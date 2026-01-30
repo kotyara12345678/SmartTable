@@ -346,7 +346,7 @@ class FormulaEngine:
                     for col in range(start_col, end_col + 1):
                         # Преобразование координат в ссылку на ячейку
                         col_letter = self._col_number_to_letter(col)
-                        cell_ref = f"{col_letter}{row}"
+                        cell_ref = f"{col_letter}{row + 1}"  # +1 для 1-based индекса
 
                         value = cell_resolver(cell_ref)
                         parsed_value = self._parse_value(value)

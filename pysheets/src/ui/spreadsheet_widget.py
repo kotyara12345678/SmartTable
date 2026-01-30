@@ -8,14 +8,14 @@ from typing import Optional, List, Tuple
 from dataclasses import dataclass
 from enum import Enum
 
-from PyQt6.QtWidgets import (QTableWidget, QTableWidgetItem, QHeaderView,
-                             QAbstractItemView, QMenu, QInputDialog, QColorDialog)
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint, QTimer
-from PyQt6.QtGui import QBrush, QColor, QFont, QAction, QKeySequence
+from PyQt5.QtWidgets import (QTableWidget, QTableWidgetItem, QHeaderView,
+                             QAbstractItemView, QMenu, QInputDialog, QColorDialog, QAction, QApplication)
+from PyQt5.QtCore import Qt, pyqtSignal, QPoint, QTimer
+from PyQt5.QtGui import QBrush, QColor, QFont, QKeySequence
 
-from src.core.cell import Cell
-from src.core.formula_engine import FormulaEngine
-from src.utils.validators import validate_formula, parse_cell_reference
+from pysheets.src.core.cell import Cell
+from pysheets.src.core.formula_engine import FormulaEngine
+from pysheets.src.utils.validators import validate_formula, parse_cell_reference
 
 
 class SpreadsheetWidget(QTableWidget):
@@ -34,6 +34,7 @@ class SpreadsheetWidget(QTableWidget):
         self.columns = cols
         self.zoom_level = 100
         self.formula_engine = FormulaEngine()
+        self._updating = False  # Флаг чтобы избежать циклических обновлений
 
         # Данные ячеек
         self.cells: List[List[Cell]] = [
@@ -44,7 +45,7 @@ class SpreadsheetWidget(QTableWidget):
         self.init_ui()
 
         # Контекстное меню
-        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
 
         # Подключение сигналов
@@ -74,11 +75,25 @@ class SpreadsheetWidget(QTableWidget):
         vertical_header.setMinimumSectionSize(20)
 
         # Включение сортировки
-        self.setSortingEnabled(True)
+        # ОТКЛЮЧЕНО: сортировка может менять порядок данных и нарушать формулы
+        # self.setSortingEnabled(True)
 
         # Настройка сетки
         self.setShowGrid(True)
         self.setGridStyle(Qt.PenStyle.SolidLine)
+
+        # Скрываем corner button полностью
+        self._hide_corner_button()
+
+    def _hide_corner_button(self):
+        """Полностью скрывает corner button"""
+        from PyQt5.QtWidgets import QAbstractButton
+        
+        # Находим и скрываем кнопку
+        for child in self.findChildren(QAbstractButton):
+            child.setVisible(False)
+            child.setMaximumHeight(0)
+            child.setMaximumWidth(0)
 
     def get_cell(self, row: int, col: int) -> Optional[Cell]:
         """Получение объекта ячейки"""
@@ -104,12 +119,20 @@ class SpreadsheetWidget(QTableWidget):
                     result = self.formula_engine.evaluate(value[1:], self.get_cell_data)
                     cell.set_formula(value)
                     cell.set_calculated_value(str(result))
+                    # Устанавливаем флаг чтобы не триггерить on_cell_changed при setText
+                    self._updating = True
                     item.setText(str(result))
+                    self._updating = False
                 except Exception as e:
+                    print(f"[WARNING] Ошибка при вычислении формулы '{value}': {e}")
+                    self._updating = True
                     item.setText(f"#ERROR!")
+                    self._updating = False
                     cell.set_calculated_value(f"#ERROR!")
             else:
+                self._updating = True
                 item.setText(value)
+                self._updating = False
                 cell.set_formula(None)
                 cell.set_calculated_value(value)
 
@@ -163,6 +186,10 @@ class SpreadsheetWidget(QTableWidget):
 
     def on_cell_changed(self, row: int, col: int):
         """Обработка изменения ячейки"""
+        # Пропускаем если это обновление от set_cell_value
+        if self._updating:
+            return
+            
         item = self.item(row, col)
         if item:
             value = item.text()
@@ -177,6 +204,8 @@ class SpreadsheetWidget(QTableWidget):
 
     def on_selection_changed(self):
         """Обработка изменения выделения"""
+        # Вычислим и отправим статистику по выделению
+        stats = self.calculate_selection_stats()
         self.selection_changed.emit()
 
     def show_context_menu(self, position: QPoint):
@@ -234,6 +263,24 @@ class SpreadsheetWidget(QTableWidget):
         menu.addAction(delete_row_action)
 
         menu.exec(self.viewport().mapToGlobal(position))
+
+    def get_selection_range(self) -> str:
+        """Получить строку диапазона выделенных ячеек (например A1:C5)"""
+        selected = self.selectedRanges()
+        if selected:
+            range_obj = selected[0]
+            start_row = range_obj.topRow()
+            end_row = range_obj.bottomRow()
+            start_col = range_obj.leftColumn()
+            end_col = range_obj.rightColumn()
+            
+            start_cell = f"{chr(65 + start_col)}{start_row + 1}"
+            end_cell = f"{chr(65 + end_col)}{end_row + 1}"
+            
+            if start_cell == end_cell:
+                return start_cell
+            return f"{start_cell}:{end_cell}"
+        return ""
 
     def copy_selection(self):
         """Копирование выделения"""
@@ -356,6 +403,63 @@ class SpreadsheetWidget(QTableWidget):
                         item = self.item(row, col)
                         if item:
                             item.setText("#ERROR!")
+    
+    def get_selected_cells_range(self) -> str:
+        """Получить диапазон выделенных ячеек"""
+        selected = self.selectedRanges()
+        if selected:
+            range_obj = selected[0]
+            start_row = range_obj.topRow()
+            start_col = range_obj.leftColumn()
+            end_row = range_obj.bottomRow()
+            end_col = range_obj.rightColumn()
+            
+            start_cell = f"{chr(65 + start_col)}{start_row + 1}"
+            end_cell = f"{chr(65 + end_col)}{end_row + 1}"
+            
+            if start_cell == end_cell:
+                return start_cell
+            else:
+                return f"{start_cell}:{end_cell}"
+        return ""
+    
+    def calculate_selection_stats(self) -> dict:
+        """Вычислить статистику по выделению (SUM, AVERAGE, COUNT)"""
+        stats = {
+            'sum': 0,
+            'average': 0,
+            'count': 0,
+            'min': 0,
+            'max': 0
+        }
+        
+        values = []
+        selected = self.selectedRanges()
+        
+        if not selected:
+            return stats
+        
+        # Собрать все значения из выделения
+        for range_obj in selected:
+            for row in range(range_obj.topRow(), range_obj.bottomRow() + 1):
+                for col in range(range_obj.leftColumn(), range_obj.rightColumn() + 1):
+                    cell = self.get_cell(row, col)
+                    if cell and cell.calculated_value:
+                        try:
+                            # Попытаться преобразовать в число
+                            value = float(str(cell.calculated_value).replace(',', '.').replace('$', '').replace('%', ''))
+                            values.append(value)
+                        except:
+                            pass
+        
+        if values:
+            stats['sum'] = sum(values)
+            stats['average'] = sum(values) / len(values)
+            stats['count'] = len(values)
+            stats['min'] = min(values)
+            stats['max'] = max(values)
+        
+        return stats
 
     def zoom_in(self):
         """Увеличение масштаба"""
@@ -379,6 +483,15 @@ class SpreadsheetWidget(QTableWidget):
 
         # Обновление высоты строк
         self.verticalHeader().setDefaultSectionSize(int(25 * self.zoom_level / 100))
+        
+        # Обновление ширины колонок
+        self.horizontalHeader().setDefaultSectionSize(int(100 * self.zoom_level / 100))
+        
+        # Применение размеров ко всем строкам и колонкам
+        for i in range(self.rowCount()):
+            self.setRowHeight(i, int(25 * self.zoom_level / 100))
+        for i in range(self.columnCount()):
+            self.setColumnWidth(i, int(100 * self.zoom_level / 100))
 
     def load_data(self, data: List[List[str]]):
         """Загрузка данных"""
@@ -393,6 +506,11 @@ class SpreadsheetWidget(QTableWidget):
         self.rows = rows
         self.columns = cols
 
+        # Обновление массива cells
+        self.cells = [
+            [Cell(row, col) for col in range(cols)] for row in range(rows)
+        ]
+
         # Обновление заголовков
         self.setHorizontalHeaderLabels([chr(65 + i) for i in range(cols)])
         self.setVerticalHeaderLabels([str(i + 1) for i in range(rows)])
@@ -403,11 +521,6 @@ class SpreadsheetWidget(QTableWidget):
                 value = data[row][col]
                 if value is not None:
                     self.set_cell_value(row, col, str(value))
-
-        # Обновление массива cells
-        self.cells = [
-            [Cell(row, col) for col in range(cols)] for row in range(rows)
-        ]
 
     def get_dataframe(self) -> pd.DataFrame:
         """Получение данных в виде DataFrame"""

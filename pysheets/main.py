@@ -8,62 +8,42 @@ import sys
 import os
 from pathlib import Path
 
-from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox
-from PyQt6.QtCore import Qt, QSettings
-from PyQt6.QtGui import QIcon
+from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox
+from PyQt5.QtCore import Qt, QSettings
+from PyQt5.QtGui import QIcon
 
-# Добавление пути к модулям проекта
 current_dir = Path(__file__).parent
+sys.path.insert(0, str(current_dir))
+current_dir = Path(__file__).parent
+parent_dir = current_dir.parent
+sys.path.insert(0, str(parent_dir))
 sys.path.insert(0, str(current_dir))
 
 try:
-    from src.ui.main_window import MainWindow
+    from pysheets.src.ui.main_window import MainWindow
 except ImportError as e:
     print(f"Ошибка импорта: {e}")
     print("Создаем базовую структуру...")
 
-
-    # Создание минимальной структуры
     class SimpleSpreadsheet(QMainWindow):
-        """Простой табличный редактор для быстрого старта"""
-
         def __init__(self):
             super().__init__()
             self.setWindowTitle("SmartTable - Простой редактор")
             self.setGeometry(100, 100, 1200, 800)
-
-            # Простое сообщение
-            self.show_message()
-
-        def show_message(self):
-            QMessageBox.information(
-                self,
-                "Приветствие",
-                "SmartTable успешно запущен!\n\n"
-                "Это базовая версия приложения.\n"
-                "Полная версия будет доступна после настройки всех модулей."
-            )
-
-
-    # Используем простую версию
     MainWindow = SimpleSpreadsheet
 
 
 def main():
     """Точка входа приложения"""
-    # Создание приложения
     app = QApplication(sys.argv)
 
-    # Настройка приложения
     app.setApplicationName("SmartTable")
     app.setOrganizationName("SmartTable")
 
-    # Попытка установки иконки
     icon_path = current_dir / "assets" / "icons" / "app_icon.ico"
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 
-    # Создание и отображение главного окна
     try:
         window = MainWindow()
     except Exception as e:
@@ -76,7 +56,6 @@ def main():
 
     window.show()
 
-    # Запуск главного цикла
     return app.exec()
 
 

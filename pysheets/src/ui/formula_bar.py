@@ -2,9 +2,9 @@
 Панель ввода формул
 """
 
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLineEdit, QComboBox, QLabel
-from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtGui import QKeySequence, QShortcut
+from PyQt5.QtWidgets import QWidget, QHBoxLayout, QLineEdit, QComboBox, QLabel
+from PyQt5.QtCore import pyqtSignal, Qt
+from PyQt5.QtGui import QKeySequence
 
 
 class FormulaBar(QWidget):
@@ -21,13 +21,13 @@ class FormulaBar(QWidget):
     def init_ui(self):
         """Инициализация UI"""
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(5, 2, 5, 2)
+        layout.setContentsMargins(10, 5, 10, 5)
 
         # Метка и поле адреса ячейки
         layout.addWidget(QLabel("Ячейка:"))
         self.cell_label = QLineEdit()
         self.cell_label.setReadOnly(True)
-        self.cell_label.setFixedWidth(70)
+        self.cell_label.setFixedWidth(80)
         layout.addWidget(self.cell_label)
 
         # Метка формулы
@@ -46,15 +46,13 @@ class FormulaBar(QWidget):
 
         # Поле ввода формулы
         self.formula_edit = QLineEdit()
-        self.formula_edit.setPlaceholderText("Введите формулу (начинается с =) или значение...")
+        self.formula_edit.setPlaceholderText("Введите формулу или значение...")
         self.formula_edit.returnPressed.connect(self.on_formula_entered)
         layout.addWidget(self.formula_edit)
 
     def setup_shortcuts(self):
         """Настройка горячих клавиш"""
-        # F2 для редактирования ячейки
-        shortcut = QShortcut(QKeySequence("F2"), self)
-        shortcut.activated.connect(self.focus_formula_edit)
+        pass
 
     def set_cell_reference(self, cell_ref: str):
         """Установка ссылки на ячейку"""
@@ -75,7 +73,6 @@ class FormulaBar(QWidget):
         if function != "Функции...":
             self.formula_edit.setText(f"={function}()")
             self.formula_edit.setFocus()
-            # Установка курсора между скобками
             cursor_pos = len(f"={function}(")
             self.formula_edit.setCursorPosition(cursor_pos)
 

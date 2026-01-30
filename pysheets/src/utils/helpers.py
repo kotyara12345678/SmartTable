@@ -6,7 +6,7 @@ import logging
 import json
 from pathlib import Path
 from typing import Optional
-from PyQt6.QtWidgets import QMessageBox
+from PyQt5.QtWidgets import QMessageBox
 
 def setup_logging():
     """Настройка логирования"""

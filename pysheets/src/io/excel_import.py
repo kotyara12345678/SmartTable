@@ -4,7 +4,7 @@
 
 import pandas as pd
 from typing import List
-from src.core.workbook import Workbook
+from pysheets.src.core.workbook import Workbook
 
 class ExcelImporter:
     """Импортер Excel файлов"""
