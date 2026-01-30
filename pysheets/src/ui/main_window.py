@@ -113,7 +113,7 @@ class MainWindow(QMainWindow):
 
         # AI Chat панель справа
         from pysheets.src.ui.chat import AIChatWidget
-        self.ai_chat_widget = AIChatWidget()
+        self.ai_chat_widget = AIChatWidget(self.current_theme, self.app_theme_color)
         self.ai_chat_widget.setMaximumWidth(350)
         self.ai_chat_widget.setMinimumWidth(300)
         self.ai_chat_widget.hide()
@@ -827,6 +827,10 @@ class MainWindow(QMainWindow):
         app = QApplication.instance()
         if app and app.styleSheet():
             self.setStyleSheet(app.styleSheet())
+        
+        # Обновляем тему в AI Chat
+        if hasattr(self, 'ai_chat_widget'):
+            self.ai_chat_widget.update_theme(theme_name, color)
         
         # Сохраняем тему в настройки
         self.settings.setValue("theme", theme_name)
