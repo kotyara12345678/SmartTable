@@ -130,7 +130,7 @@ class SpreadsheetTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Таблица
+        # Таблица.png
         self.table = ModernTableWidget(100, 26, self)
         self.table.setHorizontalHeaderLabels([chr(65 + i) for i in range(26)])
         self.table.setVerticalHeaderLabels([str(i + 1) for i in range(100)])

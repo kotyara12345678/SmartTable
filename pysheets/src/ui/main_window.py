@@ -561,6 +561,9 @@ class MainWindow(QMainWindow):
             file_path = None
 
         if file_path:
+            # Гарантируем расширение .csv
+            if not file_path.lower().endswith('.csv'):
+                file_path += '.csv'
             try:
                 df = spreadsheet.get_dataframe()
                 df.to_csv(file_path, index=False, encoding='utf-8')
@@ -800,6 +803,9 @@ class MainWindow(QMainWindow):
             file_path = None
 
         if file_path:
+            # Гарантируем расширение .pdf
+            if not file_path.lower().endswith('.pdf'):
+                file_path += '.pdf'
             try:
                 from reportlab.lib.pagesizes import letter, A4
                 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
@@ -860,6 +866,9 @@ class MainWindow(QMainWindow):
             file_path = None
 
         if file_path:
+            # Гарантируем расширение .png
+            if not file_path.lower().endswith('.png'):
+                file_path += '.png'
             try:
                 # Получаем таблицу и создаем скриншот
                 table = spreadsheet
