@@ -329,7 +329,138 @@ class SpreadsheetWidget(QTableWidget):
         delete_row_action.triggered.connect(self.delete_row)
         menu.addAction(delete_row_action)
 
+        # Сортировка
+        sort_action = QAction("Сортировка...", self)
+        sort_action.triggered.connect(self.open_sort_dialog)
+        menu.addAction(sort_action)
+
         menu.exec(self.viewport().mapToGlobal(position))
+
+    def open_sort_dialog(self):
+        """Открывает диалог сортировки и применяет выбранные опции"""
+        from pysheets.src.ui.dialogs.sort_dialog import SortDialog
+        selected = self.selectedRanges()
+        if selected:
+            rng = selected[0]
+            start_col = rng.leftColumn()
+            end_col = rng.rightColumn()
+            # Собираем метки колонок (буквы)
+            cols = [chr(65 + c) for c in range(start_col, end_col + 1)]
+        else:
+            # Если нет выделения, используем все колонки виджета
+            cols = [chr(65 + c) for c in range(self.columns)]
+
+        dlg = SortDialog(cols, self)
+        if dlg.exec_() != QDialog.Accepted:
+            return
+        cfg = dlg.get_sort_config()
+        # Применяем сортировку
+        self.apply_sort(cfg, selected[0] if selected else None)
+
+    def apply_sort(self, cfg: dict, range_obj=None):
+        """Применяет сортировку к диапазону или ко всему листу.
+
+        cfg: {'has_header': bool, 'levels': [{'column': idx, 'type': str, 'order': 'ASC'|'DESC'}, ...]}
+        range_obj: QTableWidgetSelectionRange or None
+        """
+        import math
+
+        if range_obj:
+            top = range_obj.topRow()
+            bottom = range_obj.bottomRow()
+            left = range_obj.leftColumn()
+            right = range_obj.rightColumn()
+        else:
+            top, bottom, left, right = 0, self.rows - 1, 0, self.columns - 1
+
+        # Определяем стартовую строку данных (если есть заголовок в выделении)
+        data_top = top + 1 if cfg.get('has_header', False) else top
+
+        # Считываем строки в виде списка списков
+        rows = []
+        for r in range(data_top, bottom + 1):
+            row_vals = []
+            for c in range(left, right + 1):
+                cell = self.get_cell(r, c)
+                val = cell.value if cell and cell.value is not None else ''
+                row_vals.append(val)
+            rows.append((r, row_vals))
+
+        if not rows:
+            return
+
+        # Вспомогательная функция для преобразования по типу
+        def convert_value(v, typ):
+            if v is None or v == '':
+                return None
+            s = str(v)
+            if typ == 'Numeric':
+                try:
+                    return float(s.replace(',', '.'))
+                except:
+                    return math.nan
+            elif typ == 'Date':
+                # Простая попытка распарсить как ISO или DD/MM/YYYY
+                from datetime import datetime
+                for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%Y/%m/%d"):
+                    try:
+                        return datetime.strptime(s, fmt)
+                    except:
+                        continue
+                return s
+            else:
+                return s.lower()
+
+        # Сортируем по уровням: применяем stable sort от последнего уровня к первому
+        levels = cfg.get('levels', [])
+        # Map column index relative to left
+        for level in reversed(levels):
+            col_idx = left + int(level.get('column', 0))
+            typ = level.get('type', 'Automatic')
+            order = level.get('order', 'ASC')
+
+            def key_fn(item):
+                _, rowvals = item
+                rel_idx = col_idx - left
+                if rel_idx < 0 or rel_idx >= len(rowvals):
+                    return None
+                v = rowvals[rel_idx]
+                # If Automatic, try numeric first
+                if typ == 'Automatic':
+                    try:
+                        return float(str(v).replace(',', '.'))
+                    except:
+                        return str(v).lower()
+                return convert_value(v, typ)
+
+            reverse = True if order == 'DESC' else False
+            try:
+                rows.sort(key=key_fn, reverse=reverse)
+            except TypeError:
+                # Fallback: convert keys to strings to avoid comparison errors
+                rows.sort(key=lambda it: str(key_fn(it)), reverse=reverse)
+
+        # Записываем отсортированные значения обратно в таблицу
+        for i, (orig_r, rowvals) in enumerate(rows):
+            target_r = data_top + i
+            for j, v in enumerate(rowvals):
+                col = left + j
+                # Устанавливаем значение без триггера on_cell_changed
+                item = self.item(target_r, col)
+                if not item:
+                    item = QTableWidgetItem()
+                    self.setItem(target_r, col, item)
+                self._updating = True
+                item.setText(str(v))
+                self._updating = False
+                # Обновляем модель
+                cell = self.get_cell(target_r, col)
+                if cell:
+                    cell.set_value(str(v))
+                    cell.set_calculated_value(str(v))
+                    cell.set_formula(None)
+                self.apply_cell_formatting(target_r, col)
+
 
     def get_selection_range(self) -> str:
         """Получить строку диапазона выделенных ячеек (например A1:C5)"""

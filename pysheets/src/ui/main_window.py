@@ -4,6 +4,7 @@
 
 import json
 import pandas as pd
+import numpy as np
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
@@ -11,7 +12,7 @@ from typing import Optional
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QTabWidget, QStatusBar, QMenuBar, QMessageBox,
                              QFileDialog, QSplitter, QToolBar, QDialog, QAction,
-                             QApplication, QMenu, QInputDialog)
+                             QApplication, QMenu, QInputDialog, QPushButton)
 from PyQt5.QtCore import Qt, QTimer, QSize, QSettings
 from PyQt5.QtGui import QKeySequence, QIcon, QColor, QPixmap, QPainter
 
@@ -67,6 +68,58 @@ class MainWindow(QMainWindow):
 
         # Загрузка последней сессии
         self.load_last_session()
+
+    # ============ Undo/Redo and Clipboard ============
+    def add_to_undo_stack(self, row, col, value):
+        """Добавляет действие в стек отмены"""
+        self.undo_stack.append((row, col, value))
+        self.redo_stack.clear()
+
+    def undo(self):
+        """Отмена последнего действия"""
+        if not self.undo_stack:
+            self.status_bar.showMessage("Нет действий для отмены")
+            return
+        row, col, value = self.undo_stack.pop()
+        spreadsheet = self.get_current_spreadsheet()
+        if spreadsheet:
+            prev_value = spreadsheet.item(row, col).text() if spreadsheet.item(row, col) else ""
+            spreadsheet.set_cell_value(row, col, prev_value)
+            self.redo_stack.append((row, col, value))
+            self.status_bar.showMessage(f"Отмена: ({row+1},{col+1})")
+
+    def redo(self):
+        """Повтор последнего отмененного действия"""
+        if not self.redo_stack:
+            self.status_bar.showMessage("Нет действий для повтора")
+            return
+        row, col, value = self.redo_stack.pop()
+        spreadsheet = self.get_current_spreadsheet()
+        if spreadsheet:
+            spreadsheet.set_cell_value(row, col, value)
+            self.undo_stack.append((row, col, value))
+            self.status_bar.showMessage(f"Повтор: ({row+1},{col+1})")
+
+    def cut(self):
+        """Вырезать выделение"""
+        spreadsheet = self.get_current_spreadsheet()
+        if spreadsheet:
+            spreadsheet.cut_selection()
+            self.status_bar.showMessage("Вырезано")
+
+    def copy(self):
+        """Копировать выделение"""
+        spreadsheet = self.get_current_spreadsheet()
+        if spreadsheet:
+            spreadsheet.copy_selection()
+            self.status_bar.showMessage("Скопировано")
+
+    def paste(self):
+        """Вставить из буфера"""
+        spreadsheet = self.get_current_spreadsheet()
+        if spreadsheet:
+            spreadsheet.paste_selection()
+            self.status_bar.showMessage("Вставлено")
 
     def init_ui(self):
         """Инициализация пользовательского интерфейса"""
@@ -262,6 +315,40 @@ class MainWindow(QMainWindow):
         chart_action = QAction("Создать диаграмму...", self)
         chart_action.triggered.connect(self.create_chart)
         tools_menu.addAction(chart_action)
+        sort_action = QAction("Сортировка...", self)
+        sort_action.triggered.connect(self.open_sort_for_current)
+        tools_menu.addAction(sort_action)
+        # Новый пункт для шаблонов
+        templates_action = QAction("Шаблоны...", self)
+        templates_action.triggered.connect(self.open_templates_dialog)
+        tools_menu.addAction(templates_action)
+
+        # Добавляем действие "Сортировка" для быстрого доступа (альтернативный вызов)
+        sort_quick_action = QAction("Сортировка (текущий лист)", self)
+        sort_quick_action.triggered.connect(self.open_sort_for_current)
+        tools_menu.addAction(sort_quick_action)
+
+    def open_templates_dialog(self):
+        """Открыть менеджер шаблонов"""
+        try:
+            from pysheets.src.ui.templates.templates.template_ui import TemplateManagerDialog
+        except Exception:
+            show_error_message(self, "Не удалось импортировать модуль шаблонов")
+            return
+        dialog = TemplateManagerDialog(self)
+        dialog.exec_()
+
+    def open_sort_for_current(self):
+        """Открывает диалог сортировки для текущего листа"""
+        spreadsheet = self.get_current_spreadsheet()
+        if not spreadsheet:
+            show_error_message(self, "Нет активного листа для сортировки")
+            return
+        # Используем метод виджета таблицы
+        try:
+            spreadsheet.open_sort_dialog()
+        except AttributeError:
+            show_error_message(self, "Данный лист не поддерживает сортировку")
 
     def create_toolbars(self):
         """Создание панелей инструментов"""
@@ -291,6 +378,166 @@ class MainWindow(QMainWindow):
         self.formula_bar.formula_entered.connect(self.on_formula_entered)
         self.sidebar.function_selected.connect(self.on_function_selected)
 
+    # ============ Масштаб (Zoom) ============
+    def zoom_in(self):
+        """Увеличить масштаб текущей таблицы"""
+        spreadsheet = self.get_current_spreadsheet()
+        if spreadsheet:
+            spreadsheet.zoom_in()
+            # Синхронизируем значение в тулбаре если он есть
+            try:
+                self.main_toolbar.zoom_combo.setCurrentText(f"{spreadsheet.zoom_level}%")
+            except Exception:
+                pass
+
+    def zoom_out(self):
+        """Уменьшить масштаб текущей таблицы"""
+        spreadsheet = self.get_current_spreadsheet()
+        if spreadsheet:
+            spreadsheet.zoom_out()
+            try:
+                self.main_toolbar.zoom_combo.setCurrentText(f"{spreadsheet.zoom_level}%")
+            except Exception:
+                pass
+
+    def zoom_combo_changed(self, value: str):
+        """Обработчик изменения комбобокса масштаба"""
+        if not isinstance(value, str) or not value.endswith('%'):
+            return
+        try:
+            level = int(value.rstrip('%'))
+        except ValueError:
+            return
+        spreadsheet = self.get_current_spreadsheet()
+        if spreadsheet:
+            spreadsheet.zoom_level = max(50, min(200, level))
+            spreadsheet.apply_zoom()
+
+    def create_chart(self):
+        """Создать диаграмму на основе выделенных данных"""
+        from pysheets.src.ui.dialogs.chart_wizard import ChartWizardDialog
+
+        spreadsheet = self.get_current_spreadsheet()
+        if not spreadsheet:
+            show_error_message(self, "Откройте лист и выделите данные для построения диаграммы")
+            return
+
+        ranges = spreadsheet.selectedRanges()
+        if not ranges:
+            show_error_message(self, "Выделите диапазон данных для диаграммы")
+            return
+
+        sel = ranges[0]
+        top, bottom = sel.topRow(), sel.bottomRow()
+        left, right = sel.leftColumn(), sel.rightColumn()
+
+        df = spreadsheet.get_dataframe()
+        # Slice dataframe rows/cols
+        try:
+            sub_df = df.iloc[top:bottom+1, left:right+1]
+        except Exception:
+            show_error_message(self, "Не удалось получить данные для выделенного диапазона")
+            return
+
+        # Показываем мастер диаграмм
+        dlg = ChartWizardDialog(self)
+        if dlg.exec_() != QDialog.Accepted:
+            return
+
+        chart_type = dlg.get_chart_type()
+        opts = dlg.get_options()
+
+        # Построение графика с использованием matplotlib
+        try:
+            import matplotlib
+            matplotlib.use('Qt5Agg')
+            from matplotlib.figure import Figure
+            from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+            import matplotlib.pyplot as plt
+        except Exception:
+            show_error_message(self, "Для отображения диаграмм необходимо установить matplotlib\nУстановите: pip install matplotlib")
+            return
+
+        # Подготовка данных: пытаемся привести все столбцы к числовым если возможно
+        plot_df = sub_df.copy()
+        for col in plot_df.columns:
+            plot_df[col] = pd.to_numeric(plot_df[col], errors='coerce')
+
+        # Создаём диалог для отображения графика
+        chart_dialog = QDialog(self)
+        chart_dialog.setWindowTitle(f"Диаграмма - {chart_type}")
+        chart_dialog.setMinimumSize(600, 400)
+        layout = QVBoxLayout(chart_dialog)
+
+        fig = Figure(figsize=(6, 4))
+        canvas = FigureCanvas(fig)
+        ax = fig.add_subplot(111)
+
+        # Рисуем в зависимости от типа
+        if "Столбчатая" in chart_type:
+            if plot_df.shape[1] == 1:
+                vals = plot_df.iloc[:, 0].dropna()
+                ax.bar(range(len(vals)), vals.values)
+            else:
+                x = range(plot_df.shape[0])
+                for col in plot_df.columns:
+                    vals = plot_df[col].fillna(0).values
+                    ax.bar(x, vals, label=str(col), alpha=0.7)
+        elif "Линейный" in chart_type or "Сглаженная" in chart_type:
+            x = range(plot_df.shape[0])
+            for col in plot_df.columns:
+                vals = plot_df[col].fillna(np.nan).values
+                ax.plot(x, vals, label=str(col))
+            if opts.get('smooth') and plot_df.shape[0] >= 3:
+                # простое сглаживание: скользящая средняя
+                for col in plot_df.columns:
+                    vals = pd.to_numeric(plot_df[col], errors='coerce').dropna()
+                    if len(vals) >= 3:
+                        sm = vals.rolling(window=3, min_periods=1).mean()
+                        ax.plot(range(len(vals)), sm.values, linestyle='--')
+        elif "Круговая" in chart_type:
+            # Для круговой берем первую строку или суммируем столбцы
+            row = plot_df.iloc[0].fillna(0)
+            ax.pie(row.values, labels=[str(c) for c in row.index], autopct='%1.1f%%')
+        elif "Площадная" in chart_type:
+            x = range(plot_df.shape[0])
+            for col in plot_df.columns:
+                vals = plot_df[col].fillna(0).values
+                ax.fill_between(x, vals, step='pre', alpha=0.5)
+        else:
+            # По умолчанию линейный
+            x = range(plot_df.shape[0])
+            for col in plot_df.columns:
+                vals = plot_df[col].fillna(np.nan).values
+                ax.plot(x, vals, label=str(col))
+
+        if opts.get('legend'):
+            ax.legend()
+
+        ax.set_title(chart_type)
+        ax.grid(True)
+
+        layout.addWidget(canvas)
+
+        # Кнопки
+        btn_layout = QHBoxLayout()
+        save_btn = QPushButton("Сохранить как PNG")
+        close_btn = QPushButton("Закрыть")
+        btn_layout.addStretch()
+        btn_layout.addWidget(save_btn)
+        btn_layout.addWidget(close_btn)
+        layout.addLayout(btn_layout)
+
+        def on_save():
+            from PyQt5.QtWidgets import QFileDialog
+            path, _ = QFileDialog.getSaveFileName(self, "Сохранить диаграмму", "chart.png", "PNG Files (*.png);;All Files (*)")
+            if path:
+                fig.savefig(path)
+        save_btn.clicked.connect(on_save)
+        close_btn.clicked.connect(chart_dialog.accept)
+
+        chart_dialog.exec_()
+
     def add_new_sheet(self, name: str):
         """Добавление нового листа"""
         spreadsheet = SpreadsheetWidget()
@@ -318,6 +565,134 @@ class MainWindow(QMainWindow):
         if isinstance(current_widget, SpreadsheetWidget):
             return current_widget
         return None
+
+    # ============ Вкладки и сессии ============
+    def close_tab(self, index: int):
+        """Закрывает вкладку по индексу и удаляет соответствующий лист в модели"""
+        if index < 0:
+            return
+        # Удаляем лист из модели workbook
+        removed = self.workbook.remove_sheet(index)
+        # Удаляем вкладку из UI только если model удалила лист
+        if removed:
+            self.tab_widget.removeTab(index)
+            # Обновляем боковую панель и заголовок
+            self.sidebar.update_tabs(self.workbook.sheet_names())
+            self.update_window_title()
+        else:
+            # Нельзя удалить если это единственный лист
+            self.status_bar.showMessage("Нельзя удалить последний лист")
+
+    def tab_changed(self, index: int):
+        """Обработка смены активной вкладки"""
+        if index < 0:
+            return
+        # Синхронизируем модель
+        self.workbook.set_active_sheet(index)
+        # Обновляем боковую панель
+        sheet_name = self.tab_widget.tabText(index)
+        try:
+            self.sidebar.update_sheet_info(sheet_name)
+            self.sidebar.update_tabs(self.workbook.sheet_names())
+        except Exception:
+            pass
+        # Обновляем заголовок окна
+        self.update_window_title()
+
+    def show_tab_context_menu(self, pos):
+        """Контекстное меню для вкладок"""
+        tab_bar = self.tab_widget.tabBar()
+        index = tab_bar.tabAt(pos)
+        if index < 0:
+            return
+        menu = QMenu()
+
+        def make_action(text, handler):
+            act = QAction(text, self)
+            act.triggered.connect(handler)
+            return act
+
+        def rename():
+            old_name = self.tab_widget.tabText(index)
+            new_name, ok = QInputDialog.getText(self, "Переименование вкладки", "Новое имя:", text=old_name)
+            if ok and new_name and new_name != old_name:
+                if self.workbook.rename_sheet(index, new_name):
+                    self.tab_widget.setTabText(index, new_name)
+                    self.sidebar.update_tabs(self.workbook.sheet_names())
+
+        def duplicate():
+            # Дублируем данные листа
+            source_widget = self.tab_widget.widget(index)
+            if not isinstance(source_widget, SpreadsheetWidget):
+                return
+            df = source_widget.get_dataframe()
+            new_name = f"{self.tab_widget.tabText(index)} (копия)"
+            # Добавляем в модель
+            self.workbook.add_sheet_from_dataframe(df, new_name)
+            # Добавляем UI вкладку
+            new_sheet = SpreadsheetWidget()
+            new_sheet.load_data(df.values.tolist())
+            new_index = self.tab_widget.addTab(new_sheet, new_name)
+            self.tab_widget.setCurrentIndex(new_index)
+            self.sidebar.update_tabs(self.workbook.sheet_names())
+
+        def close_here():
+            self.close_tab(index)
+
+        def new_here():
+            self.add_new_sheet("Новый лист")
+
+        menu.addAction(make_action("Переименовать", rename))
+        menu.addAction(make_action("Дублировать", duplicate))
+        menu.addAction(make_action("Закрыть", close_here))
+        menu.addSeparator()
+        menu.addAction(make_action("Новый лист", new_here))
+
+        menu.exec_(tab_bar.mapToGlobal(pos))
+
+    def update_window_title(self, modified: bool = False):
+        """Обновляет заголовок окна в зависимости от текущего файла/статуса"""
+        base = "SmartTable"
+        if self.current_file_path:
+            name = Path(self.current_file_path).name
+            title = f"{base} - {name}"
+        else:
+            title = f"{base} - Новый документ"
+        if modified or self.workbook.is_modified():
+            title += " *"
+        self.setWindowTitle(title)
+
+    def setup_shortcuts(self):
+        """Настройка горячих клавиш"""
+        # Простая настройка: Ctrl+0 сброс масштаба
+        try:
+            from PyQt5.QtWidgets import QShortcut
+            from PyQt5.QtGui import QKeySequence
+            QShortcut(QKeySequence("Ctrl+0"), self, activated=lambda: self.main_toolbar.zoom_combo.setCurrentText("100%"))
+        except Exception:
+            pass
+
+    def load_last_session(self):
+        """Загружает последний файл, если он сохранялся в настройках"""
+        last = self.settings.value("last_file")
+        if last:
+            try:
+                p = Path(last)
+                if p.exists():
+                    # Пытаемся открыть файл аналогично open_file
+                    if str(last).endswith(('.xlsx', '.xls')):
+                        importer = ExcelImporter()
+                        workbook = importer.import_excel(last)
+                        self.workbook = workbook
+                        # Обновление UI
+                        self.tab_widget.clear()
+                        for sheet_name in workbook.sheet_names:
+                            spreadsheet = SpreadsheetWidget()
+                            spreadsheet.load_data(workbook.get_sheet_data(sheet_name))
+                            self.tab_widget.addTab(spreadsheet, sheet_name)
+                        self.update_window_title()
+            except Exception:
+                pass
 
     # ============ ОБРАБОТЧИКИ СОБЫТИЙ ============
 
@@ -400,6 +775,28 @@ class MainWindow(QMainWindow):
         # Применяем формат к выделенным ячейкам
         spreadsheet.apply_format('number_format', format_type)
         self.status_bar.showMessage(f"Применён формат: {format_type}")
+
+    def apply_format(self, format_type: str, value=None):
+    
+        spreadsheet = self.get_current_spreadsheet()
+        if not spreadsheet:
+            self.status_bar.showMessage("Нет активного листа для применения формата")
+            return
+
+        # Делегируем логику в SpreadsheetWidget
+        try:
+            spreadsheet.apply_format(format_type, value)
+            # Выводим информативное сообщение в строку состояния
+            if format_type in ('bold', 'italic', 'underline', 'strike'):
+                self.status_bar.showMessage(f"Применён стиль: {format_type}")
+            elif format_type in ('font', 'font_size') and value is not None:
+                self.status_bar.showMessage(f"Применён формат: {format_type} = {value}")
+            elif format_type in ('text_color', 'bg_color') and value is None:
+                self.status_bar.showMessage("Цвет изменён")
+            else:
+                self.status_bar.showMessage(f"Применён формат: {format_type}")
+        except Exception as e:
+            show_error_message(self, f"Ошибка при применении формата: {str(e)}")
 
     # ============ ФУНКЦИИ ФАЙЛОВ ============
 
@@ -572,432 +969,6 @@ class MainWindow(QMainWindow):
                 df.to_csv(file_path, index=False, encoding='utf-8')
                 self.status_bar.showMessage(f"Экспорт завершен: {Path(file_path).name}")
             except Exception as e:
-                show_error_message(self, f"Ошибка при экспорте: {str(e)}")
-
-    # ============ ФУНКЦИИ ПРАВКИ ============
-
-    def undo(self):
-        """Отмена последнего действия"""
-        if self.undo_stack:
-            action = self.undo_stack.pop()
-            self.redo_stack.append(action)
-
-            # Восстановление состояния
-            # (реализация зависит от структуры данных)
-            self.status_bar.showMessage("Отменено последнее действие")
-
-    def redo(self):
-        """Повтор последнего действия"""
-        if self.redo_stack:
-            action = self.redo_stack.pop()
-            self.undo_stack.append(action)
-
-            # Восстановление состояния
-            self.status_bar.showMessage("Повторено последнее действие")
-
-    def cut(self):
-        """Вырезание"""
-        spreadsheet = self.get_current_spreadsheet()
-        if spreadsheet:
-            spreadsheet.cut()
-            self.status_bar.showMessage("Вырезано")
-
-    def copy(self):
-        """Копирование"""
-        spreadsheet = self.get_current_spreadsheet()
-        if spreadsheet:
-            spreadsheet.copy()
-            self.status_bar.showMessage("Скопировано")
-
-    def paste(self):
-        """Вставка"""
-        spreadsheet = self.get_current_spreadsheet()
-        if spreadsheet:
-            spreadsheet.paste()
-            self.status_bar.showMessage("Вставлено")
-
-    # ============ ФУНКЦИИ ВИДА ============
-
-    def zoom_in(self):
-        """Увеличение масштаба"""
-        spreadsheet = self.get_current_spreadsheet()
-        if spreadsheet:
-            spreadsheet.zoom_in()
-
-    def zoom_out(self):
-        """Уменьшение масштаба"""
-        spreadsheet = self.get_current_spreadsheet()
-        if spreadsheet:
-            spreadsheet.zoom_out()
-
-    def zoom_combo_changed(self, value):
-        """Обработка изменения масштаба из комбобокса"""
-        if value.endswith("%"):
-            zoom_value = int(value[:-1])
-            spreadsheet = self.get_current_spreadsheet()
-            if spreadsheet:
-                spreadsheet.zoom_level = zoom_value
-                spreadsheet.apply_zoom()
-            self.status_bar.showMessage(f"Масштаб: {zoom_value}%")
-
-    # ============ ИНСТРУМЕНТЫ ============
-
-    def create_chart(self):
-        """Создание диаграммы по выделенному диапазону"""
-        from pysheets.src.ui.dialogs.chart_wizard import ChartWizardDialog
-        import matplotlib.pyplot as plt
-        import numpy as np
-        spreadsheet = self.get_current_spreadsheet()
-        if not spreadsheet:
-            return
-        # Получаем выделенный диапазон
-        selected = spreadsheet.selectedRanges()
-        if not selected:
-            self.status_bar.showMessage("Нет выделения для построения графика")
-            return
-        rng = selected[0]
-        rows = list(range(rng.topRow(), rng.bottomRow() + 1))
-        cols = list(range(rng.leftColumn(), rng.rightColumn() + 1))
-        # Собираем данные (None -> np.nan)
-        data = []
-        for row in rows:
-            row_data = []
-            for col in cols:
-                cell = spreadsheet.get_cell(row, col)
-                val = None
-                if cell and cell.value is not None:
-                    try:
-                        val = float(str(cell.value).replace(',', '.'))
-                    except:
-                        val = None
-                row_data.append(np.nan if val is None else val)
-            data.append(row_data)
-        arr = np.array(data, dtype=np.float64)
-        # Проверяем, есть ли хоть одно число
-        if not np.isfinite(arr).any():
-            self.status_bar.showMessage("Нет числовых данных для графика")
-            return
-        # Диалог выбора типа графика и опций
-        dlg = ChartWizardDialog(self)
-        if dlg.exec_() != QDialog.Accepted:
-            return
-        chart_type = dlg.get_chart_type()
-        options = dlg.get_options()
-        smooth = options.get('smooth', False)
-        show_legend = options.get('legend', False)
-        normalize = options.get('normalize', False)
-
-        # Подготовка данных и меток
-        plt.figure(figsize=(7, 4))
-        if arr.shape[0] == 1:
-            labels = [chr(65 + c) for c in cols]
-            series = [arr[0]]
-        elif arr.shape[1] == 1:
-            labels = [str(r + 1) for r in rows]
-            series = [arr[:, 0]]
-        else:
-            labels = [chr(65 + c) for c in cols]
-            series = [arr[i] for i in range(arr.shape[0])]
-
-        # Нормализация серий при необходимости
-        if normalize:
-            normed = []
-            for s in series:
-                finite = s[np.isfinite(s)]
-                if finite.size:
-                    mn, mx = finite.min(), finite.max()
-                    if mx - mn > 0:
-                        ns = (s - mn) / (mx - mn)
-                    else:
-                        ns = s * 0
-                else:
-                    ns = s
-                normed.append(ns)
-            series = normed
-
-        # Сглаживание: простой moving average
-        def smooth_series(s, window=3):
-            if not smooth:
-                return s
-            w = int(window)
-            mask = np.isfinite(s)
-            out = np.full_like(s, np.nan)
-            if mask.any():
-                vals = s.copy()
-                vals[~mask] = 0
-                kernel = np.ones(w) / w
-                conv = np.convolve(vals, kernel, mode='same')
-                # скорректировать краевые значения
-                out[mask] = conv[mask]
-            return out
-
-        # Построение
-        if chart_type == "Столбчатая диаграмма":
-            x = np.arange(len(labels))
-            width = 0.8 / max(1, len(series))
-            for i, s in enumerate(series):
-                s2 = smooth_series(s)
-                plt.bar(x + i * width, s2, width=width, label=(f"Строка {rows[0]+i+1}" if len(series) > 1 else None))
-            plt.xticks(x + width * (len(series)-1) / 2, labels)
-            plt.title("Столбчатая диаграмма")
-        elif chart_type == "Горизонтальная столбчатая":
-            y = np.arange(len(labels))
-            height = 0.8 / max(1, len(series))
-            for i, s in enumerate(series):
-                s2 = smooth_series(s)
-                plt.barh(y + i * height, s2, height=height, label=(f"Строка {rows[0]+i+1}" if len(series) > 1 else None))
-            plt.yticks(y + height * (len(series)-1) / 2, labels)
-            plt.title("Горизонтальная столбчатая")
-        elif chart_type in ("Линейный график", "Сглаженная линия"):
-            for i, s in enumerate(series):
-                s2 = smooth_series(s)
-                plt.plot(labels, s2, marker='o', label=(f"Строка {rows[0]+i+1}" if len(series) > 1 else None))
-            plt.title("Линейный график")
-        elif chart_type == "Круговая диаграмма":
-            if len(series) != 1:
-                self.status_bar.showMessage("Круговая диаграмма поддерживает только одну строку или столбец")
-                return
-            s = series[0]
-            s = s[np.isfinite(s)]
-            lbls = [l for l, v in zip(labels, series[0]) if np.isfinite(v)]
-            plt.pie(s, labels=lbls, autopct='%1.1f%%', startangle=90)
-            plt.title("Круговая диаграмма")
-        elif chart_type == "Площадная (Area)":
-            for i, s in enumerate(series):
-                s2 = smooth_series(s)
-                plt.fill_between(labels, s2, alpha=0.4)
-                plt.plot(labels, s2, marker='o', label=(f"Строка {rows[0]+i+1}" if len(series) > 1 else None))
-            plt.title("Площадная (Area)")
-        else:
-            self.status_bar.showMessage("Неизвестный тип графика")
-            return
-
-        if show_legend and len(series) > 1:
-            plt.legend()
-        plt.xlabel("Категории")
-        plt.ylabel("Значения")
-        plt.tight_layout()
-        plt.show()
-        self.status_bar.showMessage("График построен")
-
-    # ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ============
-
-    def add_to_undo_stack(self, row: int, col: int, value: str):
-        """Добавление действия в стек отмены"""
-        self.undo_stack.append({
-            'row': row,
-            'col': col,
-            'value': value,
-            'timestamp': datetime.now()
-        })
-
-        # Ограничиваем размер стека
-        if len(self.undo_stack) > 50:
-            self.undo_stack.pop(0)
-
-    def update_window_title(self, modified: bool = False):
-        """Обновление заголовка окна"""
-        title = "SmartTable"
-
-        if self.current_file_path:
-            title += f" - {Path(self.current_file_path).name}"
-        else:
-            title += " - Новый документ"
-
-        if modified:
-            title += " *"
-
-        self.setWindowTitle(title)
-
-    def tab_changed(self, index: int):
-        """Обработка смены вкладки"""
-        if index >= 0:
-            spreadsheet = self.tab_widget.widget(index)
-            if spreadsheet:
-                # Обновление UI для новой вкладки
-                pass
-
-    def close_tab(self, index: int):
-        """Закрытие вкладки"""
-        if self.tab_widget.count() > 1:
-            # Удаляем и из модели workbook
-            try:
-                removed = self.workbook.remove_sheet(index)
-            except Exception:
-                removed = False
-            # Всегда удаляем вкладку UI, даже если модель не удалила (чтобы не оставлять пустую вкладку)
-            self.tab_widget.removeTab(index)
-            if not removed:
-                # помечаем книгу как изменённую
-                self.workbook.modified = True
-        else:
-            QMessageBox.warning(self, "Ошибка", "Нельзя закрыть последнюю вкладку")
-
-    def show_tab_context_menu(self, position):
-        """Показать контекстное меню для вкладки: закрыть, переименовать, дублировать"""
-        tab_bar = self.tab_widget.tabBar()
-        index = tab_bar.tabAt(position)
-        if index < 0:
-            return
-
-        menu = QMenu(self)
-
-        close_action = QAction("Закрыть вкладку", self)
-        close_action.triggered.connect(lambda: self.close_tab(index))
-        menu.addAction(close_action)
-
-        rename_action = QAction("Переименовать вкладку", self)
-        rename_action.triggered.connect(lambda: self.rename_tab(index))
-        menu.addAction(rename_action)
-
-        duplicate_action = QAction("Дублировать вкладку", self)
-        duplicate_action.triggered.connect(lambda: self.duplicate_tab(index))
-        menu.addAction(duplicate_action)
-
-        menu.exec(tab_bar.mapToGlobal(position))
-
-    def rename_tab(self, index: int):
-        """Переименование вкладки и обновление модели workbook"""
-        current_name = self.tab_widget.tabText(index)
-        new_name, ok = QInputDialog.getText(self, "Переименовать вкладку", "Новое имя:", text=current_name)
-        if ok and new_name and new_name.strip():
-            new_name = new_name.strip()
-            self.tab_widget.setTabText(index, new_name)
-            try:
-                self.workbook.rename_sheet(index, new_name)
-            except Exception:
-                # Если не удалось обновить модель, пометим как изменённую
-                self.workbook.modified = True
-
-    def duplicate_tab(self, index: int):
-        """Дублирование вкладки: копируем содержимое и форматирование"""
-        src_widget = self.tab_widget.widget(index)
-        if not isinstance(src_widget, SpreadsheetWidget):
-            # просто создаём пустую вкладку
-            self.add_new_sheet(self.tab_widget.tabText(index) + " (копия)")
-            return
-
-        new_name = f"{self.tab_widget.tabText(index)} (копия)"
-        # Создаём новую вкладку (это также добавляет лист в workbook)
-        self.add_new_sheet(new_name)
-        new_widget = self.tab_widget.currentWidget()
-
-        # Копируем данные и форматирование
-        max_rows = min(src_widget.rows, new_widget.rows)
-        max_cols = min(src_widget.columns, new_widget.columns)
-        for r in range(max_rows):
-            for c in range(max_cols):
-                src_cell = src_widget.get_cell(r, c)
-                if src_cell:
-                    value = src_cell.formula if src_cell.formula else (src_cell.value if src_cell.value is not None else "")
-                    if value is not None:
-                        new_widget.set_cell_value(r, c, str(value))
-
-                    # Копируем форматирование свойства если есть
-                    dst_cell = new_widget.get_cell(r, c)
-                    if dst_cell and src_cell:
-                        dst_cell.bold = getattr(src_cell, 'bold', False)
-                        dst_cell.italic = getattr(src_cell, 'italic', False)
-                        dst_cell.underline = getattr(src_cell, 'underline', False)
-                        dst_cell.font_size = getattr(src_cell, 'font_size', 10)
-                        dst_cell.alignment = getattr(src_cell, 'alignment', 'left')
-                        dst_cell.text_color = getattr(src_cell, 'text_color', None)
-                        dst_cell.background_color = getattr(src_cell, 'background_color', None)
-                        if hasattr(src_cell, 'strike'):
-                            dst_cell.strike = getattr(src_cell, 'strike', False)
-                        # Применяем формат к виджету
-                        new_widget.apply_cell_formatting(r, c)
-
-        self.status_bar.showMessage(f"Вкладка '{new_name}' создана")
-
-    def apply_format(self, format_type: str, value):
-        """Применение форматирования"""
-        spreadsheet = self.get_current_spreadsheet()
-        if spreadsheet:
-            spreadsheet.apply_format(format_type, value)
-
-    def setup_shortcuts(self):
-        """Настройка горячих клавиш"""
-        # Дополнительные горячие клавиши
-        shortcuts = [
-            (QKeySequence("F2"), self.edit_cell),
-            (QKeySequence("F5"), self.calculate_formulas),
-            (QKeySequence("F11"), self.toggle_fullscreen),
-        ]
-
-        for shortcut, handler in shortcuts:
-            action = QAction(self)
-            action.setShortcut(shortcut)
-            action.triggered.connect(handler)
-            self.addAction(action)
-
-    def edit_cell(self):
-        """Редактирование ячейки"""
-        self.formula_bar.setFocus()
-
-    def calculate_formulas(self):
-        """Пересчет формул"""
-        spreadsheet = self.get_current_spreadsheet()
-        if spreadsheet:
-            spreadsheet.calculate_formulas()
-            self.status_bar.showMessage("Формулы пересчитаны")
-
-    def toggle_fullscreen(self):
-        """Переключение полноэкранного режима"""
-        if self.isFullScreen():
-            self.showNormal()
-        else:
-            self.showFullScreen()
-
-    def load_last_session(self):
-        """Загрузка последней сессии"""
-        last_file = self.settings.value("last_file")
-        if last_file and Path(last_file).exists():
-            reply = QMessageBox.question(
-                self, "Восстановление сессии",
-                f"Восстановить последний файл?\n{Path(last_file).name}",
-                QMessageBox.Yes | QMessageBox.No
-            )
-
-            if reply == QMessageBox.Yes:
-                self.current_file_path = last_file
-                self.open_file()
-
-    def autosave(self):
-        """Автосохранение"""
-        if self.workbook and self.current_file_path:
-            backup_file = self.current_file_path + ".autosave"
-            try:
-                self.save_to_file(backup_file)
-            except:
-                pass
-
-    def export_to_csv(self):
-        """Экспорт в CSV"""
-        spreadsheet = self.get_current_spreadsheet()
-        if not spreadsheet:
-            return
-
-        dlg = QFileDialog(self, "Экспорт в CSV")
-        dlg.setAcceptMode(QFileDialog.AcceptSave)
-        dlg.setNameFilter("CSV файлы (*.csv)")
-        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
-        app = QApplication.instance()
-        if app and app.styleSheet():
-            dlg.setStyleSheet(app.styleSheet())
-        if dlg.exec_() == QDialog.Accepted:
-            selected = dlg.selectedFiles()
-            file_path = selected[0] if selected else None
-        else:
-            file_path = None
-
-        if file_path:
-            try:
-                df = spreadsheet.get_dataframe()
-                df.to_csv(file_path, index=False, encoding='utf-8')
-                self.status_bar.showMessage(f"Экспорт завершен: {Path(file_path).name}")
-            except Exception as e:
-                from pysheets.src.utils.helpers import show_error_message
                 show_error_message(self, f"Ошибка при экспорте: {str(e)}")
 
     def export_to_pdf(self):

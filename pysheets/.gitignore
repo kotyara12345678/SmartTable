@@ -1,2 +1,6 @@
 .venv
 .idea
+.cursor
+.vscode
+__pycache__/
+*.pyc
