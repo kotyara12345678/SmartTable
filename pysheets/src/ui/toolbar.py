@@ -238,3 +238,191 @@ class FormatToolBar(QToolBar):
                 self.align_center_btn.setChecked(True)
             elif alignment == 'right':
                 self.align_right_btn.setChecked(True)
+
+
+class FunctionsToolBar(QToolBar):
+    """Панель с вкладками функций как в Excel"""
+
+    function_selected = pyqtSignal(str)
+    format_selected = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super().__init__("Функции", parent)
+        self.setMovable(False)
+        self.current_panel = None
+        self.panels = {}
+        self.init_ui()
+
+    def init_ui(self):
+        """Инициализация UI"""
+        from PyQt5.QtWidgets import QStackedWidget, QScrollArea, QFrame, QVBoxLayout, QSizePolicy
+        
+        # Контейнер для вкладок
+        tabs_widget = QWidget()
+        tabs_layout = QHBoxLayout(tabs_widget)
+        tabs_layout.setContentsMargins(4, 2, 4, 2)
+        tabs_layout.setSpacing(2)
+
+        # Кнопки-вкладки
+        self.tab_buttons = []
+        tabs = [
+            ("➕ Математика", "math"),
+            ("📝 Текст", "text"),
+            ("📅 Дата", "date"),
+            ("🔀 Логика", "logic"),
+            ("🔄 Конверт.", "convert"),
+            ("📊 Формат", "format"),
+        ]
+
+        for tab_name, tab_id in tabs:
+            btn = QPushButton(tab_name)
+            btn.setCheckable(True)
+            btn.setProperty("tab_id", tab_id)
+            btn.clicked.connect(lambda checked, tid=tab_id: self.on_tab_clicked(tid))
+            btn.setMinimumWidth(80)
+            tabs_layout.addWidget(btn)
+            self.tab_buttons.append(btn)
+
+        tabs_layout.addStretch()
+        self.addWidget(tabs_widget)
+
+        # Стек панелей с функциями
+        self.panels_stack = QStackedWidget()
+        self.panels_stack.setMaximumHeight(36)
+        
+        # Создаём панели для каждой категории
+        self._create_math_panel()
+        self._create_text_panel()
+        self._create_date_panel()
+        self._create_logic_panel()
+        self._create_convert_panel()
+        self._create_format_panel()
+
+        self.addWidget(self.panels_stack)
+
+        # Выбираем первую вкладку по умолчанию
+        self.tab_buttons[0].setChecked(True)
+        self.panels_stack.setCurrentIndex(0)
+
+    def _create_function_row(self, functions: list) -> QWidget:
+        """Создаёт горизонтальный ряд кнопок функций"""
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(4)
+
+        for func_data in functions:
+            func_code = func_data[0]
+            func_name = func_data[1]
+            tooltip = func_data[2] if len(func_data) > 2 else func_code
+            
+            btn = QPushButton(func_name)
+            btn.setToolTip(f"<b>{func_code}</b><br>{tooltip}")
+            btn.clicked.connect(lambda checked, f=func_code: self.function_selected.emit(f))
+            btn.setMinimumWidth(60)
+            layout.addWidget(btn)
+
+        layout.addStretch()
+        return widget
+
+    def _create_math_panel(self):
+        functions = [
+            ("SUM", "Сумма", "SUM(A1:A10)"),
+            ("AVERAGE", "Среднее", "AVERAGE(A1:A10)"),
+            ("COUNT", "Кол-во", "COUNT(A1:A10)"),
+            ("MAX", "Макс", "MAX(A1:A10)"),
+            ("MIN", "Мин", "MIN(A1:A10)"),
+            ("ROUND", "Округл", "ROUND(число, знаки)"),
+            ("ABS", "Модуль", "ABS(-5) = 5"),
+            ("SQRT", "Корень", "SQRT(16) = 4"),
+            ("POWER", "Степень", "POWER(2, 3)"),
+        ]
+        panel = self._create_function_row(functions)
+        self.panels_stack.addWidget(panel)
+        self.panels["math"] = 0
+
+    def _create_text_panel(self):
+        functions = [
+            ("LEN", "Длина", "LEN(текст)"),
+            ("UPPER", "ВЕРХН", "В верхний регистр"),
+            ("LOWER", "нижн", "В нижний регистр"),
+            ("PROPER", "Загл", "Каждое Слово"),
+            ("TRIM", "Пробелы", "Удалить лишние"),
+            ("LEFT", "Слева", "LEFT(текст, N)"),
+            ("RIGHT", "Справа", "RIGHT(текст, N)"),
+            ("MID", "Середина", "MID(текст, старт, длина)"),
+            ("CONCATENATE", "Склеить", "Объединить текст"),
+            ("SUBSTITUTE", "Замена", "Заменить текст"),
+            ("FIND", "Найти", "Поиск в тексте"),
+        ]
+        panel = self._create_function_row(functions)
+        self.panels_stack.addWidget(panel)
+        self.panels["text"] = 1
+
+    def _create_date_panel(self):
+        functions = [
+            ("NOW", "Сейчас", "Дата и время"),
+            ("TODAY", "Сегодня", "Текущая дата"),
+            ("DATE", "Дата", "DATE(год, месяц, день)"),
+        ]
+        panel = self._create_function_row(functions)
+        self.panels_stack.addWidget(panel)
+        self.panels["date"] = 2
+
+    def _create_logic_panel(self):
+        functions = [
+            ("IF", "Если", "IF(условие, да, нет)"),
+            ("EXACT", "Равно", "Сравнение строк"),
+        ]
+        panel = self._create_function_row(functions)
+        self.panels_stack.addWidget(panel)
+        self.panels["logic"] = 3
+
+    def _create_convert_panel(self):
+        functions = [
+            ("TEXT", "→Текст", "TEXT(число, формат)"),
+            ("VALUE", "→Число", "VALUE(текст)"),
+            ("FIXED", "Формат", "FIXED(число, знаки)"),
+            ("CHAR", "Символ", "CHAR(код)"),
+            ("CODE", "Код", "CODE(символ)"),
+        ]
+        panel = self._create_function_row(functions)
+        self.panels_stack.addWidget(panel)
+        self.panels["convert"] = 4
+
+    def _create_format_panel(self):
+        formats = [
+            ("general", "Общий", "Автоформат"),
+            ("number", "Числовой", "1 234,56"),
+            ("currency", "₽ Рубли", "Денежный"),
+            ("currency_usd", "$ Доллары", "USD"),
+            ("percent", "% Процент", "Процентный"),
+            ("date", "Дата", "ДД.ММ.ГГГГ"),
+            ("time", "Время", "ЧЧ:ММ"),
+        ]
+        
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(4)
+
+        for fmt_code, fmt_name, tooltip in formats:
+            btn = QPushButton(fmt_name)
+            btn.setToolTip(tooltip)
+            btn.clicked.connect(lambda checked, f=fmt_code: self.format_selected.emit(f))
+            btn.setMinimumWidth(60)
+            layout.addWidget(btn)
+
+        layout.addStretch()
+        self.panels_stack.addWidget(widget)
+        self.panels["format"] = 5
+
+    def on_tab_clicked(self, tab_id: str):
+        """Обработка клика по вкладке"""
+        # Снимаем выделение со всех кнопок
+        for btn in self.tab_buttons:
+            btn.setChecked(btn.property("tab_id") == tab_id)
+        
+        # Показываем нужную панель
+        if tab_id in self.panels:
+            self.panels_stack.setCurrentIndex(self.panels[tab_id])

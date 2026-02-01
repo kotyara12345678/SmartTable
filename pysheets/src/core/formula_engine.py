@@ -14,19 +14,51 @@ class FormulaEngine:
     def __init__(self):
         # Регистрация функций
         self.functions = {
+            # Математические функции
             'SUM': self._sum,
             'AVERAGE': self._average,
             'COUNT': self._count,
             'MAX': self._max,
             'MIN': self._min,
-            'IF': self._if,
-            'CONCATENATE': self._concatenate,
-            'NOW': self._now,
-            'DATE': self._date,
             'ROUND': self._round,
             'ABS': self._abs,
             'SQRT': self._sqrt,
             'POWER': self._power,
+            
+            # Логические функции
+            'IF': self._if,
+            
+            # Дата и время
+            'NOW': self._now,
+            'TODAY': self._today,
+            'DATE': self._date,
+            
+            # Текстовые функции
+            'CONCATENATE': self._concatenate,
+            'CONCAT': self._concatenate,  # Алиас
+            'LEN': self._len,
+            'UPPER': self._upper,
+            'LOWER': self._lower,
+            'PROPER': self._proper,
+            'TRIM': self._trim,
+            'LEFT': self._left,
+            'RIGHT': self._right,
+            'MID': self._mid,
+            'FIND': self._find,
+            'SEARCH': self._search,
+            'REPLACE': self._replace,
+            'SUBSTITUTE': self._substitute,
+            'REPT': self._rept,
+            'TEXT': self._text,
+            'VALUE': self._value,
+            'CHAR': self._char,
+            'CODE': self._code,
+            'CLEAN': self._clean,
+            'EXACT': self._exact,
+            'T': self._t,
+            'TEXTJOIN': self._textjoin,
+            'NUMBERVALUE': self._numbervalue,
+            'FIXED': self._fixed,
         }
 
         # Операторы
@@ -328,6 +360,382 @@ class FormulaEngine:
             exponent = float(self.evaluate(args[1], cell_resolver))
             return base ** exponent
         return 0.0
+
+    def _today(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> str:
+        """Текущая дата"""
+        return datetime.now().strftime("%Y-%m-%d")
+
+    # ============ ТЕКСТОВЫЕ ФУНКЦИИ ============
+
+    def _get_text_value(self, arg: str, cell_resolver: Callable[[str], Optional[str]]) -> str:
+        """Получение текстового значения из аргумента"""
+        if self._is_cell_reference(arg):
+            value = cell_resolver(arg)
+            return str(value) if value is not None else ''
+        else:
+            # Удаление кавычек для строковых литералов
+            if arg.startswith('"') and arg.endswith('"'):
+                return arg[1:-1]
+            return arg
+
+    def _len(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> int:
+        """Длина текста - LEN(текст)"""
+        if args:
+            text = self._get_text_value(args[0], cell_resolver)
+            return len(text)
+        return 0
+
+    def _upper(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> str:
+        """Преобразование в верхний регистр - UPPER(текст)"""
+        if args:
+            text = self._get_text_value(args[0], cell_resolver)
+            return text.upper()
+        return ''
+
+    def _lower(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> str:
+        """Преобразование в нижний регистр - LOWER(текст)"""
+        if args:
+            text = self._get_text_value(args[0], cell_resolver)
+            return text.lower()
+        return ''
+
+    def _proper(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> str:
+        """Каждое слово с заглавной буквы - PROPER(текст)"""
+        if args:
+            text = self._get_text_value(args[0], cell_resolver)
+            return text.title()
+        return ''
+
+    def _trim(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> str:
+        """Удаление лишних пробелов - TRIM(текст)"""
+        if args:
+            text = self._get_text_value(args[0], cell_resolver)
+            # Удаляем пробелы по краям и заменяем множественные пробелы на одинарные
+            return ' '.join(text.split())
+        return ''
+
+    def _left(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> str:
+        """Левые символы - LEFT(текст, количество)"""
+        if args:
+            text = self._get_text_value(args[0], cell_resolver)
+            num_chars = 1  # По умолчанию 1 символ
+            if len(args) > 1:
+                try:
+                    num_chars = int(float(self.evaluate(args[1], cell_resolver)))
+                except:
+                    num_chars = 1
+            return text[:num_chars]
+        return ''
+
+    def _right(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> str:
+        """Правые символы - RIGHT(текст, количество)"""
+        if args:
+            text = self._get_text_value(args[0], cell_resolver)
+            num_chars = 1  # По умолчанию 1 символ
+            if len(args) > 1:
+                try:
+                    num_chars = int(float(self.evaluate(args[1], cell_resolver)))
+                except:
+                    num_chars = 1
+            return text[-num_chars:] if num_chars > 0 else ''
+        return ''
+
+    def _mid(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> str:
+        """Подстрока из середины - MID(текст, начало, длина)"""
+        if len(args) >= 3:
+            text = self._get_text_value(args[0], cell_resolver)
+            try:
+                start = int(float(self.evaluate(args[1], cell_resolver))) - 1  # 1-based в 0-based
+                length = int(float(self.evaluate(args[2], cell_resolver)))
+                if start < 0:
+                    start = 0
+                return text[start:start + length]
+            except:
+                pass
+        return ''
+
+    def _find(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> int:
+        """Поиск текста (с учётом регистра) - FIND(искать, текст, [начало])"""
+        if len(args) >= 2:
+            find_text = self._get_text_value(args[0], cell_resolver)
+            within_text = self._get_text_value(args[1], cell_resolver)
+            start_num = 0
+            if len(args) > 2:
+                try:
+                    start_num = int(float(self.evaluate(args[2], cell_resolver))) - 1
+                except:
+                    start_num = 0
+            
+            pos = within_text.find(find_text, start_num)
+            if pos >= 0:
+                return pos + 1  # 1-based позиция
+            else:
+                raise ValueError(f"Текст '{find_text}' не найден")
+        return 0
+
+    def _search(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> int:
+        """Поиск текста (без учёта регистра) - SEARCH(искать, текст, [начало])"""
+        if len(args) >= 2:
+            find_text = self._get_text_value(args[0], cell_resolver).lower()
+            within_text = self._get_text_value(args[1], cell_resolver).lower()
+            start_num = 0
+            if len(args) > 2:
+                try:
+                    start_num = int(float(self.evaluate(args[2], cell_resolver))) - 1
+                except:
+                    start_num = 0
+            
+            pos = within_text.find(find_text, start_num)
+            if pos >= 0:
+                return pos + 1  # 1-based позиция
+            else:
+                raise ValueError(f"Текст не найден")
+        return 0
+
+    def _replace(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> str:
+        """Замена по позиции - REPLACE(текст, начало, длина, новый_текст)"""
+        if len(args) >= 4:
+            old_text = self._get_text_value(args[0], cell_resolver)
+            try:
+                start = int(float(self.evaluate(args[1], cell_resolver))) - 1  # 1-based
+                num_chars = int(float(self.evaluate(args[2], cell_resolver)))
+                new_text = self._get_text_value(args[3], cell_resolver)
+                
+                if start < 0:
+                    start = 0
+                return old_text[:start] + new_text + old_text[start + num_chars:]
+            except:
+                pass
+        return ''
+
+    def _substitute(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> str:
+        """Замена текста - SUBSTITUTE(текст, старый, новый, [номер])"""
+        if len(args) >= 3:
+            text = self._get_text_value(args[0], cell_resolver)
+            old_text = self._get_text_value(args[1], cell_resolver)
+            new_text = self._get_text_value(args[2], cell_resolver)
+            
+            if len(args) > 3:
+                # Заменить только n-ое вхождение
+                try:
+                    instance_num = int(float(self.evaluate(args[3], cell_resolver)))
+                    count = 0
+                    result = ''
+                    i = 0
+                    while i < len(text):
+                        if text[i:i + len(old_text)] == old_text:
+                            count += 1
+                            if count == instance_num:
+                                result += new_text
+                            else:
+                                result += old_text
+                            i += len(old_text)
+                        else:
+                            result += text[i]
+                            i += 1
+                    return result
+                except:
+                    pass
+            else:
+                # Заменить все вхождения
+                return text.replace(old_text, new_text)
+        return ''
+
+    def _rept(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> str:
+        """Повторение текста - REPT(текст, количество)"""
+        if len(args) >= 2:
+            text = self._get_text_value(args[0], cell_resolver)
+            try:
+                times = int(float(self.evaluate(args[1], cell_resolver)))
+                return text * max(0, times)
+            except:
+                pass
+        return ''
+
+    def _text(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> str:
+        """Форматирование числа как текст - TEXT(число, формат)"""
+        if len(args) >= 2:
+            try:
+                value = float(self.evaluate(args[0], cell_resolver))
+                format_str = self._get_text_value(args[1], cell_resolver)
+                
+                # Базовые форматы
+                if format_str == "0":
+                    return str(int(value))
+                elif format_str == "0.00":
+                    return f"{value:.2f}"
+                elif format_str == "0.000":
+                    return f"{value:.3f}"
+                elif format_str == "#,##0":
+                    return f"{value:,.0f}"
+                elif format_str == "#,##0.00":
+                    return f"{value:,.2f}"
+                elif format_str == "0%":
+                    return f"{value * 100:.0f}%"
+                elif format_str == "0.00%":
+                    return f"{value * 100:.2f}%"
+                else:
+                    return str(value)
+            except:
+                pass
+        return ''
+
+    def _value(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> float:
+        """Преобразование текста в число - VALUE(текст)"""
+        if args:
+            text = self._get_text_value(args[0], cell_resolver)
+            # Удаляем пробелы, валюту и проценты
+            text = text.strip().replace(' ', '').replace('$', '').replace('€', '').replace('₽', '')
+            text = text.replace(',', '.')
+            
+            is_percent = '%' in text
+            text = text.replace('%', '')
+            
+            try:
+                value = float(text)
+                if is_percent:
+                    value /= 100
+                return value
+            except:
+                raise ValueError(f"Не удалось преобразовать '{text}' в число")
+        return 0.0
+
+    def _char(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> str:
+        """Символ по коду - CHAR(число)"""
+        if args:
+            try:
+                code = int(float(self.evaluate(args[0], cell_resolver)))
+                return chr(code)
+            except:
+                pass
+        return ''
+
+    def _code(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> int:
+        """Код первого символа - CODE(текст)"""
+        if args:
+            text = self._get_text_value(args[0], cell_resolver)
+            if text:
+                return ord(text[0])
+        return 0
+
+    def _clean(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> str:
+        """Удаление непечатаемых символов - CLEAN(текст)"""
+        if args:
+            text = self._get_text_value(args[0], cell_resolver)
+            # Удаляем все непечатаемые символы (ASCII 0-31)
+            return ''.join(char for char in text if ord(char) >= 32)
+        return ''
+
+    def _exact(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> bool:
+        """Точное сравнение строк - EXACT(текст1, текст2)"""
+        if len(args) >= 2:
+            text1 = self._get_text_value(args[0], cell_resolver)
+            text2 = self._get_text_value(args[1], cell_resolver)
+            return text1 == text2
+        return False
+
+    def _t(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> str:
+        """Возвращает текст или пустую строку - T(значение)"""
+        if args:
+            value = self._get_text_value(args[0], cell_resolver)
+            # Если это число, вернуть пустую строку
+            try:
+                float(value)
+                return ''
+            except:
+                return value
+        return ''
+
+    def _textjoin(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> str:
+        """Объединение текста с разделителем - TEXTJOIN(разделитель, игнор_пустых, текст1, ...)"""
+        if len(args) >= 3:
+            delimiter = self._get_text_value(args[0], cell_resolver)
+            try:
+                ignore_empty = bool(int(float(self.evaluate(args[1], cell_resolver))))
+            except:
+                ignore_empty = True
+            
+            texts = []
+            for arg in args[2:]:
+                if ':' in arg:
+                    # Диапазон ячеек
+                    values = self._get_range_text_values(arg, cell_resolver)
+                    texts.extend(values)
+                else:
+                    text = self._get_text_value(arg, cell_resolver)
+                    texts.append(text)
+            
+            if ignore_empty:
+                texts = [t for t in texts if t.strip()]
+            
+            return delimiter.join(texts)
+        return ''
+
+    def _get_range_text_values(self, range_str: str, cell_resolver: Callable[[str], Optional[str]]) -> list:
+        """Получение текстовых значений из диапазона"""
+        values = []
+        if ':' in range_str:
+            start, end = range_str.split(':')
+            start_col, start_row = self._parse_cell_reference(start)
+            end_col, end_row = self._parse_cell_reference(end)
+            
+            if all(v is not None for v in [start_col, start_row, end_col, end_row]):
+                for row in range(start_row, end_row + 1):
+                    for col in range(start_col, end_col + 1):
+                        col_letter = self._col_number_to_letter(col)
+                        cell_ref = f"{col_letter}{row + 1}"
+                        value = cell_resolver(cell_ref)
+                        values.append(str(value) if value is not None else '')
+        return values
+
+    def _numbervalue(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> float:
+        """Преобразование текста в число с настройками локали - NUMBERVALUE(текст, [дес_разд], [груп_разд])"""
+        if args:
+            text = self._get_text_value(args[0], cell_resolver)
+            decimal_sep = '.' if len(args) < 2 else self._get_text_value(args[1], cell_resolver)
+            group_sep = '' if len(args) < 3 else self._get_text_value(args[2], cell_resolver)
+            
+            # Удаляем разделитель групп
+            if group_sep:
+                text = text.replace(group_sep, '')
+            # Заменяем десятичный разделитель на точку
+            if decimal_sep and decimal_sep != '.':
+                text = text.replace(decimal_sep, '.')
+            
+            text = text.strip()
+            
+            is_percent = '%' in text
+            text = text.replace('%', '')
+            
+            try:
+                value = float(text)
+                if is_percent:
+                    value /= 100
+                return value
+            except:
+                raise ValueError(f"Не удалось преобразовать в число")
+        return 0.0
+
+    def _fixed(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> str:
+        """Форматирование числа с фиксированным количеством знаков - FIXED(число, [знаки], [без_разделителей])"""
+        if args:
+            try:
+                number = float(self.evaluate(args[0], cell_resolver))
+                decimals = 2  # По умолчанию
+                no_commas = False
+                
+                if len(args) > 1:
+                    decimals = int(float(self.evaluate(args[1], cell_resolver)))
+                if len(args) > 2:
+                    no_commas = bool(int(float(self.evaluate(args[2], cell_resolver))))
+                
+                if no_commas:
+                    return f"{number:.{decimals}f}"
+                else:
+                    return f"{number:,.{decimals}f}"
+            except:
+                pass
+        return ''
 
     def _get_range_values(self, range_str: str, cell_resolver: Callable[[str], Optional[str]]) -> list:
         """Получение значений из диапазона"""

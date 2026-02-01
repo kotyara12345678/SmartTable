@@ -20,7 +20,7 @@ from pysheets.src.io import ExcelImporter, ExcelExporter
 from pysheets.src.ui.formula_bar import FormulaBar
 from pysheets.src.ui.sidebar import Sidebar
 from pysheets.src.ui.spreadsheet_widget import SpreadsheetWidget
-from pysheets.src.ui.toolbar import MainToolBar, FormatToolBar
+from pysheets.src.ui.toolbar import MainToolBar, FormatToolBar, FunctionsToolBar
 from pysheets.src.utils import show_error_message
 
 
@@ -54,6 +54,7 @@ class MainWindow(QMainWindow):
         self.status_bar = None
         self.main_toolbar = None
         self.format_toolbar = None
+        self.functions_toolbar = None
         self.formula_bar = None
         self.sidebar = None
         self.menu_bar = None
@@ -89,6 +90,7 @@ class MainWindow(QMainWindow):
         self.create_toolbars()
         main_layout.addWidget(self.main_toolbar)
         main_layout.addWidget(self.format_toolbar)
+        main_layout.addWidget(self.functions_toolbar)
 
         # Панель формул
         self.formula_bar = FormulaBar()
@@ -132,7 +134,7 @@ class MainWindow(QMainWindow):
         splitter_right.setCollapsible(1, True)
 
         main_area_layout.addWidget(splitter_right)
-        main_layout.addWidget(main_area)
+        main_layout.addWidget(main_area, 1)  # stretch factor = 1, чтобы занять всё пространство
 
         # Строка состояния
         self.create_statusbar()
@@ -271,6 +273,10 @@ class MainWindow(QMainWindow):
         self.format_toolbar = FormatToolBar()
         self.format_toolbar.format_changed.connect(self.apply_format)
 
+        self.functions_toolbar = FunctionsToolBar()
+        self.functions_toolbar.function_selected.connect(self.on_function_selected)
+        self.functions_toolbar.format_selected.connect(self.on_format_selected)
+
     def create_statusbar(self):
         """Создание строки состояния"""
         self.status_bar = QStatusBar()
@@ -381,6 +387,16 @@ class MainWindow(QMainWindow):
         else:
             # Если нет выделения, просто вставляем пустую функцию
             self.formula_bar.insert_function(function)
+
+    def on_format_selected(self, format_type: str):
+        """Обработка выбора формата из панели функций"""
+        spreadsheet = self.get_current_spreadsheet()
+        if not spreadsheet:
+            return
+        
+        # Применяем формат к выделенным ячейкам
+        spreadsheet.apply_format('number_format', format_type)
+        self.status_bar.showMessage(f"Применён формат: {format_type}")
 
     # ============ ФУНКЦИИ ФАЙЛОВ ============
 
