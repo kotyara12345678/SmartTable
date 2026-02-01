@@ -527,6 +527,13 @@ class MainWindow(QMainWindow):
             file_path = None
 
         if file_path:
+            # Гарантируем расширение .xlsx
+            if not file_path.lower().endswith('.xlsx'):
+                file_path += '.xlsx'
+            # Проверка наличия листов и данных
+            if not self.workbook.sheets or all(sheet.rows == 0 or sheet.columns == 0 for sheet in self.workbook.sheets):
+                show_error_message(self, "Нет данных для экспорта!")
+                return
             try:
                 exporter = ExcelExporter()
                 exporter.export_excel(self.workbook, file_path)

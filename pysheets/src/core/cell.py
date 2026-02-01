@@ -24,6 +24,7 @@ class Cell:
     bold: bool = False
     italic: bool = False
     underline: bool = False
+    strike: bool = False  # перечёркнутый
     text_color: str = "#000000"
     background_color: str = "#FFFFFF"
     alignment: str = "left"  # left, center, right
@@ -90,6 +91,7 @@ class Cell:
             'bold': self.bold,
             'italic': self.italic,
             'underline': self.underline,
+            'strike': self.strike,
             'text_color': self.text_color,
             'background_color': self.background_color,
             'alignment': self.alignment,
@@ -111,6 +113,7 @@ class Cell:
             bold=data.get('bold', False),
             italic=data.get('italic', False),
             underline=data.get('underline', False),
+            strike=data.get('strike', False),
             text_color=data.get('text_color', '#000000'),
             background_color=data.get('background_color', '#FFFFFF'),
             alignment=data.get('alignment', 'left'),

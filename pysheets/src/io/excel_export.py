@@ -11,31 +11,70 @@ class ExcelExporter:
 
     @staticmethod
     def export_excel(workbook: Workbook, file_path: str):
-        """Экспорт в Excel файл"""
+        """Экспорт в Excel файл с сохранением стилей"""
         try:
-            with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
-                for sheet in workbook.sheets:
-                    # Получение данных
-                    data = sheet.get_data()
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill, Alignment
+            from openpyxl.utils import get_column_letter
+            wb = openpyxl.Workbook()
+            # Удаляем стандартный лист
+            if wb.worksheets:
+                wb.remove(wb.active)
+            for sheet in workbook.sheets:
+                ws = wb.create_sheet(title=sheet.name)
+                for row in range(sheet.rows):
+                    for col in range(sheet.columns):
+                        cell_obj = sheet.get_cell(row, col)
+                        value = cell_obj.value if cell_obj else ""
+                        ws_cell = ws.cell(row=row+1, column=col+1, value=value)
+                        if cell_obj:
+                            # Корректный hex-цвет (6 символов, без #)
+                            def norm_hex(color, default):
+                                if not color or color in ("#000000", "#FFFFFF", "000000", "FFFFFF"):
+                                    return default
+                                c = color.replace('#', '')
+                                if len(c) == 3:
+                                    c = ''.join([x*2 for x in c])
+                                return c.upper().ljust(6, '0')
 
-                    # Создание DataFrame
-                    df = pd.DataFrame(data)
-
-                    # Сохранение в Excel
-                    df.to_excel(
-                        writer,
-                        sheet_name=sheet.name,
-                        index=False,
-                        header=False
-                    )
-
-                    # Настройка ширины столбцов (опционально)
-                    worksheet = writer.sheets[sheet.name]
-                    for col_idx, column in enumerate(df.columns):
-                        column_width = max(df[col_idx].astype(str).map(len).max(), 10)
-                        column_letter = chr(65 + col_idx) if col_idx < 26 else f"A{chr(65 + col_idx - 26)}"
-                        worksheet.column_dimensions[column_letter].width = min(column_width, 50)
-
+                            # Стиль шрифта
+                            font = Font(
+                                name=cell_obj.font_family or "Arial",
+                                size=cell_obj.font_size or 11,
+                                bold=bool(cell_obj.bold),
+                                italic=bool(cell_obj.italic),
+                                underline='single' if cell_obj.underline else None,
+                                strike=bool(getattr(cell_obj, 'strike', False)),
+                                color=norm_hex(cell_obj.text_color, "000000")
+                            )
+                            ws_cell.font = font
+                            # Цвет фона
+                            bg = norm_hex(cell_obj.background_color, None)
+                            if bg and bg != "FFFFFF":
+                                ws_cell.fill = PatternFill(
+                                    fill_type="solid",
+                                    start_color=bg,
+                                    end_color=bg
+                                )
+                            # Выравнивание
+                            align = cell_obj.alignment
+                            if align == 'left':
+                                ws_cell.alignment = Alignment(horizontal='left')
+                            elif align == 'center':
+                                ws_cell.alignment = Alignment(horizontal='center')
+                            elif align == 'right':
+                                ws_cell.alignment = Alignment(horizontal='right')
+                # Настройка ширины столбцов
+                for col in range(sheet.columns):
+                    max_len = 10
+                    for row in range(sheet.rows):
+                        cell_obj = sheet.get_cell(row, col)
+                        val = str(cell_obj.value) if cell_obj and cell_obj.value else ""
+                        if len(val) > max_len:
+                            max_len = len(val)
+                    col_letter = get_column_letter(col+1)
+                    ws.column_dimensions[col_letter].width = min(max_len, 50)
+            wb.save(file_path)
         except ImportError:
             raise ImportError("Требуется установка openpyxl: pip install openpyxl")
         except Exception as e:

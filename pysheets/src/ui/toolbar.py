@@ -181,6 +181,56 @@ class FormatToolBar(QToolBar):
         self.italic_btn.setFixedWidth(30)
         self.addWidget(self.italic_btn)
 
+        self.underline_btn = QPushButton("U")
+        self.underline_btn.setCheckable(True)
+        self.underline_btn.setToolTip("Подчеркнутый (Ctrl+U)")
+        fontu = QFont("Arial", 9)
+        fontu.setUnderline(True)
+        self.underline_btn.setFont(fontu)
+        self.underline_btn.clicked.connect(
+            lambda: self.format_changed.emit('underline', self.underline_btn.isChecked())
+        )
+        self.underline_btn.setFixedWidth(30)
+        self.addWidget(self.underline_btn)
+
+        self.strike_btn = QPushButton("S")
+        self.strike_btn.setCheckable(True)
+        self.strike_btn.setToolTip("Перечеркнутый")
+        fontstrike = QFont("Arial", 9)
+        fontstrike.setStrikeOut(True)
+        self.strike_btn.setFont(fontstrike)
+        self.strike_btn.clicked.connect(
+            lambda: self.format_changed.emit('strike', self.strike_btn.isChecked())
+        )
+        self.strike_btn.setFixedWidth(30)
+        self.addWidget(self.strike_btn)
+
+        self.addSeparator()
+
+        # Цвет текста
+        self.text_color_btn = QPushButton("A")
+        self.text_color_btn.setToolTip("Цвет текста")
+        self.text_color_btn.setStyleSheet("color: #DC143C; font-weight: bold;")
+        self.text_color_btn.clicked.connect(lambda: self.format_changed.emit('text_color', None))
+        self.text_color_btn.setFixedWidth(30)
+        self.addWidget(self.text_color_btn)
+
+        # Цвет фона
+        self.bg_color_btn = QPushButton("🖌")
+        self.bg_color_btn.setToolTip("Цвет фона ячейки")
+        self.bg_color_btn.clicked.connect(lambda: self.format_changed.emit('bg_color', None))
+        self.bg_color_btn.setFixedWidth(30)
+        self.addWidget(self.bg_color_btn)
+
+        self.addSeparator()
+
+        # Сброс стилей
+        self.clear_format_btn = QPushButton("✖")
+        self.clear_format_btn.setToolTip("Сбросить форматирование")
+        self.clear_format_btn.clicked.connect(lambda: self.format_changed.emit('clear_format', True))
+        self.clear_format_btn.setFixedWidth(30)
+        self.addWidget(self.clear_format_btn)
+
         self.addSeparator()
 
         # Выравнивание - делаем кнопки взаимоисключающими

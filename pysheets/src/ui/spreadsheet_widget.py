@@ -181,12 +181,11 @@ class SpreadsheetWidget(QTableWidget):
         if cell and item:
             # Применение шрифта
             font = QFont()
-            if cell.bold:
-                font.setBold(True)
-            if cell.italic:
-                font.setItalic(True)
-            if cell.underline:
-                font.setUnderline(True)
+            font.setBold(bool(cell.bold))
+            font.setItalic(bool(cell.italic))
+            font.setUnderline(bool(cell.underline))
+            if hasattr(cell, 'strike'):
+                font.setStrikeOut(bool(cell.strike))
             font.setPointSize(cell.font_size)
             item.setFont(font)
 
@@ -231,7 +230,7 @@ class SpreadsheetWidget(QTableWidget):
         self.selection_changed.emit()
 
     def show_context_menu(self, position: QPoint):
-        """Показать контекстное меню"""
+        """Показать контекстное меню с расширенным форматированием"""
         menu = QMenu(self)
 
         # Основные действия
@@ -252,26 +251,72 @@ class SpreadsheetWidget(QTableWidget):
 
         menu.addSeparator()
 
-        # Форматирование
+        # Форматирование (все функции)
         format_menu = menu.addMenu("Форматирование")
 
         bold_action = QAction("Жирный", self)
         bold_action.setCheckable(True)
-        bold_action.triggered.connect(self.toggle_bold)
+        bold_action.triggered.connect(lambda: self.apply_format('bold', None))
         format_menu.addAction(bold_action)
 
         italic_action = QAction("Курсив", self)
         italic_action.setCheckable(True)
-        italic_action.triggered.connect(self.toggle_italic)
+        italic_action.triggered.connect(lambda: self.apply_format('italic', None))
         format_menu.addAction(italic_action)
 
-        color_action = QAction("Цвет текста...", self)
-        color_action.triggered.connect(self.change_text_color)
-        format_menu.addAction(color_action)
+        underline_action = QAction("Подчеркнутый", self)
+        underline_action.setCheckable(True)
+        underline_action.triggered.connect(lambda: self.apply_format('underline', None))
+        format_menu.addAction(underline_action)
+
+        strike_action = QAction("Перечеркнутый", self)
+        strike_action.setCheckable(True)
+        strike_action.triggered.connect(lambda: self.apply_format('strike', None))
+        format_menu.addAction(strike_action)
+
+        format_menu.addSeparator()
+
+        text_color_action = QAction("Цвет текста...", self)
+        text_color_action.triggered.connect(lambda: self.apply_format('text_color', None))
+        format_menu.addAction(text_color_action)
 
         bg_color_action = QAction("Цвет фона...", self)
-        bg_color_action.triggered.connect(self.change_bg_color)
+        bg_color_action.triggered.connect(lambda: self.apply_format('bg_color', None))
         format_menu.addAction(bg_color_action)
+
+        format_menu.addSeparator()
+
+        # Размер шрифта
+        font_size_menu = format_menu.addMenu("Размер шрифта")
+        for size in [8, 9, 10, 11, 12, 14, 16, 18, 20, 24]:
+            size_action = QAction(str(size), self)
+            size_action.triggered.connect(lambda checked, s=size: self.apply_format('font_size', s))
+            font_size_menu.addAction(size_action)
+
+        # Шрифт
+        font_menu = format_menu.addMenu("Шрифт")
+        for font_name in ["Arial", "Calibri", "Times New Roman", "Verdana", "Segoe UI"]:
+            font_action = QAction(font_name, self)
+            font_action.triggered.connect(lambda checked, f=font_name: self.apply_format('font', f))
+            font_menu.addAction(font_action)
+
+        # Выравнивание
+        align_menu = format_menu.addMenu("Выравнивание")
+        align_left_action = QAction("По левому краю", self)
+        align_left_action.triggered.connect(lambda: self.apply_format('alignment', 'left'))
+        align_menu.addAction(align_left_action)
+        align_center_action = QAction("По центру", self)
+        align_center_action.triggered.connect(lambda: self.apply_format('alignment', 'center'))
+        align_menu.addAction(align_center_action)
+        align_right_action = QAction("По правому краю", self)
+        align_right_action.triggered.connect(lambda: self.apply_format('alignment', 'right'))
+        align_menu.addAction(align_right_action)
+
+        format_menu.addSeparator()
+
+        clear_format_action = QAction("Сбросить форматирование", self)
+        clear_format_action.triggered.connect(lambda: self.apply_format('clear_format', True))
+        format_menu.addAction(clear_format_action)
 
         menu.addSeparator()
 
@@ -571,18 +616,63 @@ class SpreadsheetWidget(QTableWidget):
         return pd.DataFrame(data)
 
     def apply_format(self, format_type: str, value):
-        """Применение форматирования к выделенным ячейкам"""
+        """Применение форматирования к выделенным ячейкам (toolbar и меню)"""
         for item in self.selectedItems():
             row = item.row()
             col = item.column()
             cell = self.get_cell(row, col)
-
-            if cell:
-                if format_type == 'font':
-                    cell.font_family = value
-                elif format_type == 'font_size':
-                    cell.font_size = value
-                elif format_type == 'alignment':
-                    cell.alignment = value
-
-                self.apply_cell_formatting(row, col)
+            if not cell:
+                continue
+            if format_type == 'font':
+                cell.font_family = value
+            elif format_type == 'font_size':
+                cell.font_size = value
+            elif format_type == 'alignment':
+                cell.alignment = value
+            elif format_type == 'bold':
+                cell.bold = value if value is not None else not cell.bold
+            elif format_type == 'italic':
+                cell.italic = value if value is not None else not cell.italic
+            elif format_type == 'underline':
+                cell.underline = value if value is not None else not cell.underline
+            elif format_type == 'strike':
+                if hasattr(cell, 'strike'):
+                    cell.strike = value if value is not None else not getattr(cell, 'strike', False)
+                else:
+                    cell.strike = value if value is not None else True
+            elif format_type == 'text_color':
+                if value is None:
+                    dlg = QColorDialog(self)
+                    app = QApplication.instance()
+                    if app and app.styleSheet():
+                        dlg.setStyleSheet(app.styleSheet())
+                    if dlg.exec_() == QDialog.Accepted:
+                        color = dlg.currentColor()
+                        if color.isValid():
+                            cell.text_color = color.name()
+                else:
+                    cell.text_color = value
+            elif format_type == 'bg_color':
+                if value is None:
+                    dlg = QColorDialog(self)
+                    app = QApplication.instance()
+                    if app and app.styleSheet():
+                        dlg.setStyleSheet(app.styleSheet())
+                    if dlg.exec_() == QDialog.Accepted:
+                        color = dlg.currentColor()
+                        if color.isValid():
+                            cell.background_color = color.name()
+                else:
+                    cell.background_color = value
+            elif format_type == 'clear_format':
+                cell.font_family = "Arial"
+                cell.font_size = 11
+                cell.bold = False
+                cell.italic = False
+                cell.underline = False
+                cell.text_color = "#000000"
+                cell.background_color = "#FFFFFF"
+                cell.alignment = "left"
+                if hasattr(cell, 'strike'):
+                    cell.strike = False
+            self.apply_cell_formatting(row, col)
