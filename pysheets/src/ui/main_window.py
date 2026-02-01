@@ -11,7 +11,7 @@ from typing import Optional
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QTabWidget, QStatusBar, QMenuBar, QMessageBox,
                              QFileDialog, QSplitter, QToolBar, QDialog, QAction,
-                             QApplication)
+                             QApplication, QMenu, QInputDialog)
 from PyQt5.QtCore import Qt, QTimer, QSize, QSettings
 from PyQt5.QtGui import QKeySequence, QIcon, QColor, QPixmap, QPainter
 
@@ -110,6 +110,9 @@ class MainWindow(QMainWindow):
         self.tab_widget.setTabsClosable(True)
         self.tab_widget.tabCloseRequested.connect(self.close_tab)
         self.tab_widget.currentChanged.connect(self.tab_changed)
+        # Контекстное меню для вкладок (правый клик)
+        self.tab_widget.tabBar().setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tab_widget.tabBar().customContextMenuRequested.connect(self.show_tab_context_menu)
 
         # Добавляем первую вкладку
         self.add_new_sheet("Лист1")
@@ -640,14 +643,142 @@ class MainWindow(QMainWindow):
     # ============ ИНСТРУМЕНТЫ ============
 
     def create_chart(self):
-        """Создание диаграммы"""
+        """Создание диаграммы по выделенному диапазону"""
+        from pysheets.src.ui.dialogs.chart_wizard import ChartWizardDialog
+        import matplotlib.pyplot as plt
+        import numpy as np
         spreadsheet = self.get_current_spreadsheet()
-        if spreadsheet:
-            dialog = QDialog(self)
-            if dialog.exec() == QDialog.Accepted:
-                chart_data = dialog.get_chart_data()
-                # Создание диаграммы
-                self.status_bar.showMessage("Диаграмма создана")
+        if not spreadsheet:
+            return
+        # Получаем выделенный диапазон
+        selected = spreadsheet.selectedRanges()
+        if not selected:
+            self.status_bar.showMessage("Нет выделения для построения графика")
+            return
+        rng = selected[0]
+        rows = list(range(rng.topRow(), rng.bottomRow() + 1))
+        cols = list(range(rng.leftColumn(), rng.rightColumn() + 1))
+        # Собираем данные (None -> np.nan)
+        data = []
+        for row in rows:
+            row_data = []
+            for col in cols:
+                cell = spreadsheet.get_cell(row, col)
+                val = None
+                if cell and cell.value is not None:
+                    try:
+                        val = float(str(cell.value).replace(',', '.'))
+                    except:
+                        val = None
+                row_data.append(np.nan if val is None else val)
+            data.append(row_data)
+        arr = np.array(data, dtype=np.float64)
+        # Проверяем, есть ли хоть одно число
+        if not np.isfinite(arr).any():
+            self.status_bar.showMessage("Нет числовых данных для графика")
+            return
+        # Диалог выбора типа графика и опций
+        dlg = ChartWizardDialog(self)
+        if dlg.exec_() != QDialog.Accepted:
+            return
+        chart_type = dlg.get_chart_type()
+        options = dlg.get_options()
+        smooth = options.get('smooth', False)
+        show_legend = options.get('legend', False)
+        normalize = options.get('normalize', False)
+
+        # Подготовка данных и меток
+        plt.figure(figsize=(7, 4))
+        if arr.shape[0] == 1:
+            labels = [chr(65 + c) for c in cols]
+            series = [arr[0]]
+        elif arr.shape[1] == 1:
+            labels = [str(r + 1) for r in rows]
+            series = [arr[:, 0]]
+        else:
+            labels = [chr(65 + c) for c in cols]
+            series = [arr[i] for i in range(arr.shape[0])]
+
+        # Нормализация серий при необходимости
+        if normalize:
+            normed = []
+            for s in series:
+                finite = s[np.isfinite(s)]
+                if finite.size:
+                    mn, mx = finite.min(), finite.max()
+                    if mx - mn > 0:
+                        ns = (s - mn) / (mx - mn)
+                    else:
+                        ns = s * 0
+                else:
+                    ns = s
+                normed.append(ns)
+            series = normed
+
+        # Сглаживание: простой moving average
+        def smooth_series(s, window=3):
+            if not smooth:
+                return s
+            w = int(window)
+            mask = np.isfinite(s)
+            out = np.full_like(s, np.nan)
+            if mask.any():
+                vals = s.copy()
+                vals[~mask] = 0
+                kernel = np.ones(w) / w
+                conv = np.convolve(vals, kernel, mode='same')
+                # скорректировать краевые значения
+                out[mask] = conv[mask]
+            return out
+
+        # Построение
+        if chart_type == "Столбчатая диаграмма":
+            x = np.arange(len(labels))
+            width = 0.8 / max(1, len(series))
+            for i, s in enumerate(series):
+                s2 = smooth_series(s)
+                plt.bar(x + i * width, s2, width=width, label=(f"Строка {rows[0]+i+1}" if len(series) > 1 else None))
+            plt.xticks(x + width * (len(series)-1) / 2, labels)
+            plt.title("Столбчатая диаграмма")
+        elif chart_type == "Горизонтальная столбчатая":
+            y = np.arange(len(labels))
+            height = 0.8 / max(1, len(series))
+            for i, s in enumerate(series):
+                s2 = smooth_series(s)
+                plt.barh(y + i * height, s2, height=height, label=(f"Строка {rows[0]+i+1}" if len(series) > 1 else None))
+            plt.yticks(y + height * (len(series)-1) / 2, labels)
+            plt.title("Горизонтальная столбчатая")
+        elif chart_type in ("Линейный график", "Сглаженная линия"):
+            for i, s in enumerate(series):
+                s2 = smooth_series(s)
+                plt.plot(labels, s2, marker='o', label=(f"Строка {rows[0]+i+1}" if len(series) > 1 else None))
+            plt.title("Линейный график")
+        elif chart_type == "Круговая диаграмма":
+            if len(series) != 1:
+                self.status_bar.showMessage("Круговая диаграмма поддерживает только одну строку или столбец")
+                return
+            s = series[0]
+            s = s[np.isfinite(s)]
+            lbls = [l for l, v in zip(labels, series[0]) if np.isfinite(v)]
+            plt.pie(s, labels=lbls, autopct='%1.1f%%', startangle=90)
+            plt.title("Круговая диаграмма")
+        elif chart_type == "Площадная (Area)":
+            for i, s in enumerate(series):
+                s2 = smooth_series(s)
+                plt.fill_between(labels, s2, alpha=0.4)
+                plt.plot(labels, s2, marker='o', label=(f"Строка {rows[0]+i+1}" if len(series) > 1 else None))
+            plt.title("Площадная (Area)")
+        else:
+            self.status_bar.showMessage("Неизвестный тип графика")
+            return
+
+        if show_legend and len(series) > 1:
+            plt.legend()
+        plt.xlabel("Категории")
+        plt.ylabel("Значения")
+        plt.tight_layout()
+        plt.show()
+        self.status_bar.showMessage("График построен")
 
     # ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ============
 
@@ -689,9 +820,95 @@ class MainWindow(QMainWindow):
     def close_tab(self, index: int):
         """Закрытие вкладки"""
         if self.tab_widget.count() > 1:
+            # Удаляем и из модели workbook
+            try:
+                removed = self.workbook.remove_sheet(index)
+            except Exception:
+                removed = False
+            # Всегда удаляем вкладку UI, даже если модель не удалила (чтобы не оставлять пустую вкладку)
             self.tab_widget.removeTab(index)
+            if not removed:
+                # помечаем книгу как изменённую
+                self.workbook.modified = True
         else:
             QMessageBox.warning(self, "Ошибка", "Нельзя закрыть последнюю вкладку")
+
+    def show_tab_context_menu(self, position):
+        """Показать контекстное меню для вкладки: закрыть, переименовать, дублировать"""
+        tab_bar = self.tab_widget.tabBar()
+        index = tab_bar.tabAt(position)
+        if index < 0:
+            return
+
+        menu = QMenu(self)
+
+        close_action = QAction("Закрыть вкладку", self)
+        close_action.triggered.connect(lambda: self.close_tab(index))
+        menu.addAction(close_action)
+
+        rename_action = QAction("Переименовать вкладку", self)
+        rename_action.triggered.connect(lambda: self.rename_tab(index))
+        menu.addAction(rename_action)
+
+        duplicate_action = QAction("Дублировать вкладку", self)
+        duplicate_action.triggered.connect(lambda: self.duplicate_tab(index))
+        menu.addAction(duplicate_action)
+
+        menu.exec(tab_bar.mapToGlobal(position))
+
+    def rename_tab(self, index: int):
+        """Переименование вкладки и обновление модели workbook"""
+        current_name = self.tab_widget.tabText(index)
+        new_name, ok = QInputDialog.getText(self, "Переименовать вкладку", "Новое имя:", text=current_name)
+        if ok and new_name and new_name.strip():
+            new_name = new_name.strip()
+            self.tab_widget.setTabText(index, new_name)
+            try:
+                self.workbook.rename_sheet(index, new_name)
+            except Exception:
+                # Если не удалось обновить модель, пометим как изменённую
+                self.workbook.modified = True
+
+    def duplicate_tab(self, index: int):
+        """Дублирование вкладки: копируем содержимое и форматирование"""
+        src_widget = self.tab_widget.widget(index)
+        if not isinstance(src_widget, SpreadsheetWidget):
+            # просто создаём пустую вкладку
+            self.add_new_sheet(self.tab_widget.tabText(index) + " (копия)")
+            return
+
+        new_name = f"{self.tab_widget.tabText(index)} (копия)"
+        # Создаём новую вкладку (это также добавляет лист в workbook)
+        self.add_new_sheet(new_name)
+        new_widget = self.tab_widget.currentWidget()
+
+        # Копируем данные и форматирование
+        max_rows = min(src_widget.rows, new_widget.rows)
+        max_cols = min(src_widget.columns, new_widget.columns)
+        for r in range(max_rows):
+            for c in range(max_cols):
+                src_cell = src_widget.get_cell(r, c)
+                if src_cell:
+                    value = src_cell.formula if src_cell.formula else (src_cell.value if src_cell.value is not None else "")
+                    if value is not None:
+                        new_widget.set_cell_value(r, c, str(value))
+
+                    # Копируем форматирование свойства если есть
+                    dst_cell = new_widget.get_cell(r, c)
+                    if dst_cell and src_cell:
+                        dst_cell.bold = getattr(src_cell, 'bold', False)
+                        dst_cell.italic = getattr(src_cell, 'italic', False)
+                        dst_cell.underline = getattr(src_cell, 'underline', False)
+                        dst_cell.font_size = getattr(src_cell, 'font_size', 10)
+                        dst_cell.alignment = getattr(src_cell, 'alignment', 'left')
+                        dst_cell.text_color = getattr(src_cell, 'text_color', None)
+                        dst_cell.background_color = getattr(src_cell, 'background_color', None)
+                        if hasattr(src_cell, 'strike'):
+                            dst_cell.strike = getattr(src_cell, 'strike', False)
+                        # Применяем формат к виджету
+                        new_widget.apply_cell_formatting(r, c)
+
+        self.status_bar.showMessage(f"Вкладка '{new_name}' создана")
 
     def apply_format(self, format_type: str, value):
         """Применение форматирования"""
