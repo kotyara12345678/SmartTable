@@ -23,6 +23,10 @@ class Workbook:
         """Инициализация после создания"""
         if not self.sheets:
             self.add_sheet("Лист1")
+            # Сброс флага модификации после начальной инициализации
+            self.modified = False
+            for sheet in self.sheets:
+                sheet.modified = False
 
     def add_sheet(self, name: str) -> 'Spreadsheet':
         """Добавление нового листа"""

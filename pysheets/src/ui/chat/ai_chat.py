@@ -14,6 +14,10 @@ class AIChatWidget(QWidget):
         super().__init__(parent)
         self.theme = theme
         self.accent_color = accent_color if accent_color else QColor("#DC143C")
+        
+        # История сообщений для пересоздания при смене цвета
+        self.message_history = []  # Список кортежей (type, message, time)
+        
         self.init_ui()
         self.apply_theme()
 
@@ -127,19 +131,23 @@ class AIChatWidget(QWidget):
         from PyQt5.QtGui import QPalette
         from PyQt5.QtWidgets import QApplication
         
-        # Если системная тема, определяем реальную тему
+        # Определяем реальную тему
         actual_theme = self.theme
+        
         if self.theme == "system":
+            # Для системной темы, сначала применим светлую палитру и проверим
+            actual_theme = "light"  # По умолчанию
+            
             app = QApplication.instance()
             if app:
+                # Пытаемся определить реальную тему по текущей палитре приложения
                 palette = app.palette()
-                # Проверяем базовый цвет приложения
-                base_color = palette.color(QPalette.Base)
-                # Если цвет светлый (RGB > 128 в среднем) - светлая тема
-                brightness = (base_color.red() + base_color.green() + base_color.blue()) / 3
-                actual_theme = "light" if brightness > 128 else "dark"
-            else:
-                actual_theme = "light"
+                text_color = palette.color(QPalette.Text)
+                text_brightness = (text_color.red() + text_color.green() + text_color.blue()) / 3
+                
+                # Если текст светлый (RGB > 128) - тёмная тема
+                # Если текст тёмный (RGB < 128) - светлая тема
+                actual_theme = "dark" if text_brightness > 128 else "light"
         
         accent_hex = self.accent_color.name()
         accent_light = self.accent_color.lighter(130).name()
@@ -248,9 +256,9 @@ class AIChatWidget(QWidget):
             
             user_msg_color = "white"
             user_msg_bg = accent_hex
-            ai_msg_color = "#202124"
-            ai_msg_bg = "#f0f0f0"
-            ai_msg_border = "#e8eaed"
+            ai_msg_color = "white"
+            ai_msg_bg = accent_light
+            ai_msg_border = accent_hex
         
         # Применяем стили
         self.header.setStyleSheet(f"color: {chat_style.split('color: ')[1].split(';')[0]}")
@@ -271,6 +279,48 @@ class AIChatWidget(QWidget):
         self.theme = theme
         self.accent_color = accent_color
         self.apply_theme()
+        # Пересоздаём весь чат с новыми цветами
+        self._rebuild_chat()
+    
+    def _rebuild_chat(self):
+        """Перестраивает все сообщения в чате с текущими цветами"""
+        # Сначала применяем тему (это определит реальную тему для системной темы)
+        self.apply_theme()
+        
+        # Сохраняем историю
+        history = self.message_history.copy()
+        
+        # Очищаем чат
+        self.chat_display.clear()
+        self.message_history.clear()
+        
+        # Пересоздаём все сообщения
+        for msg_type, message, time in history:
+            if msg_type == "user":
+                # Пересоздаём пользовательское сообщение
+                clean_message = message.replace('<', '&lt;').replace('>', '&gt;')
+                html = f"""<table width="100%"><tr><td align="right"><table><tr><td style="background-color: {self.user_msg_bg}; color: white; padding: 10px 14px; border-radius: 14px; box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.2);"><span style="font-size: 11px; color: white; opacity: 0.8;">{time}</span><br><span style="color: white;">{clean_message}</span></td></tr></table></td></tr></table>"""
+                cursor = self.chat_display.textCursor()
+                cursor.movePosition(cursor.End)
+                self.chat_display.setTextCursor(cursor)
+                self.chat_display.insertHtml(html)
+                # Добавляем в историю
+                self.message_history.append((msg_type, message, time))
+            else:  # "ai"
+                # Пересоздаём ИИ сообщение
+                clean_message = message.replace('<', '&lt;').replace('>', '&gt;')
+                html = f"""<table width="100%"><tr><td align="left"><table><tr><td style="background-color: {self.ai_msg_bg}; color: {self.ai_msg_color}; padding: 10px 14px; border-radius: 14px; border-left: 3px solid {self.ai_msg_color}; box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);"><span style="font-size: 11px; color: {self.ai_msg_color}; opacity: 0.8;">{time}</span><br><span style="color: {self.ai_msg_color};">{clean_message}</span></td></tr></table></td></tr></table>"""
+                cursor = self.chat_display.textCursor()
+                cursor.movePosition(cursor.End)
+                self.chat_display.setTextCursor(cursor)
+                self.chat_display.insertHtml(html)
+                # Добавляем в историю
+                self.message_history.append((msg_type, message, time))
+        
+        # Автоскролл вниз
+        self.chat_display.verticalScrollBar().setValue(
+            self.chat_display.verticalScrollBar().maximum()
+        )
 
     def send_message(self):
         """Отправка сообщения"""
@@ -289,9 +339,12 @@ class AIChatWidget(QWidget):
     def add_user_message(self, message: str):
         """Добавляет сообщение пользователя в чат"""
         time = QDateTime.currentDateTime().toString("hh:mm")
+        # Сохраняем в историю (оригинальное сообщение без экранирования)
+        self.message_history.append(("user", message, time))
+        
         # Экранируем HTML теги в сообщении
-        message = message.replace('<', '&lt;').replace('>', '&gt;')
-        html = f"""<table width="100%"><tr><td align="right"><table><tr><td style="background-color: {self.user_msg_bg}; color: white; padding: 10px 14px; border-radius: 14px; box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.2);"><span style="font-size: 11px; color: white; opacity: 0.8;">{time}</span><br><span style="color: white;">{message}</span></td></tr></table></td></tr></table>"""
+        clean_message = message.replace('<', '&lt;').replace('>', '&gt;')
+        html = f"""<table width="100%"><tr><td align="right"><table><tr><td style="background-color: {self.user_msg_bg}; color: white; padding: 10px 14px; border-radius: 14px; box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.2);"><span style="font-size: 11px; color: white; opacity: 0.8;">{time}</span><br><span style="color: white;">{clean_message}</span></td></tr></table></td></tr></table>"""
         cursor = self.chat_display.textCursor()
         cursor.movePosition(cursor.End)
         self.chat_display.setTextCursor(cursor)
@@ -305,9 +358,12 @@ class AIChatWidget(QWidget):
     def add_system_message(self, message: str):
         """Добавляет системное сообщение в чат"""
         time = QDateTime.currentDateTime().toString("hh:mm")
+        # Сохраняем в историю (оригинальное сообщение без экранирования)
+        self.message_history.append(("ai", message, time))
+        
         # Экранируем HTML теги в сообщении
-        message = message.replace('<', '&lt;').replace('>', '&gt;')
-        html = f"""<table width="100%"><tr><td align="left"><table><tr><td style="background-color: {self.ai_msg_bg}; color: {self.ai_msg_color}; padding: 10px 14px; border-radius: 14px; border-left: 3px solid {self.ai_msg_color}; box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);"><span style="font-size: 11px; color: {self.ai_msg_color}; opacity: 0.8;">{time}</span><br><span style="color: {self.ai_msg_color};">{message}</span></td></tr></table></td></tr></table>"""
+        clean_message = message.replace('<', '&lt;').replace('>', '&gt;')
+        html = f"""<table width="100%"><tr><td align="left"><table><tr><td style="background-color: {self.ai_msg_bg}; color: {self.ai_msg_color}; padding: 10px 14px; border-radius: 14px; border-left: 3px solid {self.ai_msg_color}; box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);"><span style="font-size: 11px; color: {self.ai_msg_color}; opacity: 0.8;">{time}</span><br><span style="color: {self.ai_msg_color};">{clean_message}</span></td></tr></table></td></tr></table>"""
         cursor = self.chat_display.textCursor()
         cursor.movePosition(cursor.End)
         self.chat_display.setTextCursor(cursor)

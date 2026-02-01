@@ -441,7 +441,7 @@ class SpreadsheetApp(QMainWindow):
             palette.setColor(QPalette.BrightText, Qt.red)
             palette.setColor(QPalette.Link, accent_color)
             palette.setColor(QPalette.Highlight, accent_color)
-            palette.setColor(QPalette.HighlightedText, Qt.white)
+            palette.setColor(QPalette.HighlightedText, QColor(32, 33, 36))
 
             # Акцентные цвета для состояний
             palette.setColor(QPalette.Light, accent_color.lighter(150))

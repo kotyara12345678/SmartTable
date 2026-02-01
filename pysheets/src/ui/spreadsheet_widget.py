@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from enum import Enum
 
 from PyQt5.QtWidgets import (QTableWidget, QTableWidgetItem, QHeaderView,
-                             QAbstractItemView, QMenu, QInputDialog, QColorDialog, QAction, QApplication)
+                             QAbstractItemView, QMenu, QInputDialog, QColorDialog, QAction, QApplication,
+                             QStyledItemDelegate, QLineEdit, QDialog)
 from PyQt5.QtCore import Qt, pyqtSignal, QPoint, QTimer
 from PyQt5.QtGui import QBrush, QColor, QFont, QKeySequence
 
@@ -84,6 +85,27 @@ class SpreadsheetWidget(QTableWidget):
 
         # Скрываем corner button полностью
         self._hide_corner_button()
+
+        # Устанавливаем делегат, чтобы редакторы заполняли всю ячейку
+        class FullCellDelegate(QStyledItemDelegate):
+            def createEditor(self, parent, option, index):
+                editor = QLineEdit(parent)
+                editor.setFrame(False)
+                return editor
+
+            def updateEditorGeometry(self, editor, option, index):
+                # Сделать редактор размером на всю ячейку
+                editor.setGeometry(option.rect)
+
+            def paint(self, painter, option, index):
+                # Remove focus rectangle while keeping selection highlight
+                from PyQt5.QtWidgets import QStyle
+                opt = option
+                # Clear focus state so the small focus rect isn't drawn
+                opt.state &= ~QStyle.State_HasFocus
+                super().paint(painter, opt, index)
+
+        self.setItemDelegate(FullCellDelegate(self))
 
     def _hide_corner_button(self):
         """Полностью скрывает corner button"""
@@ -326,27 +348,38 @@ class SpreadsheetWidget(QTableWidget):
 
     def change_text_color(self):
         """Изменение цвета текста"""
-        color = QColorDialog.getColor()
-        if color.isValid():
-            for item in self.selectedItems():
-                row = item.row()
-                col = item.column()
-                cell = self.get_cell(row, col)
-                if cell:
-                    cell.text_color = color.name()
-                    self.apply_cell_formatting(row, col)
+        dlg = QColorDialog(self)
+        # Apply application stylesheet so color dialog matches theme
+        app = QApplication.instance()
+        if app and app.styleSheet():
+            dlg.setStyleSheet(app.styleSheet())
+        if dlg.exec_() == QDialog.Accepted:
+            color = dlg.currentColor()
+            if color.isValid():
+                for item in self.selectedItems():
+                    row = item.row()
+                    col = item.column()
+                    cell = self.get_cell(row, col)
+                    if cell:
+                        cell.text_color = color.name()
+                        self.apply_cell_formatting(row, col)
 
     def change_bg_color(self):
         """Изменение цвета фона"""
-        color = QColorDialog.getColor()
-        if color.isValid():
-            for item in self.selectedItems():
-                row = item.row()
-                col = item.column()
-                cell = self.get_cell(row, col)
-                if cell:
-                    cell.background_color = color.name()
-                    self.apply_cell_formatting(row, col)
+        dlg = QColorDialog(self)
+        app = QApplication.instance()
+        if app and app.styleSheet():
+            dlg.setStyleSheet(app.styleSheet())
+        if dlg.exec_() == QDialog.Accepted:
+            color = dlg.currentColor()
+            if color.isValid():
+                for item in self.selectedItems():
+                    row = item.row()
+                    col = item.column()
+                    cell = self.get_cell(row, col)
+                    if cell:
+                        cell.background_color = color.name()
+                        self.apply_cell_formatting(row, col)
 
     def insert_row(self):
         """Вставка строки"""

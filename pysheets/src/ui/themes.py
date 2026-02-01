@@ -2,8 +2,18 @@
 Менеджер тем приложения
 """
 
+import sys
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QPalette, QColor
+
+# Try to import winreg on Windows for reliable system theme detection
+if sys.platform.startswith("win"):
+    try:
+        import winreg
+    except Exception:
+        winreg = None
+else:
+    winreg = None
 
 
 class ThemeManager:
@@ -18,6 +28,55 @@ class ThemeManager:
             "system": "system",
         }
 
+    def _get_real_system_theme(self):
+        """Определяет реальную системную тему.
+
+        Сначала пытается прочитать значения из реестра Windows (AppsUseLightTheme / SystemUsesLightTheme).
+        Если реестр недоступен или ключи не найдены — использует эвристику по палитре приложения.
+        """
+        # Try registry on Windows first
+        if winreg is not None:
+            try:
+                key_path = r"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+                    try:
+                        apps_val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+                    except FileNotFoundError:
+                        apps_val = None
+                    try:
+                        sys_val, _ = winreg.QueryValueEx(key, "SystemUsesLightTheme")
+                    except FileNotFoundError:
+                        sys_val = None
+
+                    print(f"DEBUG: Registry AppsUseLightTheme={apps_val}, SystemUsesLightTheme={sys_val}")
+
+                    if apps_val is not None:
+                        return "dark" if apps_val == 0 else "light"
+                    if sys_val is not None:
+                        return "dark" if sys_val == 0 else "light"
+            except Exception as e:
+                print(f"DEBUG: Registry read failed: {e}")
+
+        # Fallback to palette heuristics
+        app = QApplication.instance()
+        if not app:
+            return "light"
+
+        palette = app.palette()
+        window_color = palette.color(QPalette.Window)
+        window_brightness = (window_color.red() + window_color.green() + window_color.blue()) / 3
+        text_color = palette.color(QPalette.Text)
+        text_brightness = (text_color.red() + text_color.green() + text_color.blue()) / 3
+
+        print(f"DEBUG: Palette Window RGB=({window_color.red()},{window_color.green()},{window_color.blue()}) brightness={window_brightness}")
+        print(f"DEBUG: Palette Text RGB=({text_color.red()},{text_color.green()},{text_color.blue()}) brightness={text_brightness}")
+
+        if window_brightness < 100:
+            return "dark"
+        if text_brightness > 180:
+            return "dark"
+        return "light"
+
     def apply_theme(self, theme_name: str, color: QColor = None):
         """Применение темы"""
         if theme_name in self.themes:
@@ -25,24 +84,25 @@ class ThemeManager:
             if color:
                 self.app_theme_color = color
             
-            # Для системной темы определяем реальную тему системы
-            if theme_name == "system":
-                # Проверяем системную палитру
-                app = QApplication.instance()
-                if app:
-                    palette = app.palette()
-                    # Проверяем основной цвет приложения
-                    base_color = palette.color(QPalette.Base)
-                    brightness = (base_color.red() + base_color.green() + base_color.blue()) / 3
-                    # Если яркость > 128 - светлая тема, иначе тёмная
-                    actual_theme = "light" if brightness > 128 else "dark"
-                else:
-                    actual_theme = "light"
-            else:
-                actual_theme = theme_name
+            # Определяем реальную тему
+            actual_theme = theme_name
             
-            self.apply_palette(actual_theme)
-            self.apply_stylesheet(actual_theme)
+            if theme_name == "system":
+                # Для системной темы: сначала применяем светлую, потом проверяем и переприменяем если нужна тёмная
+                self.apply_palette("light")
+                self.apply_stylesheet("light")
+                
+                # Теперь проверяем реальную системную тему после применения светлой темы
+                actual_theme = self._get_real_system_theme()
+                
+                # Если реальная тема тёмная, переприменяем
+                if actual_theme == "dark":
+                    self.apply_palette("dark")
+                    self.apply_stylesheet("dark")
+            else:
+                # Для явных светлых/тёмных тем просто применяем
+                self.apply_palette(actual_theme)
+                self.apply_stylesheet(actual_theme)
 
     def apply_stylesheet(self, theme_name: str):
         """Применение таблицы стилей"""
@@ -418,12 +478,14 @@ class ThemeManager:
                     selection-background-color: {accent_dark};
                     selection-color: #e8eaed;
                     font-size: 12px;
+                    color: #e8eaed;
                 }}
                 QTableWidget::item {{ 
                     padding: 10px 12px; 
                     border-right: 1px solid #4a4a4a; 
                     border-bottom: 1px solid #4a4a4a;
                     background-color: #1e1e1e;
+                    color: #e8eaed;
                 }}
                 QTableWidget::item:alternate {{
                     background-color: #262626;
@@ -734,7 +796,7 @@ class ThemeManager:
             palette.setColor(QPalette.BrightText, QColor(255, 0, 0))
             palette.setColor(QPalette.Link, accent_color)
             palette.setColor(QPalette.Highlight, accent_color)
-            palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+            palette.setColor(QPalette.HighlightedText, QColor(32, 33, 36))
 
         app.setPalette(palette)
 
@@ -896,27 +958,34 @@ class ThemeSettingsDialog(QDialog):
     def choose_custom_color(self):
         """Выбор пользовательского цвета"""
         from PyQt5.QtWidgets import QColorDialog
-        color = QColorDialog.getColor(self.selected_color, self, "Выберите цвет")
-        if color.isValid():
-            self.selected_color = color
-            self.color_preview.setStyleSheet(f"background-color: {color.name()}; border: 1px solid #ccc;")
-            # Снимаем выбор с пресетов
-            for btn in self.color_buttons:
-                btn.setChecked(False)
+        dlg = QColorDialog(self)
+        app = QApplication.instance()
+        if app and app.styleSheet():
+            dlg.setStyleSheet(app.styleSheet())
+        if dlg.exec_() == QDialog.Accepted:
+            color = dlg.currentColor()
+            if color.isValid():
+                self.selected_color = color
+                self.color_preview.setStyleSheet(f"background-color: {color.name()}; border: 1px solid #ccc;")
+                # Снимаем выбор с пресетов
+                for btn in self.color_buttons:
+                    btn.setChecked(False)
 
     def get_settings(self):
-        """Получение выбранных настроек"""
-        # Определяем выбранную тему
-        if self.light_theme_radio.isChecked():
-            theme = "light"
+        """Возвращает выбранные в диалоге настройки темы"""
+        if self.system_theme_radio.isChecked():
+            theme = "system"
         elif self.dark_theme_radio.isChecked():
             theme = "dark"
         else:
-            theme = "system"
+            theme = "light"
 
         return {
-            'theme': theme,
-            'color': self.selected_color,
-            'show_grid': self.grid_checkbox.isChecked(),
-            'alternating_rows': self.alternating_rows_checkbox.isChecked()
+            "theme": theme,
+            "color": self.selected_color,
+            "show_grid": self.grid_checkbox.isChecked(),
+            "alternating_rows": self.alternating_rows_checkbox.isChecked(),
         }
+        
+
+        return "light"

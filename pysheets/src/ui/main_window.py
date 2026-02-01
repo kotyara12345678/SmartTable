@@ -10,7 +10,8 @@ from typing import Optional
 
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QTabWidget, QStatusBar, QMenuBar, QMessageBox,
-                             QFileDialog, QSplitter, QToolBar, QDialog, QAction)
+                             QFileDialog, QSplitter, QToolBar, QDialog, QAction,
+                             QApplication)
 from PyQt5.QtCore import Qt, QTimer, QSize, QSettings
 from PyQt5.QtGui import QKeySequence, QIcon, QColor, QPixmap, QPainter
 
@@ -136,8 +137,10 @@ class MainWindow(QMainWindow):
         # Строка состояния
         self.create_statusbar()
 
-        # Применяем тему
-        self.apply_theme(self.current_theme, self.app_theme_color)
+        # Применяем тему ПОСЛЕ полной инициализации UI
+        # (используем QTimer для отложенного выполнения)
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(100, lambda: self.apply_theme(self.current_theme, self.app_theme_color))
 
         # Подключение сигналов
         self.connect_signals()
@@ -392,12 +395,21 @@ class MainWindow(QMainWindow):
 
     def open_file(self):
         """Открытие файла"""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Открыть файл",
-            "",
-            "Excel файлы (*.xlsx *.xls);;CSV файлы (*.csv);;Все файлы (*.*)"
-        )
+        dlg = QFileDialog(self, "Открыть файл")
+        dlg.setFileMode(QFileDialog.ExistingFile)
+        dlg.setNameFilter("Excel файлы (*.xlsx *.xls);;CSV файлы (*.csv);;Все файлы (*.*)")
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        app = QApplication.instance()
+        if app and app.styleSheet():
+            dlg.setStyleSheet(app.styleSheet())
+        if dlg.exec_() == QDialog.Accepted:
+            selected = dlg.selectedFiles()
+            if selected:
+                file_path = selected[0]
+            else:
+                file_path = None
+        else:
+            file_path = None
 
         if file_path:
             try:
@@ -437,12 +449,21 @@ class MainWindow(QMainWindow):
 
     def save_as(self):
         """Сохранение как"""
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Сохранить как",
-            "",
-            "Excel файлы (*.xlsx);;CSV файлы (*.csv);;JSON файлы (*.json)"
-        )
+        dlg = QFileDialog(self, "Сохранить как")
+        dlg.setAcceptMode(QFileDialog.AcceptSave)
+        dlg.setNameFilter("Excel файлы (*.xlsx);;CSV файлы (*.csv);;JSON файлы (*.json)")
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        app = QApplication.instance()
+        if app and app.styleSheet():
+            dlg.setStyleSheet(app.styleSheet())
+        if dlg.exec_() == QDialog.Accepted:
+            selected = dlg.selectedFiles()
+            if selected:
+                file_path = selected[0]
+            else:
+                file_path = None
+        else:
+            file_path = None
 
         if file_path:
             self.save_to_file(file_path)
@@ -476,12 +497,18 @@ class MainWindow(QMainWindow):
 
     def export_to_excel(self):
         """Экспорт в Excel"""
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Экспорт в Excel",
-            "",
-            "Excel файлы (*.xlsx)"
-        )
+        dlg = QFileDialog(self, "Экспорт в Excel")
+        dlg.setAcceptMode(QFileDialog.AcceptSave)
+        dlg.setNameFilter("Excel файлы (*.xlsx)")
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        app = QApplication.instance()
+        if app and app.styleSheet():
+            dlg.setStyleSheet(app.styleSheet())
+        if dlg.exec_() == QDialog.Accepted:
+            selected = dlg.selectedFiles()
+            file_path = selected[0] if selected else None
+        else:
+            file_path = None
 
         if file_path:
             try:
@@ -497,12 +524,18 @@ class MainWindow(QMainWindow):
         if not spreadsheet:
             return
 
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Экспорт в CSV",
-            "",
-            "CSV файлы (*.csv)"
-        )
+        dlg = QFileDialog(self, "Экспорт в CSV")
+        dlg.setAcceptMode(QFileDialog.AcceptSave)
+        dlg.setNameFilter("CSV файлы (*.csv)")
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        app = QApplication.instance()
+        if app and app.styleSheet():
+            dlg.setStyleSheet(app.styleSheet())
+        if dlg.exec_() == QDialog.Accepted:
+            selected = dlg.selectedFiles()
+            file_path = selected[0] if selected else None
+        else:
+            file_path = None
 
         if file_path:
             try:
@@ -702,12 +735,18 @@ class MainWindow(QMainWindow):
         if not spreadsheet:
             return
 
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Экспорт в CSV",
-            "",
-            "CSV файлы (*.csv)"
-        )
+        dlg = QFileDialog(self, "Экспорт в CSV")
+        dlg.setAcceptMode(QFileDialog.AcceptSave)
+        dlg.setNameFilter("CSV файлы (*.csv)")
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        app = QApplication.instance()
+        if app and app.styleSheet():
+            dlg.setStyleSheet(app.styleSheet())
+        if dlg.exec_() == QDialog.Accepted:
+            selected = dlg.selectedFiles()
+            file_path = selected[0] if selected else None
+        else:
+            file_path = None
 
         if file_path:
             try:
@@ -724,12 +763,18 @@ class MainWindow(QMainWindow):
         if not spreadsheet:
             return
 
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Экспорт в PDF",
-            "",
-            "PDF файлы (*.pdf)"
-        )
+        dlg = QFileDialog(self, "Экспорт в PDF")
+        dlg.setAcceptMode(QFileDialog.AcceptSave)
+        dlg.setNameFilter("PDF файлы (*.pdf)")
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        app = QApplication.instance()
+        if app and app.styleSheet():
+            dlg.setStyleSheet(app.styleSheet())
+        if dlg.exec_() == QDialog.Accepted:
+            selected = dlg.selectedFiles()
+            file_path = selected[0] if selected else None
+        else:
+            file_path = None
 
         if file_path:
             try:
@@ -778,12 +823,18 @@ class MainWindow(QMainWindow):
         if not spreadsheet:
             return
 
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Экспорт в PNG",
-            "",
-            "PNG файлы (*.png)"
-        )
+        dlg = QFileDialog(self, "Экспорт в PNG")
+        dlg.setAcceptMode(QFileDialog.AcceptSave)
+        dlg.setNameFilter("PNG файлы (*.png)")
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        app = QApplication.instance()
+        if app and app.styleSheet():
+            dlg.setStyleSheet(app.styleSheet())
+        if dlg.exec_() == QDialog.Accepted:
+            selected = dlg.selectedFiles()
+            file_path = selected[0] if selected else None
+        else:
+            file_path = None
 
         if file_path:
             try:
@@ -818,10 +869,12 @@ class MainWindow(QMainWindow):
         
         manager = ThemeManager()
         manager.current_theme = theme_name
-        manager.app_theme_color = color
+        if color is not None:
+            manager.app_theme_color = color
         manager.apply_theme(theme_name, color)
         self.current_theme = theme_name
-        self.app_theme_color = color
+        if color is not None:
+            self.app_theme_color = color
         
         # Также применяем stylesheet на само окно для гарантии
         app = QApplication.instance()
@@ -834,7 +887,8 @@ class MainWindow(QMainWindow):
         
         # Сохраняем тему в настройки
         self.settings.setValue("theme", theme_name)
-        self.settings.setValue("theme_color", color.name())
+        if color is not None:
+            self.settings.setValue("theme_color", color.name())
 
     def show_theme_settings(self):
         """Показывает диалог настроек темы"""
@@ -852,21 +906,147 @@ class MainWindow(QMainWindow):
             self.settings.setValue("last_file", self.current_file_path)
 
         # Проверка несохраненных изменений
-        if self.workbook.is_modified():
-            reply = QMessageBox.question(
-                self, "Сохранение",
-                "Есть несохраненные изменения. Сохранить?",
-                QMessageBox.Yes |
-                QMessageBox.No |
-                QMessageBox.Cancel
-            )
+        try:
+            is_modified = self.workbook.is_modified()
+        except Exception:
+            is_modified = False
 
-            if reply == QMessageBox.Yes:
-                self.save_file()
+        if is_modified:
+            # Создаём диалог с поддержкой темы
+            result = self._show_save_dialog()
+            
+            if result == "save":
+                try:
+                    self.save_file()
+                except Exception:
+                    pass  # Если не удалось сохранить, всё равно закрываем
                 event.accept()
-            elif reply == QMessageBox.StandardButton.No:
+            elif result == "discard":
                 event.accept()
-            else:
+            else:  # cancel
                 event.ignore()
         else:
             event.accept()
+
+    def _show_save_dialog(self) -> str:
+        """Показывает диалог сохранения с поддержкой темы.
+        
+        Returns:
+            'save', 'discard' или 'cancel'
+        """
+        from pysheets.src.ui.themes import ThemeManager
+        
+        # Определяем текущую тему для стилизации диалога
+        actual_theme = self.current_theme
+        if actual_theme == "system":
+            manager = ThemeManager()
+            actual_theme = manager._get_real_system_theme()
+        
+        # Создаём стилизованный диалог
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("Сохранение")
+        dlg.setText("Есть несохраненные изменения.")
+        dlg.setInformativeText("Сохранить изменения перед закрытием?")
+        dlg.setIcon(QMessageBox.Question)
+        
+        # Добавляем кнопки с русскими названиями
+        save_btn = dlg.addButton("Сохранить", QMessageBox.AcceptRole)
+        discard_btn = dlg.addButton("Не сохранять", QMessageBox.DestructiveRole)
+        cancel_btn = dlg.addButton("Отмена", QMessageBox.RejectRole)
+        
+        dlg.setDefaultButton(save_btn)
+        
+        # Применяем стили в соответствии с темой
+        accent_color = self.app_theme_color.name()
+        accent_hover = self.app_theme_color.lighter(120).name()
+        accent_dark = self.app_theme_color.darker(150).name()
+        
+        if actual_theme == "dark":
+            dialog_style = f"""
+                QMessageBox {{
+                    background-color: #2d2d2d;
+                }}
+                QMessageBox QLabel {{
+                    color: #e8eaed;
+                    font-size: 12px;
+                    padding: 10px;
+                }}
+                QPushButton {{
+                    background-color: #3d3d3d;
+                    border: 1px solid #4a4a4a;
+                    border-radius: 6px;
+                    padding: 8px 20px;
+                    color: #e8eaed;
+                    font-weight: 500;
+                    min-width: 80px;
+                }}
+                QPushButton:hover {{
+                    background-color: #4d4d4d;
+                    border-color: #5a5a5a;
+                }}
+                QPushButton:pressed {{
+                    background-color: #555555;
+                }}
+                QPushButton:default {{
+                    background-color: {accent_color};
+                    color: white;
+                    border: none;
+                }}
+                QPushButton:default:hover {{
+                    background-color: {accent_hover};
+                }}
+                QPushButton:default:pressed {{
+                    background-color: {accent_dark};
+                }}
+            """
+        else:
+            dialog_style = f"""
+                QMessageBox {{
+                    background-color: #ffffff;
+                }}
+                QMessageBox QLabel {{
+                    color: #202124;
+                    font-size: 12px;
+                    padding: 10px;
+                }}
+                QPushButton {{
+                    background-color: #f8f9fa;
+                    border: 1px solid #dadce0;
+                    border-radius: 6px;
+                    padding: 8px 20px;
+                    color: #202124;
+                    font-weight: 500;
+                    min-width: 80px;
+                }}
+                QPushButton:hover {{
+                    background-color: #f1f3f4;
+                    border-color: #c6c6c6;
+                }}
+                QPushButton:pressed {{
+                    background-color: #e8eaed;
+                }}
+                QPushButton:default {{
+                    background-color: {accent_color};
+                    color: white;
+                    border: none;
+                }}
+                QPushButton:default:hover {{
+                    background-color: {accent_hover};
+                }}
+                QPushButton:default:pressed {{
+                    background-color: {accent_dark};
+                }}
+            """
+        
+        dlg.setStyleSheet(dialog_style)
+        
+        # Показываем диалог
+        dlg.exec_()
+        
+        clicked = dlg.clickedButton()
+        if clicked == save_btn:
+            return "save"
+        elif clicked == discard_btn:
+            return "discard"
+        else:
+            return "cancel"
