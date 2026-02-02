@@ -3,16 +3,53 @@ import os
 import logging
 import json
 import requests
+import random
 from requests.exceptions import RequestException
+
+# List of available API keys
+OPENROUTER_KEYS = [
+    "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",
+    "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",
+    "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",
+    "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",
+    "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",
+    "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",
+    "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",
+    "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",
+    "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",
+    "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",
+    "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",
+]
+
+# Track dead keys (401 errors)
+_dead_keys = set()
+
+def _get_valid_key() -> Optional[str]:
+    """Get a random valid API key, excluding dead ones. Returns None if all keys are dead."""
+    global _dead_keys
+    valid_keys = [k for k in OPENROUTER_KEYS if k not in _dead_keys]
+    if not valid_keys:
+        # All keys are dead; reset and try again
+        _dead_keys.clear()
+        valid_keys = OPENROUTER_KEYS
+    return random.choice(valid_keys) if valid_keys else None
+
+def _mark_key_dead(key: str):
+    """Mark a key as dead (401 error)."""
+    global _dead_keys
+    _dead_keys.add(key)
 
 def chat_with_openrouter(message: str, model: Optional[str] = None, api_key: Optional[str] = None, base_url: str = "https://openrouter.ai/api/v1/chat/completions", extra_system: Optional[str] = None) -> Optional[str]:
     logger = logging.getLogger(__name__)
 
-    # Always use the provided new API key for reliability (from PowerShell script)
-    key = "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"
-    if not key:
-        logger.warning("No OpenRouter API key provided")
-        return None
+    # Use provided key or pick a random valid one from the list
+    if api_key:
+        key = api_key
+    else:
+        key = _get_valid_key()
+        if not key:
+            logger.error("No valid OpenRouter API keys available")
+            return None
 
     # Use deepseek/deepseek-chat as default model (from PowerShell script)
     env_model = os.environ.get("OPENROUTER_MODEL")
@@ -55,7 +92,7 @@ def chat_with_openrouter(message: str, model: Optional[str] = None, api_key: Opt
             continue
         tried.append(url)
         try:
-            logger.debug(f"OpenRouter request: url={url}, model={model}, message={message[:100]}")
+            logger.debug(f"OpenRouter request: url={url}, model={model}, key={key[:20]}..., message={message[:100]}")
             resp = requests.post(url, json=payload, headers=headers, timeout=30)
             resp.raise_for_status()
 
@@ -90,11 +127,19 @@ def chat_with_openrouter(message: str, model: Optional[str] = None, api_key: Opt
             if content:
                 # Ensure string and proper Unicode
                 content_str = str(content)
+                # Remove double asterisks (Markdown formatting)
+                content_str = content_str.replace("**", "")
                 logger.info(f"OpenRouter response: {content_str[:100]}")
                 return content_str
             else:
                 logger.warning(f"OpenRouter returned no content at {url}: {data}")
                 # try next candidate
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                logger.warning(f"Key {key[:20]}... is dead (401); marking as invalid")
+                _mark_key_dead(key)
+            logger.warning(f"OpenRouter request to {url} failed: {e}")
+            # try next candidate
         except RequestException as e:
             logger.warning(f"OpenRouter request to {url} failed: {e}")
             # try next candidate

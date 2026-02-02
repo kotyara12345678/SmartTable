@@ -17,10 +17,11 @@ class AIChatWidget(QWidget):
     ai_response_ready = pyqtSignal(str)
     ai_response_done = pyqtSignal()
 
-    def __init__(self, theme="dark", accent_color=None, parent=None):
+    def __init__(self, theme="dark", accent_color=None, parent=None, main_window=None):
         super().__init__(parent)
         self.theme = theme
         self.accent_color = accent_color if accent_color else QColor("#DC143C")
+        self.main_window = main_window  # Reference to main window for table data
         
         # История сообщений для пересоздания при смене цвета
         self.message_history = []  # Список кортежей (type, message, time)
@@ -365,7 +366,19 @@ class AIChatWidget(QWidget):
         """Выполняет запрос к локальной модели в отдельном потоке и эмитит сигнал с ответом."""
         try:
             from pysheets.src.core.ai.chat import RequestMessage
-            resp = RequestMessage(message)
+            
+            # Extract table data and inject it into the message
+            table_data = None
+            if self.main_window:
+                table_data = self._extract_table_data()
+            
+            # If we have table data, prepend it to the message
+            final_message = message
+            if table_data:
+                final_message = f"{table_data}\n\nUser request: {message}"
+            
+            # Send message with table context embedded
+            resp = RequestMessage(final_message)
             if resp is None:
                 resp = "Ошибка: пустой ответ от модели"
         except Exception as e:
@@ -374,6 +387,73 @@ class AIChatWidget(QWidget):
         # Отправляем ответ в главный поток
         self.ai_response_ready.emit(str(resp))
         self.ai_response_done.emit()
+
+    def _extract_table_data(self) -> Optional[str]:
+        """Extract current table data from spreadsheet widget as formatted string."""
+        try:
+            if not self.main_window or not self.main_window.tab_widget:
+                return None
+            
+            # Get the current tab (spreadsheet widget)
+            spreadsheet_widget = self.main_window.tab_widget.currentWidget()
+            if not spreadsheet_widget:
+                return None
+            
+            # SpreadsheetWidget has cells attribute (list of lists of Cell objects)
+            if not hasattr(spreadsheet_widget, 'cells'):
+                return None
+            
+            cells = spreadsheet_widget.cells
+            if not cells:
+                return None
+            
+            # Convert Cell objects to values
+            lines = []
+            
+            # Determine max columns (non-empty)
+            max_cols = len(cells[0]) if cells else 0
+            if max_cols == 0:
+                return None
+            
+            # Add header row with column names (A, B, C, ...)
+            header = " | ".join([chr(65 + i) for i in range(min(max_cols, 26))])
+            lines.append(header)
+            lines.append("-" * len(header))
+            
+            # Add data rows (limit to first 50 rows)
+            has_data = False
+            for row_idx, row in enumerate(cells[:50]):
+                row_data = []
+                for col_idx in range(min(max_cols, 26)):
+                    cell = row[col_idx] if col_idx < len(row) else None
+                    # Extract value from Cell object
+                    if cell and hasattr(cell, 'value'):
+                        value = cell.value
+                    else:
+                        value = None
+                    
+                    if value is not None:
+                        cell_str = str(value)[:20]  # Limit cell width
+                        has_data = True
+                    else:
+                        cell_str = ""
+                    row_data.append(cell_str)
+                
+                # Only add non-empty rows
+                if any(row_data):
+                    lines.append(" | ".join(row_data))
+            
+            if not has_data or len(lines) <= 2:  # Only header + separator
+                return None
+            
+            table_str = "\n".join(lines)
+            return f"CURRENT SPREADSHEET DATA:\n{table_str}"
+            
+        except Exception as e:
+            # If extraction fails, log and return None
+            import logging
+            logging.exception(f"Failed to extract table data: {e}")
+            return None
 
     def _on_ai_response(self, text: str):
         """Слот: вызывается когда получен ответ от модели"""
