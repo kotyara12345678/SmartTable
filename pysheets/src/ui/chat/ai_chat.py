@@ -7,8 +7,15 @@ from PyQt5.QtCore import Qt, QDateTime, QSize
 from PyQt5.QtGui import QFont, QColor, QIcon
 
 
+from PyQt5.QtCore import Qt, QDateTime, QSize, pyqtSignal
+import threading
+
+
 class AIChatWidget(QWidget):
     """Виджет чата с ИИ помощником с современным дизайном"""
+
+    ai_response_ready = pyqtSignal(str)
+    ai_response_done = pyqtSignal()
 
     def __init__(self, theme="dark", accent_color=None, parent=None):
         super().__init__(parent)
@@ -20,6 +27,12 @@ class AIChatWidget(QWidget):
         
         self.init_ui()
         self.apply_theme()
+
+        # Подключаем сигналы для асинхронного ответа
+        self.ai_response_ready.connect(self._on_ai_response)
+        self.ai_response_done.connect(self._on_ai_done)
+        # Флаг для индикатора набора
+        self._placeholder_active = False
 
     def init_ui(self):
         """Инициализация интерфейса"""
@@ -323,17 +336,65 @@ class AIChatWidget(QWidget):
         )
 
     def send_message(self):
-        """Отправка сообщения"""
+        """Отправка сообщения. Запускаем запрос в фоновом потоке и отключаем ввод."""
         message = self.input_field.toPlainText().strip()
-        
+
         if not message:
             return
-        
+
         # Добавляем сообщение пользователя
         self.add_user_message(message)
-        
-        # Очищаем поле ввода
+
+        # Очищаем поле ввода и временно отключаем ввод/кнопку
         self.input_field.clear()
+        self.input_field.setEnabled(False)
+        self.send_button.setEnabled(False)
+
+        # Запускаем фоновую отправку
+        threading.Thread(target=self._send_to_ai, args=(message,), daemon=True).start()
+
+        # Показываем индикатор, что ИИ печатает
+        try:
+            self.add_system_message("Печатает...")
+            self._placeholder_active = True
+        except Exception:
+            # не критично, продолжим
+            pass
+
+    def _send_to_ai(self, message: str):
+        """Выполняет запрос к локальной модели в отдельном потоке и эмитит сигнал с ответом."""
+        try:
+            from pysheets.src.core.ai.chat import RequestMessage
+            resp = RequestMessage(message)
+            if resp is None:
+                resp = "Ошибка: пустой ответ от модели"
+        except Exception as e:
+            resp = f"Ошибка: {e}"
+
+        # Отправляем ответ в главный поток
+        self.ai_response_ready.emit(str(resp))
+        self.ai_response_done.emit()
+
+    def _on_ai_response(self, text: str):
+        """Слот: вызывается когда получен ответ от модели"""
+        # Если был показан индикатор, удалим его из истории и пересоберём чат
+        if getattr(self, '_placeholder_active', False):
+            try:
+                # удалим последний элемент истории, он должен быть индикатором
+                if len(self.message_history) > 0 and self.message_history[-1][0] == 'ai' and 'Печатает' in self.message_history[-1][1]:
+                    self.message_history.pop()
+                    self._rebuild_chat()
+            except Exception:
+                pass
+            finally:
+                self._placeholder_active = False
+
+        self.add_system_message(text)
+
+    def _on_ai_done(self):
+        """Слот: восстановление UI после завершения запроса"""
+        self.send_button.setEnabled(True)
+        self.input_field.setEnabled(True)
         self.input_field.setFocus()
 
     def add_user_message(self, message: str):
