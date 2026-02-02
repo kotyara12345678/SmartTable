@@ -420,9 +420,9 @@ class AIChatWidget(QWidget):
             lines.append(header)
             lines.append("-" * len(header))
             
-            # Add data rows (limit to first 50 rows)
+            # Add data rows (limit to first 10 rows to save token space)
             has_data = False
-            for row_idx, row in enumerate(cells[:50]):
+            for row_idx, row in enumerate(cells[:10]):
                 row_data = []
                 for col_idx in range(min(max_cols, 26)):
                     cell = row[col_idx] if col_idx < len(row) else None
@@ -433,7 +433,7 @@ class AIChatWidget(QWidget):
                         value = None
                     
                     if value is not None:
-                        cell_str = str(value)[:20]  # Limit cell width
+                        cell_str = str(value)[:15]  # Limit cell width
                         has_data = True
                     else:
                         cell_str = ""
@@ -457,6 +457,9 @@ class AIChatWidget(QWidget):
 
     def _on_ai_response(self, text: str):
         """Слот: вызывается когда получен ответ от модели"""
+        # Parse and execute any table commands from the response
+        text = self._process_ai_commands(text)
+        
         # Если был показан индикатор, удалим его из истории и пересоберём чат
         if getattr(self, '_placeholder_active', False):
             try:
@@ -514,3 +517,400 @@ class AIChatWidget(QWidget):
         self.chat_display.verticalScrollBar().setValue(
             self.chat_display.verticalScrollBar().maximum()
         )
+    def _process_ai_commands(self, response: str) -> str:
+        """
+        Парсит JSON команды из ответа модели для модификации таблицы.
+        Поддерживает форматы:
+        - [TABLE_COMMAND]{json}[/TABLE_COMMAND]
+        - ```json {json} ```
+        - Голые JSON объекты с полем 'action'
+        - Простые массивы [[...], [...]] - автоматически преобразуются в insert команду
+        
+        Возвращает отчищенный от команд текст ответа.
+        """
+        import re
+        import json
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        removed_positions = []
+        commands_found = 0
+        
+        # DEBUG: выводим весь ответ
+        print(f"\n=== RESPONSE DEBUG ===")
+        print(f"Response length: {len(response)}")
+        print(f"Response preview: {response[:500]}")
+        print(f"=== END RESPONSE DEBUG ===\n")
+        
+        try:
+            # 1. Проверяем [TABLE_COMMAND] маркеры
+            command_pattern = r'\[TABLE_COMMAND\](.*?)\[/TABLE_COMMAND\]'
+            matches = re.finditer(command_pattern, response, re.DOTALL)
+            
+            for match in matches:
+                try:
+                    command = json.loads(match.group(1).strip())
+                    logger.info(f"Found [TABLE_COMMAND] marker with action: {command.get('action')}")
+                    self._execute_table_command(command)
+                    commands_found += 1
+                    removed_positions.append((match.start(), match.end()))
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse [TABLE_COMMAND]: {e}")
+            
+            # 2. Ищем ```json``` блоки ВРУЧНУЮ (более надежный способ)
+            i = 0
+            backtick_json_count = response.count('```json')
+            print(f"Looking for ```json blocks. Found {backtick_json_count} occurrences")
+            
+            while i < len(response):
+                # Проверяем есть ли ```json в этой позиции
+                if i + 7 <= len(response) and response[i:i+7] == '```json':
+                    print(f"Found ```json at position {i}")
+                    # Нашли начало блока
+                    start_pos = i
+                    i += 7
+                    # Ищем конец блока ``` 
+                    end_pos = response.find('```', i)
+                    print(f"Looking for closing ``` from position {i}, found at {end_pos}")
+                    
+                    if end_pos == -1:
+                        # Нет закрывающего ```, может быть JSON продолжается до конца
+                        # Ищем первый [ и пытаемся парсить массив до конца
+                        bracket_pos = response.find('[', i)
+                        if bracket_pos != -1:
+                            print(f"No closing ```, but found [ at {bracket_pos}, trying to parse from there")
+                            # Ищем парный ]
+                            bracket_depth = 0
+                            j = bracket_pos
+                            in_string = False
+                            escape_next = False
+                            
+                            while j < len(response):
+                                char = response[j]
+                                
+                                if escape_next:
+                                    escape_next = False
+                                    j += 1
+                                    continue
+                                
+                                if char == '\\' and in_string:
+                                    escape_next = True
+                                    j += 1
+                                    continue
+                                
+                                if char == '"':
+                                    in_string = not in_string
+                                elif not in_string:
+                                    if char == '[':
+                                        bracket_depth += 1
+                                    elif char == ']':
+                                        bracket_depth -= 1
+                                        if bracket_depth == 0:
+                                            json_str = response[bracket_pos:j+1]
+                                            print(f"Found complete array, length: {len(json_str)}")
+                                            try:
+                                                data = json.loads(json_str)
+                                                print(f"Successfully parsed JSON array with {len(data) if isinstance(data, list) else '?'} rows")
+                                                
+                                                if isinstance(data, list) and len(data) > 0:
+                                                    # Валидация: выравниваем количество колонок
+                                                    data = self._normalize_table_data(data)
+                                                    insert_command = {"action": "insert", "data": data, "start_row": 0, "start_col": 0}
+                                                    self._execute_table_command(insert_command)
+                                                    commands_found += 1
+                                                    removed_positions.append((start_pos, j+1))
+                                            except json.JSONDecodeError as e:
+                                                print(f"Failed to parse array: {e}")
+                                            break
+                                j += 1
+                        i = len(response)
+                    else:
+                        json_str = response[i:end_pos].strip()
+                        print(f"Found ```json block, length: {len(json_str)}")
+                        print(f"JSON preview: {json_str[:200]}")
+                        try:
+                            data = json.loads(json_str)
+                            print(f"Successfully parsed JSON, type: {type(data)}")
+                            
+                            if isinstance(data, list) and len(data) > 0:
+                                logger.info(f"Found ```json block with array of {len(data)} rows")
+                                print(f"Converting to insert command with {len(data)} rows")
+                                # Валидация: выравниваем количество колонок
+                                data = self._normalize_table_data(data)
+                                insert_command = {"action": "insert", "data": data, "start_row": 0, "start_col": 0}
+                                self._execute_table_command(insert_command)
+                                commands_found += 1
+                                removed_positions.append((start_pos, end_pos + 3))
+                            elif isinstance(data, dict) and 'action' in data:
+                                logger.info(f"Found ```json block with action: {data.get('action')}")
+                                self._execute_table_command(data)
+                                commands_found += 1
+                                removed_positions.append((start_pos, end_pos + 3))
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"Failed to parse ```json block: {e}")
+                            print(f"Failed to parse JSON: {e}")
+                        i = end_pos + 3
+                else:
+                    i += 1
+            
+            # 3. Ищем голые JSON объекты - мощный парсер с учетом строк
+            i = 0
+            while i < len(response):
+                if response[i] == '{':
+                    brace_depth = 0
+                    j = i
+                    in_string = False
+                    escape_next = False
+                    
+                    # Сканируем с учетом строк и экранирования
+                    while j < len(response):
+                        char = response[j]
+                        
+                        if escape_next:
+                            escape_next = False
+                            j += 1
+                            continue
+                        
+                        if char == '\\' and in_string:
+                            escape_next = True
+                            j += 1
+                            continue
+                        
+                        if char == '"':
+                            in_string = not in_string
+                        elif not in_string:
+                            if char == '{':
+                                brace_depth += 1
+                            elif char == '}':
+                                brace_depth -= 1
+                                if brace_depth == 0:
+                                    json_str = response[i:j+1]
+                                    try:
+                                        command = json.loads(json_str)
+                                        if isinstance(command, dict) and 'action' in command:
+                                            if command['action'] in ['set', 'insert']:
+                                                logger.info(f"Found bare JSON object with action: {command['action']}")
+                                                self._execute_table_command(command)
+                                                commands_found += 1
+                                                # Проверяем не пересекается ли с уже найденными
+                                                overlaps = False
+                                                for start, end in removed_positions:
+                                                    if not (j+1 <= start or i >= end):
+                                                        overlaps = True
+                                                        break
+                                                if not overlaps:
+                                                    removed_positions.append((i, j+1))
+                                        i = j + 1
+                                        break
+                                    except (json.JSONDecodeError, ValueError) as e:
+                                        logger.debug(f"JSON parse failed at position {i}: {e}")
+                        j += 1
+                    
+                    if brace_depth == 0 and j >= len(response):
+                        break
+                    elif brace_depth != 0:
+                        i += 1
+                elif response[i] == '[':
+                    # Ищем массивы [[...], [...], ...]
+                    bracket_depth = 0
+                    j = i
+                    in_string = False
+                    escape_next = False
+                    
+                    while j < len(response):
+                        char = response[j]
+                        
+                        if escape_next:
+                            escape_next = False
+                            j += 1
+                            continue
+                        
+                        if char == '\\' and in_string:
+                            escape_next = True
+                            j += 1
+                            continue
+                        
+                        if char == '"':
+                            in_string = not in_string
+                        elif not in_string:
+                            if char == '[':
+                                bracket_depth += 1
+                            elif char == ']':
+                                bracket_depth -= 1
+                                if bracket_depth == 0:
+                                    json_str = response[i:j+1]
+                                    try:
+                                        data = json.loads(json_str)
+                                        # Проверяем что это массив массивов (таблица данных)
+                                        if isinstance(data, list) and len(data) > 0:
+                                            is_data_table = True
+                                            for row in data[:min(3, len(data))]:  # Проверяем первые 3 строки
+                                                if not isinstance(row, (list, tuple)):
+                                                    is_data_table = False
+                                                    break
+                                            
+                                            if is_data_table:
+                                                logger.info(f"Found data array [[...], [...], ...] with {len(data)} rows, converting to insert command")
+                                                insert_command = {"action": "insert", "data": data, "start_row": 0, "start_col": 0}
+                                                self._execute_table_command(insert_command)
+                                                commands_found += 1
+                                                # Проверяем не пересекается ли с уже найденными
+                                                overlaps = False
+                                                for start, end in removed_positions:
+                                                    if not (j+1 <= start or i >= end):
+                                                        overlaps = True
+                                                        break
+                                                if not overlaps:
+                                                    removed_positions.append((i, j+1))
+                                        i = j + 1
+                                        break
+                                    except (json.JSONDecodeError, ValueError) as e:
+                                        logger.debug(f"Array parse failed at position {i}: {e}")
+                        j += 1
+                    
+                    if bracket_depth == 0 and j >= len(response):
+                        break
+                    elif bracket_depth != 0:
+                        i += 1
+                else:
+                    i += 1
+            
+            logger.info(f"Total commands found and executed: {commands_found}")
+            
+            # Удаляем найденные JSON объекты из ответа (в обратном порядке)
+            for start, end in sorted(set(removed_positions), reverse=True):
+                response = response[:start] + response[end:]
+            
+            # DEBUG
+            print(f"\n=== PROCESS RESULT ===")
+            print(f"Commands found: {commands_found}")
+            print(f"Positions to remove: {len(removed_positions)}")
+            print(f"Final response length: {len(response)}")
+            print(f"=== END PROCESS RESULT ===\n")
+            
+        except Exception as e:
+            logger.warning(f"Error processing AI commands: {e}", exc_info=True)
+            print(f"ERROR in _process_ai_commands: {e}")
+        
+        return response.strip()
+
+    def _normalize_table_data(self, data: list) -> list:
+        """
+        Нормализует данные таблицы - выравнивает количество колонок.
+        Если строки имеют разное количество колонок, приводит их к максимуму.
+        """
+        if not isinstance(data, list) or len(data) == 0:
+            return data
+        
+        # Находим максимальное количество колонок
+        max_cols = max(len(row) if isinstance(row, (list, tuple)) else 1 for row in data)
+        print(f"Normalizing table data: {len(data)} rows, max columns: {max_cols}")
+        
+        normalized = []
+        for row_idx, row in enumerate(data):
+            if isinstance(row, (list, tuple)):
+                # Приводим все значения к строкам и выравниваем количество колонок
+                normalized_row = []
+                for col_idx in range(max_cols):
+                    if col_idx < len(row):
+                        # Преобразуем в строку
+                        value = str(row[col_idx]) if row[col_idx] is not None else ""
+                        normalized_row.append(value)
+                    else:
+                        # Дополняем пустыми значениями
+                        normalized_row.append("")
+                normalized.append(normalized_row)
+            else:
+                # Если элемент не список, оборачиваем его
+                normalized.append([str(row)] + [""] * (max_cols - 1))
+        
+        print(f"Normalization complete: {len(normalized)} rows, {max_cols} columns per row")
+        return normalized
+
+    def _execute_table_command(self, command: dict):
+        """
+        Выполняет команду для модификации таблицы.
+        
+        Поддерживаемые команды:
+        - {"action": "set", "row": int, "col": int, "value": str}
+        - {"action": "insert", "data": [[row_data]], "start_row": int, "start_col": int}
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # DEBUG
+        print(f"\n=== _execute_table_command called ===")
+        print(f"Command: {command}")
+        print(f"=== end debug ===\n")
+        
+        try:
+            # Debug: проверяем наличие main_window
+            if not self.main_window:
+                logger.error("ERROR: main_window is None")
+                print("ERROR: main_window is None")
+                return
+            
+            # Debug: проверяем наличие tab_widget
+            if not hasattr(self.main_window, 'tab_widget'):
+                logger.error("ERROR: main_window has no tab_widget attribute")
+                return
+            
+            spreadsheet_widget = self.main_window.tab_widget.currentWidget()
+            
+            # Debug: проверяем наличие текущего виджета
+            if not spreadsheet_widget:
+                logger.error("ERROR: currentWidget returned None")
+                return
+            
+            # Debug: проверяем методы
+            has_add_ai_data = hasattr(spreadsheet_widget, 'add_ai_data')
+            has_set_cell = hasattr(spreadsheet_widget, 'set_cell_value')
+            logger.info(f"Spreadsheet methods - add_ai_data: {has_add_ai_data}, set_cell_value: {has_set_cell}")
+            
+            if not has_add_ai_data and not has_set_cell:
+                logger.error(f"ERROR: spreadsheet_widget missing both methods. Widget type: {type(spreadsheet_widget)}")
+                return
+            
+            action = command.get('action', '').lower()
+            logger.info(f"Processing action: {action}, command: {command}")
+            
+            if action == 'set':
+                # Установка значения в одну ячейку
+                row = command.get('row', 0)
+                col = command.get('col', 0)
+                value = command.get('value', '')
+                
+                if has_set_cell:
+                    spreadsheet_widget.set_cell_value(row, col, value)
+                    logger.info(f"SUCCESS: Set cell [{row},{col}] = {value}")
+                else:
+                    logger.error(f"ERROR: set_cell_value method not found")
+                    
+            elif action == 'insert':
+                # Вставка множества значений
+                data = command.get('data', [])
+                start_row = command.get('start_row', 0)
+                start_col = command.get('start_col', 0)
+                
+                logger.info(f"Attempting insert: {len(data) if data else 0} rows at [{start_row},{start_col}]")
+                
+                if data and has_add_ai_data:
+                    result = spreadsheet_widget.add_ai_data(data, start_row, start_col)
+                    logger.info(f"SUCCESS: Inserted {len(data)} rows at [{start_row},{start_col}], result: {result}")
+                elif data and has_set_cell:
+                    # Fallback: если нет add_ai_data, используем set_cell_value в цикле
+                    logger.info(f"Using fallback set_cell_value loop for {len(data)} rows")
+                    for row_idx, row_data in enumerate(data):
+                        for col_idx, value in enumerate(row_data):
+                            spreadsheet_widget.set_cell_value(start_row + row_idx, start_col + col_idx, str(value))
+                    logger.info(f"SUCCESS: Inserted via fallback")
+                else:
+                    logger.error(f"ERROR: No data or add_ai_data method not available")
+            else:
+                logger.warning(f"Unknown action: {action}")
+                    
+        except Exception as e:
+            import logging
+            logging.error(f"ERROR executing table command: {e}", exc_info=True)
+
+

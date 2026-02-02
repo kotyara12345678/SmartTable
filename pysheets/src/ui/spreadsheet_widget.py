@@ -173,6 +173,33 @@ class SpreadsheetWidget(QTableWidget):
                 return cell.calculated_value
         return None
 
+    def add_ai_data(self, data: List[List[str]], start_row: int = 0, start_col: int = 0) -> bool:
+        """
+        Add data from AI to the spreadsheet.
+        
+        Args:
+            data: List of lists with string values
+            start_row: Starting row (default 0)
+            start_col: Starting column (default 0)
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            for row_idx, row in enumerate(data):
+                actual_row = start_row + row_idx
+                if actual_row >= self.rows:
+                    break
+                for col_idx, value in enumerate(row):
+                    actual_col = start_col + col_idx
+                    if actual_col >= self.columns:
+                        break
+                    self.set_cell_value(actual_row, actual_col, str(value))
+            return True
+        except Exception as e:
+            print(f"[ERROR] Failed to add AI data: {e}")
+            return False
+
     def apply_cell_formatting(self, row: int, col: int):
         """Применение форматирования к ячейке"""
         cell = self.get_cell(row, col)

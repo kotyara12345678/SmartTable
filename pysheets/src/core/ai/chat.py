@@ -172,7 +172,63 @@ def RequestMessage(message: str) -> str:
     try:
         # Always use chat_with_openrouter, which uses the hardcoded API key
         if chat_with_openrouter is not None:
-            resp = chat_with_openrouter(message)
+            # System prompt to instruct AI about table modification capabilities
+            system_prompt = """You are a helpful spreadsheet assistant that extracts data from reports and fills tables.
+
+CRITICAL INSTRUCTIONS FOR TABLE DATA:
+1. ALWAYS wrap JSON arrays in ```json and ``` markers
+2. ENSURE all rows have EXACTLY the same number of columns
+3. Put headers as the FIRST row
+4. Convert all values to strings
+5. Keep column count consistent throughout
+
+REQUIRED FORMAT:
+When providing table data, ALWAYS use this exact format:
+
+```json
+[
+  ["Header1", "Header2", "Header3", "Header4"],
+  ["Value1", "Value2", "Value3", "Value4"],
+  ["Value1", "Value2", "Value3", "Value4"],
+  ["Value1", "Value2", "Value3", "Value4"]
+]
+```
+
+VALIDATION RULES:
+- Each row must have exactly 4 columns (or whatever you choose, but CONSISTENT)
+- Every cell must be a string: "value" not value or 123
+- No missing or extra columns in any row
+- Always close with ```
+
+EXAMPLE - PRODUCT DATA:
+```json
+[
+  ["Название продукта", "Количество", "Цена", "Выручка"],
+  ["Galaxy S30", "60", "74000", "4440000"],
+  ["XPhone 15 Pro", "45", "85000", "3825000"],
+  ["MacBook Air", "30", "110000", "3300000"]
+]
+```
+
+EXAMPLE - CATEGORY DATA:
+```json
+[
+  ["Категория", "Продано единиц", "Выручка", "Комментарий"],
+  ["Смартфоны", "125", "9565000", "Лидер рынка"],
+  ["Ноутбуки", "78", "5550000", "Стабильный спрос"],
+  ["Наушники", "120", "2132000", "Высокий оборот"]
+]
+```
+
+IMPORTANT:
+- If data has different column counts, normalize it (add empty cells or remove extra columns)
+- ALWAYS provide the JSON block, even if you need to ask follow-up questions
+- Put explanatory text BEFORE or AFTER the JSON block
+- The spreadsheet will automatically apply the data starting from cell A1
+
+Always respond in Russian. Always include the ```json ... ``` block when processing data."""
+            
+            resp = chat_with_openrouter(message, extra_system=system_prompt)
             if resp:
                 return str(resp)
             return "Ошибка: не удалось получить ответ от OpenRouter"
