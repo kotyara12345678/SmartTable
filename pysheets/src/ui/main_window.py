@@ -12,12 +12,20 @@ from typing import Optional
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QTabWidget, QStatusBar, QMenuBar, QMessageBox,
                              QFileDialog, QSplitter, QToolBar, QDialog, QAction,
-                             QApplication, QMenu, QInputDialog, QPushButton)
+                             QApplication, QMenu, QInputDialog, QPushButton, QShortcut)
 from PyQt5.QtCore import Qt, QTimer, QSize, QSettings
 from PyQt5.QtGui import QKeySequence, QIcon, QColor, QPixmap, QPainter
 
 from pysheets.src.core import Workbook
 from pysheets.src.io import ExcelImporter, ExcelExporter
+from pysheets.src.io.odt_export import ODTExporter
+from pysheets.src.io.print_handler import TablePrinter
+from pysheets.src.io.json_export import JSONExporter
+from pysheets.src.io.html_export import HTMLExporter
+from pysheets.src.io.xml_export import XMLExporter
+from pysheets.src.io.markdown_export import MarkdownExporter
+from pysheets.src.io.sql_export import SQLExporter
+from pysheets.src.io.text_export import TextExporter
 from pysheets.src.ui.formula_bar import FormulaBar
 from pysheets.src.ui.sidebar import Sidebar
 from pysheets.src.ui.spreadsheet_widget import SpreadsheetWidget
@@ -253,6 +261,41 @@ class MainWindow(QMainWindow):
         export_png_action.triggered.connect(self.export_to_png)
         export_menu.addAction(export_png_action)
 
+        export_odt_action = QAction("Экспорт в ODT...", self)
+        export_odt_action.triggered.connect(self.export_to_odt)
+        export_menu.addAction(export_odt_action)
+
+        export_json_action = QAction("Экспорт в JSON...", self)
+        export_json_action.triggered.connect(self.export_to_json)
+        export_menu.addAction(export_json_action)
+
+        export_html_action = QAction("Экспорт в HTML...", self)
+        export_html_action.triggered.connect(self.export_to_html)
+        export_menu.addAction(export_html_action)
+
+        export_xml_action = QAction("Экспорт в XML...", self)
+        export_xml_action.triggered.connect(self.export_to_xml)
+        export_menu.addAction(export_xml_action)
+
+        export_markdown_action = QAction("Экспорт в Markdown...", self)
+        export_markdown_action.triggered.connect(self.export_to_markdown)
+        export_menu.addAction(export_markdown_action)
+
+        export_sql_action = QAction("Экспорт в SQL...", self)
+        export_sql_action.triggered.connect(self.export_to_sql)
+        export_menu.addAction(export_sql_action)
+
+        export_text_action = QAction("Экспорт в текст (TXT)...", self)
+        export_text_action.triggered.connect(self.export_to_text)
+        export_menu.addAction(export_text_action)
+
+        file_menu.addSeparator()
+
+        print_action = QAction("Печать...", self)
+        print_action.setShortcut(QKeySequence("Ctrl+P"))
+        print_action.triggered.connect(self.print_table)
+        file_menu.addAction(print_action)
+
         file_menu.addSeparator()
 
         theme_action = QAction("Настроить тему...", self)
@@ -357,8 +400,12 @@ class MainWindow(QMainWindow):
         self.main_toolbar.open_file_triggered.connect(self.open_file)
         self.main_toolbar.save_file_triggered.connect(self.save_file)
         self.main_toolbar.export_excel_triggered.connect(self.export_to_excel)
+        self.main_toolbar.print_triggered.connect(self.print_table)
         self.main_toolbar.zoom_changed.connect(self.zoom_combo_changed)
         self.main_toolbar.ai_chat_triggered.connect(self.open_ai_chat)
+
+        # Добавляем глобальный shortcut для печати
+        QShortcut(QKeySequence("Ctrl+P"), self, self.print_table)
 
         self.format_toolbar = FormatToolBar()
         self.format_toolbar.format_changed.connect(self.apply_format)
@@ -1081,6 +1128,255 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 from pysheets.src.utils.helpers import show_error_message
                 show_error_message(self, f"Ошибка при экспорте в PNG: {str(e)}")
+
+    def export_to_odt(self):
+        """Экспорт в ODT (OpenDocument Text)"""
+        spreadsheet = self.get_current_spreadsheet()
+        if not spreadsheet:
+            return
+
+        dlg = QFileDialog(self, "Экспорт в ODT")
+        dlg.setAcceptMode(QFileDialog.AcceptSave)
+        dlg.setNameFilter("ODT файлы (*.odt)")
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        app = QApplication.instance()
+        if app and app.styleSheet():
+            dlg.setStyleSheet(app.styleSheet())
+        if dlg.exec_() == QDialog.Accepted:
+            selected = dlg.selectedFiles()
+            file_path = selected[0] if selected else None
+        else:
+            file_path = None
+
+        if file_path:
+            # Гарантируем расширение .odt
+            if not file_path.lower().endswith('.odt'):
+                file_path += '.odt'
+            try:
+                exporter = ODTExporter(spreadsheet, file_path)
+                success = exporter.export()
+                if success:
+                    self.status_bar.showMessage(f"Экспорт в ODT завершен: {Path(file_path).name}")
+                else:
+                    show_error_message(self, "Не удалось экспортировать таблицу в ODT")
+            except ImportError:
+                show_error_message(self, "Ошибка: необходимо установить odfpy\nУстановите: pip install odfpy")
+            except Exception as e:
+                show_error_message(self, f"Ошибка при экспорте в ODT: {str(e)}")
+
+    def export_to_json(self):
+        """Экспорт в JSON"""
+        spreadsheet = self.get_current_spreadsheet()
+        if not spreadsheet:
+            return
+
+        dlg = QFileDialog(self, "Экспорт в JSON")
+        dlg.setAcceptMode(QFileDialog.AcceptSave)
+        dlg.setNameFilter("JSON файлы (*.json)")
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        app = QApplication.instance()
+        if app and app.styleSheet():
+            dlg.setStyleSheet(app.styleSheet())
+        if dlg.exec_() == QDialog.Accepted:
+            selected = dlg.selectedFiles()
+            file_path = selected[0] if selected else None
+        else:
+            file_path = None
+
+        if file_path:
+            if not file_path.lower().endswith('.json'):
+                file_path += '.json'
+            try:
+                exporter = JSONExporter(spreadsheet, file_path)
+                success = exporter.export()
+                if success:
+                    self.status_bar.showMessage(f"Экспорт в JSON завершен: {Path(file_path).name}")
+                else:
+                    show_error_message(self, "Не удалось экспортировать таблицу в JSON")
+            except Exception as e:
+                show_error_message(self, f"Ошибка при экспорте в JSON: {str(e)}")
+
+    def export_to_html(self):
+        """Экспорт в HTML"""
+        spreadsheet = self.get_current_spreadsheet()
+        if not spreadsheet:
+            return
+
+        dlg = QFileDialog(self, "Экспорт в HTML")
+        dlg.setAcceptMode(QFileDialog.AcceptSave)
+        dlg.setNameFilter("HTML файлы (*.html)")
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        app = QApplication.instance()
+        if app and app.styleSheet():
+            dlg.setStyleSheet(app.styleSheet())
+        if dlg.exec_() == QDialog.Accepted:
+            selected = dlg.selectedFiles()
+            file_path = selected[0] if selected else None
+        else:
+            file_path = None
+
+        if file_path:
+            if not file_path.lower().endswith('.html'):
+                file_path += '.html'
+            try:
+                exporter = HTMLExporter(spreadsheet, file_path)
+                success = exporter.export()
+                if success:
+                    self.status_bar.showMessage(f"Экспорт в HTML завершен: {Path(file_path).name}")
+                else:
+                    show_error_message(self, "Не удалось экспортировать таблицу в HTML")
+            except Exception as e:
+                show_error_message(self, f"Ошибка при экспорте в HTML: {str(e)}")
+
+    def export_to_xml(self):
+        """Экспорт в XML"""
+        spreadsheet = self.get_current_spreadsheet()
+        if not spreadsheet:
+            return
+
+        dlg = QFileDialog(self, "Экспорт в XML")
+        dlg.setAcceptMode(QFileDialog.AcceptSave)
+        dlg.setNameFilter("XML файлы (*.xml)")
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        app = QApplication.instance()
+        if app and app.styleSheet():
+            dlg.setStyleSheet(app.styleSheet())
+        if dlg.exec_() == QDialog.Accepted:
+            selected = dlg.selectedFiles()
+            file_path = selected[0] if selected else None
+        else:
+            file_path = None
+
+        if file_path:
+            if not file_path.lower().endswith('.xml'):
+                file_path += '.xml'
+            try:
+                exporter = XMLExporter(spreadsheet, file_path)
+                success = exporter.export()
+                if success:
+                    self.status_bar.showMessage(f"Экспорт в XML завершен: {Path(file_path).name}")
+                else:
+                    show_error_message(self, "Не удалось экспортировать таблицу в XML")
+            except Exception as e:
+                show_error_message(self, f"Ошибка при экспорте в XML: {str(e)}")
+
+    def export_to_markdown(self):
+        """Экспорт в Markdown"""
+        spreadsheet = self.get_current_spreadsheet()
+        if not spreadsheet:
+            return
+
+        dlg = QFileDialog(self, "Экспорт в Markdown")
+        dlg.setAcceptMode(QFileDialog.AcceptSave)
+        dlg.setNameFilter("Markdown файлы (*.md)")
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        app = QApplication.instance()
+        if app and app.styleSheet():
+            dlg.setStyleSheet(app.styleSheet())
+        if dlg.exec_() == QDialog.Accepted:
+            selected = dlg.selectedFiles()
+            file_path = selected[0] if selected else None
+        else:
+            file_path = None
+
+        if file_path:
+            if not file_path.lower().endswith('.md'):
+                file_path += '.md'
+            try:
+                exporter = MarkdownExporter(spreadsheet, file_path)
+                success = exporter.export()
+                if success:
+                    self.status_bar.showMessage(f"Экспорт в Markdown завершен: {Path(file_path).name}")
+                else:
+                    show_error_message(self, "Не удалось экспортировать таблицу в Markdown")
+            except Exception as e:
+                show_error_message(self, f"Ошибка при экспорте в Markdown: {str(e)}")
+
+    def export_to_sql(self):
+        """Экспорт в SQL"""
+        spreadsheet = self.get_current_spreadsheet()
+        if not spreadsheet:
+            return
+
+        dlg = QFileDialog(self, "Экспорт в SQL")
+        dlg.setAcceptMode(QFileDialog.AcceptSave)
+        dlg.setNameFilter("SQL файлы (*.sql)")
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        app = QApplication.instance()
+        if app and app.styleSheet():
+            dlg.setStyleSheet(app.styleSheet())
+        if dlg.exec_() == QDialog.Accepted:
+            selected = dlg.selectedFiles()
+            file_path = selected[0] if selected else None
+        else:
+            file_path = None
+
+        if file_path:
+            if not file_path.lower().endswith('.sql'):
+                file_path += '.sql'
+            try:
+                exporter = SQLExporter(spreadsheet, file_path)
+                success = exporter.export()
+                if success:
+                    self.status_bar.showMessage(f"Экспорт в SQL завершен: {Path(file_path).name}")
+                else:
+                    show_error_message(self, "Не удалось экспортировать таблицу в SQL")
+            except Exception as e:
+                show_error_message(self, f"Ошибка при экспорте в SQL: {str(e)}")
+
+    def export_to_text(self):
+        """Экспорт в текст (TXT)"""
+        spreadsheet = self.get_current_spreadsheet()
+        if not spreadsheet:
+            return
+
+        dlg = QFileDialog(self, "Экспорт в текст")
+        dlg.setAcceptMode(QFileDialog.AcceptSave)
+        dlg.setNameFilter("Текстовые файлы (*.txt)")
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        app = QApplication.instance()
+        if app and app.styleSheet():
+            dlg.setStyleSheet(app.styleSheet())
+        if dlg.exec_() == QDialog.Accepted:
+            selected = dlg.selectedFiles()
+            file_path = selected[0] if selected else None
+        else:
+            file_path = None
+
+        if file_path:
+            if not file_path.lower().endswith('.txt'):
+                file_path += '.txt'
+            try:
+                exporter = TextExporter(spreadsheet, file_path)
+                success = exporter.export()
+                if success:
+                    self.status_bar.showMessage(f"Экспорт в текст завершен: {Path(file_path).name}")
+                else:
+                    show_error_message(self, "Не удалось экспортировать таблицу в текст")
+            except Exception as e:
+                show_error_message(self, f"Ошибка при экспорте в текст: {str(e)}")
+
+    def print_table(self):
+        """Печать таблицы"""
+        print("[INFO] Печать таблицы...")
+        spreadsheet = self.get_current_spreadsheet()
+        if not spreadsheet:
+            print("[WARNING] Нет открытой таблицы для печати")
+            show_error_message(self, "Нет открытой таблицы для печати")
+            return
+
+        try:
+            print("[INFO] Создание принтера...")
+            printer = TablePrinter(spreadsheet)
+            print("[INFO] Открытие диалога печати...")
+            printer.print_table(self)
+            print("[INFO] Печать инициирована")
+            self.status_bar.showMessage("Печать завершена")
+        except Exception as e:
+            print(f"[ERROR] Ошибка при печати: {e}")
+            import traceback
+            traceback.print_exc()
+            show_error_message(self, f"Ошибка при печати: {str(e)}")
 
     def apply_theme(self, theme_name, color):
         """Применяет тему приложению"""

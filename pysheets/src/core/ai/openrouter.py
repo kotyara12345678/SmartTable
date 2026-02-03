@@ -9,6 +9,9 @@ from requests.exceptions import RequestException
 # List of available API keys
 OPENROUTER_KEYS = [
    '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',
+   "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",
+   "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",
+   "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"
 ]
 
 # Track dead keys (401 errors)
