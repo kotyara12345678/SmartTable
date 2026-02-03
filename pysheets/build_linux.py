@@ -8,7 +8,6 @@ import os
 import sys
 import shutil
 import subprocess
-import platform
 from pathlib import Path
 
 def run_command(cmd, description, check=True):
@@ -63,13 +62,6 @@ def install_dependencies():
 
 def check_appimage_tool():
     """Проверить/скачать appimagetool"""
-    # Проверяем OS - AppImage только для Linux!
-    if platform.system() != "Linux":
-        print(f"[WARNING] AppImage сборка доступна только на Linux!")
-        print(f"[INFO] Текущая OS: {platform.system()}")
-        print("[INFO] Сборка AppImage будет пропущена")
-        return True  # Не ошибка, просто пропускаем на других ОС
-    
     appimage_tool = Path("build_appimage/appimagetool")
     
     if appimage_tool.exists():
@@ -182,19 +174,9 @@ def build_appimage():
 
 def main():
     """Основная функция"""
-    current_os = platform.system()
     print("=" * 60)
-    print(f"SmartTable - Сборка для Linux (AppImage) | OS: {current_os}")
+    print("SmartTable - Сборка для Linux (AppImage)")
     print("=" * 60)
-    
-    # Предупреждение если не Linux
-    if current_os != "Linux":
-        print(f"\n[WARNING] Этот скрипт предназначен для Linux!")
-        print(f"[WARNING] Текущая ОС: {current_os}")
-        print("[WARNING] AppImage сборка будет пропущена")
-        print("[INFO] Для сборки Windows EXE используйте: python build_exe.py")
-        print("[INFO] Для сборки macOS используйте: python build_macos.py")
-        return
     
     # Проверяем Python
     if not check_python():
