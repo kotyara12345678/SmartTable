@@ -1,5 +1,5 @@
 """
-Главное окно приложения
+Главное окно приложения SmartTable (без боковой панели)
 """
 
 import json
@@ -27,7 +27,6 @@ from pysheets.src.io.markdown_export import MarkdownExporter
 from pysheets.src.io.sql_export import SQLExporter
 from pysheets.src.io.text_export import TextExporter
 from pysheets.src.ui.formula_bar import FormulaBar
-from pysheets.src.ui.sidebar import Sidebar
 from pysheets.src.ui.spreadsheet_widget import SpreadsheetWidget
 from pysheets.src.ui.toolbar import MainToolBar, FormatToolBar, FunctionsToolBar
 from pysheets.src.utils import show_error_message
@@ -65,8 +64,8 @@ class MainWindow(QMainWindow):
         self.format_toolbar = None
         self.functions_toolbar = None
         self.formula_bar = None
-        self.sidebar = None
         self.menu_bar = None
+        self.ai_chat_widget = None
 
         # Инициализация UI
         self.init_ui()
@@ -162,11 +161,7 @@ class MainWindow(QMainWindow):
         main_area_layout = QHBoxLayout(main_area)
         main_area_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Боковая панель слева
-        self.sidebar = Sidebar()
-        self.sidebar.setMaximumWidth(250)
-
-        # Виджет вкладок
+        # Виджет вкладок (теперь занимает всю ширину слева)
         self.tab_widget = QTabWidget()
         self.tab_widget.setTabsClosable(True)
         self.tab_widget.tabCloseRequested.connect(self.close_tab)
@@ -178,28 +173,24 @@ class MainWindow(QMainWindow):
         # Добавляем первую вкладку
         self.add_new_sheet("Лист1")
 
-        # AI Chat панель справа
+        # AI Chat панель справа (можно скрывать)
         from pysheets.src.ui.chat import AIChatWidget
         self.ai_chat_widget = AIChatWidget(self.current_theme, self.app_theme_color, main_window=self)
         self.ai_chat_widget.setMaximumWidth(350)
         self.ai_chat_widget.setMinimumWidth(300)
         self.ai_chat_widget.hide()
 
-        # Разделитель слева
-        splitter_left = QSplitter(Qt.Horizontal)
-        splitter_left.addWidget(self.sidebar)
-        splitter_left.addWidget(self.tab_widget)
-        splitter_left.setSizes([200, 600])
+        # Создаем разделитель только с таблицей и AI чатом
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.addWidget(self.tab_widget)
+        splitter.addWidget(self.ai_chat_widget)
+        splitter.setCollapsible(1, True)
 
-        # Разделитель для AI Chat справа
-        splitter_right = QSplitter(Qt.Horizontal)
-        splitter_right.addWidget(splitter_left)
-        splitter_right.addWidget(self.ai_chat_widget)
-        splitter_right.setCollapsible(1, True)
+        # Начальные размеры (больше места для таблицы)
+        splitter.setSizes([1000, 350])
 
-        main_area_layout.addWidget(splitter_right)
-        main_layout.addWidget(main_area, 1)  # stretch factor = 1, чтобы занять всё пространство
-
+        main_area_layout.addWidget(splitter)
+        main_layout.addWidget(main_area, 1)
         # Строка состояния
         self.create_statusbar()
 
@@ -398,13 +389,10 @@ class MainWindow(QMainWindow):
         self.main_toolbar = MainToolBar()
         self.main_toolbar.new_file_triggered.connect(self.new_file)
         self.main_toolbar.open_file_triggered.connect(self.open_file)
-        self.main_toolbar.save_file_triggered.connect(self.save_file)
-        self.main_toolbar.export_excel_triggered.connect(self.export_to_excel)
         self.main_toolbar.print_triggered.connect(self.print_table)
         self.main_toolbar.zoom_changed.connect(self.zoom_combo_changed)
         self.main_toolbar.ai_chat_triggered.connect(self.open_ai_chat)
 
-        # Добавляем глобальный shortcut для печати
         QShortcut(QKeySequence("Ctrl+P"), self, self.print_table)
 
         self.format_toolbar = FormatToolBar()
@@ -423,7 +411,6 @@ class MainWindow(QMainWindow):
     def connect_signals(self):
         """Подключение сигналов"""
         self.formula_bar.formula_entered.connect(self.on_formula_entered)
-        self.sidebar.function_selected.connect(self.on_function_selected)
 
     # ============ Масштаб (Zoom) ============
     def zoom_in(self):
@@ -613,37 +600,22 @@ class MainWindow(QMainWindow):
             return current_widget
         return None
 
-    # ============ Вкладки и сессии ============
     def close_tab(self, index: int):
         """Закрывает вкладку по индексу и удаляет соответствующий лист в модели"""
         if index < 0:
             return
-        # Удаляем лист из модели workbook
         removed = self.workbook.remove_sheet(index)
-        # Удаляем вкладку из UI только если model удалила лист
         if removed:
             self.tab_widget.removeTab(index)
-            # Обновляем боковую панель и заголовок
-            self.sidebar.update_tabs(self.workbook.sheet_names())
             self.update_window_title()
         else:
-            # Нельзя удалить если это единственный лист
             self.status_bar.showMessage("Нельзя удалить последний лист")
 
     def tab_changed(self, index: int):
         """Обработка смены активной вкладки"""
         if index < 0:
             return
-        # Синхронизируем модель
         self.workbook.set_active_sheet(index)
-        # Обновляем боковую панель
-        sheet_name = self.tab_widget.tabText(index)
-        try:
-            self.sidebar.update_sheet_info(sheet_name)
-            self.sidebar.update_tabs(self.workbook.sheet_names())
-        except Exception:
-            pass
-        # Обновляем заголовок окна
         self.update_window_title()
 
     def show_tab_context_menu(self, pos):
@@ -665,23 +637,18 @@ class MainWindow(QMainWindow):
             if ok and new_name and new_name != old_name:
                 if self.workbook.rename_sheet(index, new_name):
                     self.tab_widget.setTabText(index, new_name)
-                    self.sidebar.update_tabs(self.workbook.sheet_names())
 
         def duplicate():
-            # Дублируем данные листа
             source_widget = self.tab_widget.widget(index)
             if not isinstance(source_widget, SpreadsheetWidget):
                 return
             df = source_widget.get_dataframe()
             new_name = f"{self.tab_widget.tabText(index)} (копия)"
-            # Добавляем в модель
             self.workbook.add_sheet_from_dataframe(df, new_name)
-            # Добавляем UI вкладку
             new_sheet = SpreadsheetWidget()
             new_sheet.load_data(df.values.tolist())
             new_index = self.tab_widget.addTab(new_sheet, new_name)
             self.tab_widget.setCurrentIndex(new_index)
-            self.sidebar.update_tabs(self.workbook.sheet_names())
 
         def close_here():
             self.close_tab(index)
@@ -698,7 +665,7 @@ class MainWindow(QMainWindow):
         menu.exec_(tab_bar.mapToGlobal(pos))
 
     def update_window_title(self, modified: bool = False):
-        """Обновляет заголовок окна в зависимости от текущего файла/статуса"""
+        """Обновляет заголовок окна"""
         base = "SmartTable"
         if self.current_file_path:
             name = Path(self.current_file_path).name

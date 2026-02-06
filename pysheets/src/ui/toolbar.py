@@ -35,10 +35,7 @@ class MainToolBar(QToolBar):
         """Инициализация UI"""
         actions = [
             ("📄", "Новый", self.new_file_triggered, "Ctrl+N"),
-            ("➕", "Новая вкладка", None, "Ctrl+T"),
             ("📂", "Открыть", self.open_file_triggered, "Ctrl+O"),
-            ("💾", "Сохранить", self.save_file_triggered, "Ctrl+S"),
-            ("📊", "Экспорт в Excel", self.export_excel_triggered, "Ctrl+E"),
             ("🖨️", "Печать", self.print_triggered, "Ctrl+P"),
         ]
 
