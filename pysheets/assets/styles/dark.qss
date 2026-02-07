@@ -1,0 +1,68 @@
+/* Темная тема */
+
+QMainWindow {
+    background-color: #2b2b2b;
+}
+
+/* Панели инструментов */
+QToolBar {
+    background-color: #3c3c3c;
+    border-bottom: 1px solid #555555;
+    spacing: 3px;
+    padding: 2px;
+}
+
+QToolButton {
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    padding: 5px 8px;
+    color: #ffffff;
+    min-height: 24px;
+}
+
+QToolButton:hover {
+    background-color: #505050;
+    border: 1px solid #666666;
+}
+
+QToolButton:pressed {
+    background-color: #606060;
+}
+
+QToolButton:checked {
+    background-color: #1a5fb4;
+    border: 1px solid #2d7bd4;
+}
+
+/* Таблица */
+QTableWidget {
+    background-color: #1e1e1e;
+    alternate-background-color: #252525;
+    gridline-color: #404040;
+    selection-background-color: #264f78;
+    selection-color: #ffffff;
+}
+
+QTableWidget::item {
+    padding: 2px 4px;
+    border-right: 1px solid #404040;
+    border-bottom: 1px solid #404040;
+    color: #ffffff;
+}
+
+QTableWidget::item:selected {
+    background-color: #264f78;
+}
+
+/* Заголовки таблицы */
+QHeaderView::section {
+    background-color: #3c3c3c;
+    color: #cccccc;
+    padding: 4px 8px;
+    border-right: 1px solid #404040;
+    border-bottom: 1px solid #404040;
+    font-weight: 500;
+}
+
+/* Остальные стили аналогично main.qss с темными цветами */
