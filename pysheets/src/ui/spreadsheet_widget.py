@@ -40,11 +40,21 @@ class SpreadsheetWidget(QTableWidget):
         super().__init__(1000, 26, parent)  # 1000 строк, 26 колонок по умолчанию
 
         # Модель данных
-        self.spreadsheet: Optional[Spreadsheet] = None
         self.rows = 1000
         self.columns = 26
         self.zoom_level = 100
         self._updating = False
+        
+        # Инициализируем FormulaEngine для вычисления формул
+        self.formula_engine = FormulaEngine()
+        
+        # Локальное хранилище ячеек (независимо от spreadsheet модели)
+        self.cells: List[List[Cell]] = [
+            [Cell(row, col) for col in range(self.columns)] for row in range(self.rows)
+        ]
+        
+        # Модель данных (опционально)
+        self.spreadsheet: Optional[Spreadsheet] = None
 
         # НОВЫЕ: состояния для расширенных функций
         self.frozen_cells = set()  # {(row, col)} замороженные ячейки
@@ -104,7 +114,7 @@ class SpreadsheetWidget(QTableWidget):
         header.setMinimumSectionSize(50)
 
         vertical_header = self.verticalHeader()
-        vertical_header.setDefaultSectionSize(25)
+        vertical_header.setDefaultSectionSize(34)
         vertical_header.setMinimumSectionSize(20)
 
         # Настройка сетки
@@ -148,13 +158,13 @@ class SpreadsheetWidget(QTableWidget):
         self.refresh_display()
 
     def get_cell(self, row: int, col: int) -> Optional[Cell]:
-        """Получение объекта ячейки из модели"""
-        if self.spreadsheet:
-            return self.spreadsheet.get_cell(row, col)
+        """Получение объекта ячейки из локального хранилища"""
+        if 0 <= row < self.rows and 0 <= col < self.columns:
+            return self.cells[row][col]
         return None
 
     def set_cell_value(self, row: int, col: int, value: str):
-        """Установка значения ячейки в модели"""
+        """Установка значения ячейки в модели и отображении"""
         # Проверяем, не скрыта ли ячейка
         if (row, col) in self.hidden_cells:
             cell = self.get_cell(row, col)
@@ -166,11 +176,12 @@ class SpreadsheetWidget(QTableWidget):
                     item.setData(Qt.UserRole + 1, value)  # Сохраняем скрытое значение
             return
 
-        if not self.spreadsheet:
+        cell = self.get_cell(row, col)
+        if not cell:
             return
 
-        old_value = self.spreadsheet.get_cell_value(row, col)
-        self.spreadsheet.set_cell_value(row, col, value)
+        old_value = cell.value
+        cell.set_value(value)
 
         # Обновление отображения (только если ячейка видима)
         item = self.item(row, col)
@@ -178,15 +189,31 @@ class SpreadsheetWidget(QTableWidget):
             item = QTableWidgetItem()
             self.setItem(row, col, item)
 
-        # Получаем значение для отображения
-        cell = self.get_cell(row, col)
-        display_value = ""
-        if cell:
-            display_value = cell.get_display_value() or ""
-
-        self._updating = True
-        item.setText(str(display_value))
-        self._updating = False
+        # Проверка на формулу и вычисление
+        if value and value.startswith('='):
+            try:
+                # Вычисляем формулу используя FormulaEngine
+                result = self.formula_engine.evaluate(value[1:], self.get_cell_data)
+                cell.set_formula(value)
+                cell.set_calculated_value(str(result))
+                
+                self._updating = True
+                item.setText(str(result))  # Показываем результат
+                self._updating = False
+                print(f"DEBUG: Формула {value} = {result}")
+            except Exception as e:
+                print(f"[WARNING] Ошибка при вычислении формулы '{value}': {e}")
+                self._updating = True
+                item.setText(f"#ERROR!")
+                self._updating = False
+                cell.set_calculated_value(f"#ERROR!")
+        else:
+            # Простое значение без формулы
+            self._updating = True
+            item.setText(str(value) if value else "")
+            self._updating = False
+            cell.set_formula(None)
+            cell.set_calculated_value(str(value) if value else "")
 
         # Применение форматирования
         self.apply_cell_formatting(row, col)
@@ -195,9 +222,14 @@ class SpreadsheetWidget(QTableWidget):
             self.data_changed.emit(row, col, value)
 
     def get_cell_data(self, cell_ref: str) -> Optional[str]:
-        """Получение данных ячейки по ссылке"""
-        if self.spreadsheet:
-            return self.spreadsheet.get_cell_data(cell_ref)
+        """Получение данных ячейки по ссылке (для формул)"""
+        # Парсим ссылку типа "A1" в row, col
+        row, col = parse_cell_reference(cell_ref)
+        if row is not None and col is not None:
+            cell = self.get_cell(row, col)
+            if cell:
+                # Возвращаем вычисленное значение для использования в формулах
+                return cell.calculated_value
         return None
 
     def apply_cell_formatting(self, row: int, col: int):

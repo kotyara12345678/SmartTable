@@ -747,19 +747,18 @@ class MainWindow(QMainWindow):
         if selected_range:
             formula = f"={function}({selected_range})"
 
-            selected = spreadsheet.selectedRanges()
-            if selected:
-                range_obj = selected[0]
-                last_row = range_obj.bottomRow()
-                last_col = range_obj.rightColumn()
+            # Вставляем результат в текущую выделённую ячейку
+            current_row = spreadsheet.currentRow()
+            current_col = spreadsheet.currentColumn()
 
-                spreadsheet.set_cell_value(last_row, last_col, formula)
+            # set_cell_value будет сам вычислять формулу и обновлять отображение
+            spreadsheet.set_cell_value(current_row, current_col, formula)
 
-                cell_ref = f"{chr(65 + last_col)}{last_row + 1}"
-                self.formula_bar.set_cell_reference(cell_ref)
-                self.formula_bar.set_formula(formula)
+            cell_ref = f"{chr(65 + current_col)}{current_row + 1}"
+            self.formula_bar.set_cell_reference(cell_ref)
+            self.formula_bar.set_formula(formula)
 
-                spreadsheet.setCurrentCell(last_row, last_col)
+            spreadsheet.setCurrentCell(current_row, current_col)
         else:
             self.formula_bar.insert_function(function)
 
