@@ -25,15 +25,15 @@ class ThemeCard(QFrame):
         self.metadata = theme_info['metadata']
         
         self.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
+        # Удалили жёсткие стили, теперь наследуем от приложения
         self.setStyleSheet("""
             ThemeCard {
-                background-color: #ffffff;
                 border: 1px solid #e8eaed;
                 border-radius: 8px;
                 padding: 12px;
             }
             ThemeCard:hover {
-                border: 1px solid #5f6368;
+                border: 2px solid #5f6368;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             }
         """)

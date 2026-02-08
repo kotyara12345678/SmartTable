@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QFileDialog, QSplitter, QToolBar, QDialog, QAction,
                              QApplication, QMenu, QInputDialog, QPushButton, QShortcut)
 from PyQt5.QtCore import Qt, QTimer, QSize, QSettings
-from PyQt5.QtGui import QKeySequence, QIcon, QColor, QPixmap, QPainter
+from PyQt5.QtGui import QKeySequence, QIcon, QColor, QPixmap, QPainter, QBrush
 
 from pysheets.src.core import Workbook
 from pysheets.src.io import ExcelImporter, ExcelExporter
@@ -1324,51 +1324,22 @@ class MainWindow(QMainWindow):
             self.apply_theme(settings['theme'], settings['color'])
 
     def apply_gallery_theme_full(self, theme_info):
-        """Применяет полную тему из галереи с расширенными стилями"""
+        """Применяет полную тему из галереи"""
         try:
-            from PyQt5.QtWidgets import QApplication
-            
             theme_data = theme_info.get('data', {})
             theme_colors = theme_data.get('theme', {})
-            
-            # Выбираем светлую или темную тему в зависимости от текущих настроек
             light_theme = theme_colors.get('light', {})
-            dark_theme = theme_colors.get('dark', {})
-            
-            # Используем светлую тему по умолчанию
-            selected_theme = light_theme or dark_theme
-            
-            if not selected_theme:
-                print("Тема не содержит данных о цветах")
-                return
-            
-            # Применяем основной цвет
-            primary_color = selected_theme.get('primary', '#DC143C')
+            primary_color = light_theme.get('primary', '#DC143C')
             color = QColor(primary_color)
             
             if color.isValid():
-                # Создаем стилевую таблицу на основе цветов темы
-                stylesheet = self._generate_stylesheet_from_theme(selected_theme)
-                
-                app = QApplication.instance()
-                if app:
-                    app.setStyleSheet(stylesheet)
-                
-                self.setStyleSheet(stylesheet)
                 self.current_theme = 'gallery'
                 self.app_theme_color = color
-                
-                # Обновляем все дочерние виджеты
-                if hasattr(self, 'ai_chat_widget') and self.ai_chat_widget:
-                    self.ai_chat_widget.update_theme('gallery', color)
-                
-                # Сохраняем настройки
-                self.settings.setValue("theme", 'gallery')
-                self.settings.setValue("theme_data", json.dumps(theme_data))
-                self.settings.setValue("theme_color", color.name())
-                
+                # Применяем тему используя стандартный метод
+                self.apply_theme(self.current_theme, self.app_theme_color)
+                print(f"[OK] Цвет темы применен: {primary_color}")
         except Exception as e:
-            print(f"Ошибка при применении расширенной темы: {e}")
+            print(f"[ERROR] {e}")
 
     def _generate_stylesheet_from_theme(self, theme_colors: dict) -> str:
         """Генерирует стилевую таблицу на основе цветов темы"""

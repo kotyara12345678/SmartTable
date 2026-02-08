@@ -79,30 +79,37 @@ class ThemeManager:
 
     def apply_theme(self, theme_name: str, color: QColor = None):
         """Применение темы"""
-        if theme_name in self.themes:
-            self.current_theme = theme_name
-            if color:
-                self.app_theme_color = color
+        self.current_theme = theme_name
+        if color:
+            self.app_theme_color = color
 
-            # Определяем реальную тему
-            actual_theme = theme_name
+        # Определяем реальную тему
+        actual_theme = theme_name
 
-            if theme_name == "system":
-                # Для системной темы: сначала применяем светлую, потом проверяем и переприменяем если нужна тёмная
-                self.apply_palette("light")
-                self.apply_stylesheet("light")
+        if theme_name == "system":
+            # Для системной темы: сначала применяем светлую, потом проверяем и переприменяем если нужна тёмная
+            self.apply_palette("light")
+            self.apply_stylesheet("light")
 
-                # Теперь проверяем реальную системную тему после применения светлой темы
-                actual_theme = self._get_real_system_theme()
+            # Теперь проверяем реальную системную тему после применения светлой темы
+            actual_theme = self._get_real_system_theme()
 
-                # Если реальная тема тёмная, переприменяем
-                if actual_theme == "dark":
-                    self.apply_palette("dark")
-                    self.apply_stylesheet("dark")
-            else:
-                # Для явных светлых/тёмных тем просто применяем
-                self.apply_palette(actual_theme)
-                self.apply_stylesheet(actual_theme)
+            # Если реальная тема тёмная, переприменяем
+            if actual_theme == "dark":
+                self.apply_palette("dark")
+                self.apply_stylesheet("dark")
+        elif theme_name == "gallery":
+            # Галерея использует светлую базу с кастомным цветом
+            self.apply_palette("light")
+            self.apply_stylesheet("light")
+        elif theme_name in self.themes:
+            # Для явных светлых/тёмных тем просто применяем
+            self.apply_palette(actual_theme)
+            self.apply_stylesheet(actual_theme)
+        else:
+            # Если тема неизвестна, применяем светлую
+            self.apply_palette("light")
+            self.apply_stylesheet("light")
 
     def apply_stylesheet(self, theme_name: str):
         """Применение таблицы стилей"""
@@ -931,25 +938,40 @@ class ThemeSettingsDialog(QDialog):
 
     def _apply_dialog_theme(self):
         """Применить тему к диалогу"""
-        # Определяем текущую тему из parent если это MainWindow
-        current_theme = "light"
-        if hasattr(self.parent(), 'current_theme'):
-            current_theme = self.parent().current_theme
-            if current_theme == "system":
-                # Определяем системную тему
-                palette = QApplication.instance().palette()
-                bg_color = palette.color(__import__('PyQt5.QtGui', fromlist=['QPalette']).QPalette.Window)
-                brightness = (bg_color.red() + bg_color.green() + bg_color.blue()) / 3
-                current_theme = "dark" if brightness < 128 else "light"
-
-        self.parent_theme = current_theme
-
-        # Применяем тему к диалогу
-        manager = ThemeManager()
-        if current_theme == "dark":
-            manager.apply_theme("dark")
-        else:
-            manager.apply_theme("light")
+        app = QApplication.instance()
+        
+        # Копируем текущий стиль приложения на диалог
+        if app:
+            current_stylesheet = app.styleSheet()
+            if current_stylesheet:
+                self.setStyleSheet(current_stylesheet)
+            else:
+                # Если стиль приложения еще не установлен, применяем светлую тему
+                # Определяем текущую тему из parent если это MainWindow
+                current_theme = "light"
+                if hasattr(self.parent(), 'current_theme'):
+                    current_theme = self.parent().current_theme
+                    if current_theme == "system":
+                        # Определяем системную тему
+                        palette = app.palette()
+                        bg_color = palette.color(__import__('PyQt5.QtGui', fromlist=['QPalette']).QPalette.Window)
+                        brightness = (bg_color.red() + bg_color.green() + bg_color.blue()) / 3
+                        current_theme = "dark" if brightness < 128 else "light"
+                
+                # Берем цвет из родителя если он есть
+                color = QColor("#DC143C")  # default color
+                if hasattr(self.parent(), 'app_theme_color'):
+                    color = self.parent().app_theme_color
+                
+                # Применяем тему
+                manager = ThemeManager()
+                manager.app_theme_color = color
+                manager.apply_theme(current_theme)
+                
+                # Копируем стиль из приложения
+                updated_stylesheet = app.styleSheet()
+                if updated_stylesheet:
+                    self.setStyleSheet(updated_stylesheet)
 
     def on_color_selected(self, color_code):
         """Обработка выбора цвета"""
