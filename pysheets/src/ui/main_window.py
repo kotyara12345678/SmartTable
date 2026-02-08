@@ -46,11 +46,11 @@ class MainWindow(QMainWindow):
         self.current_file_path = None
         self.undo_stack = []
         self.redo_stack = []
-        
-        # Загружаем сохраненную тему или используем системную с малиновым цветом по умолчанию
+
+        # Загружаем сохраненную тему
         saved_theme = self.settings.value("theme")
         saved_color = self.settings.value("theme_color")
-        
+
         self.current_theme = saved_theme if saved_theme else "system"
         if saved_color:
             self.app_theme_color = QColor(saved_color)
@@ -191,11 +191,11 @@ class MainWindow(QMainWindow):
 
         main_area_layout.addWidget(splitter)
         main_layout.addWidget(main_area, 1)
+
         # Строка состояния
         self.create_statusbar()
 
         # Применяем тему ПОСЛЕ полной инициализации UI
-        # (используем QTimer для отложенного выполнения)
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(100, lambda: self.apply_theme(self.current_theme, self.app_theme_color))
 
@@ -293,6 +293,10 @@ class MainWindow(QMainWindow):
         theme_action.triggered.connect(self.show_theme_settings)
         file_menu.addAction(theme_action)
 
+        gallery_action = QAction("Галерея тем...", self)
+        gallery_action.triggered.connect(self.open_theme_gallery)
+        file_menu.addAction(gallery_action)
+
         file_menu.addSeparator()
 
         exit_action = QAction("Выход", self)
@@ -343,24 +347,32 @@ class MainWindow(QMainWindow):
         zoom_out_action.triggered.connect(self.zoom_out)
         view_menu.addAction(zoom_out_action)
 
+        # AI Chat переключение
+        ai_chat_action = QAction("Показать/скрыть AI Чат", self)
+        ai_chat_action.setShortcut(QKeySequence("Ctrl+I"))
+        ai_chat_action.triggered.connect(self.open_ai_chat)
+        view_menu.addAction(ai_chat_action)
+
         # Меню "Инструменты"
         tools_menu = self.menu_bar.addMenu("Инструменты")
 
         chart_action = QAction("Создать диаграмму...", self)
         chart_action.triggered.connect(self.create_chart)
         tools_menu.addAction(chart_action)
+
         sort_action = QAction("Сортировка...", self)
         sort_action.triggered.connect(self.open_sort_for_current)
         tools_menu.addAction(sort_action)
-        # Новый пункт для шаблонов
+
         templates_action = QAction("Шаблоны...", self)
         templates_action.triggered.connect(self.open_templates_dialog)
         tools_menu.addAction(templates_action)
 
-        # Добавляем действие "Сортировка" для быстрого доступа (альтернативный вызов)
         sort_quick_action = QAction("Сортировка (текущий лист)", self)
         sort_quick_action.triggered.connect(self.open_sort_for_current)
         tools_menu.addAction(sort_quick_action)
+
+
 
     def open_templates_dialog(self):
         """Открыть менеджер шаблонов"""
@@ -378,7 +390,6 @@ class MainWindow(QMainWindow):
         if not spreadsheet:
             show_error_message(self, "Нет активного листа для сортировки")
             return
-        # Используем метод виджета таблицы
         try:
             spreadsheet.open_sort_dialog()
         except AttributeError:
@@ -389,6 +400,8 @@ class MainWindow(QMainWindow):
         self.main_toolbar = MainToolBar()
         self.main_toolbar.new_file_triggered.connect(self.new_file)
         self.main_toolbar.open_file_triggered.connect(self.open_file)
+        self.main_toolbar.save_file_triggered.connect(self.save_file)
+        self.main_toolbar.export_excel_triggered.connect(self.export_to_excel)
         self.main_toolbar.print_triggered.connect(self.print_table)
         self.main_toolbar.zoom_changed.connect(self.zoom_combo_changed)
         self.main_toolbar.ai_chat_triggered.connect(self.open_ai_chat)
@@ -418,7 +431,6 @@ class MainWindow(QMainWindow):
         spreadsheet = self.get_current_spreadsheet()
         if spreadsheet:
             spreadsheet.zoom_in()
-            # Синхронизируем значение в тулбаре если он есть
             try:
                 self.main_toolbar.zoom_combo.setCurrentText(f"{spreadsheet.zoom_level}%")
             except Exception:
@@ -466,14 +478,12 @@ class MainWindow(QMainWindow):
         left, right = sel.leftColumn(), sel.rightColumn()
 
         df = spreadsheet.get_dataframe()
-        # Slice dataframe rows/cols
         try:
             sub_df = df.iloc[top:bottom+1, left:right+1]
         except Exception:
             show_error_message(self, "Не удалось получить данные для выделенного диапазона")
             return
 
-        # Показываем мастер диаграмм
         dlg = ChartWizardDialog(self)
         if dlg.exec_() != QDialog.Accepted:
             return
@@ -481,23 +491,19 @@ class MainWindow(QMainWindow):
         chart_type = dlg.get_chart_type()
         opts = dlg.get_options()
 
-        # Построение графика с использованием matplotlib
         try:
             import matplotlib
             matplotlib.use('Qt5Agg')
             from matplotlib.figure import Figure
             from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-            import matplotlib.pyplot as plt
         except Exception:
             show_error_message(self, "Для отображения диаграмм необходимо установить matplotlib\nУстановите: pip install matplotlib")
             return
 
-        # Подготовка данных: пытаемся привести все столбцы к числовым если возможно
         plot_df = sub_df.copy()
         for col in plot_df.columns:
             plot_df[col] = pd.to_numeric(plot_df[col], errors='coerce')
 
-        # Создаём диалог для отображения графика
         chart_dialog = QDialog(self)
         chart_dialog.setWindowTitle(f"Диаграмма - {chart_type}")
         chart_dialog.setMinimumSize(600, 400)
@@ -507,7 +513,6 @@ class MainWindow(QMainWindow):
         canvas = FigureCanvas(fig)
         ax = fig.add_subplot(111)
 
-        # Рисуем в зависимости от типа
         if "Столбчатая" in chart_type:
             if plot_df.shape[1] == 1:
                 vals = plot_df.iloc[:, 0].dropna()
@@ -523,14 +528,12 @@ class MainWindow(QMainWindow):
                 vals = plot_df[col].fillna(np.nan).values
                 ax.plot(x, vals, label=str(col))
             if opts.get('smooth') and plot_df.shape[0] >= 3:
-                # простое сглаживание: скользящая средняя
                 for col in plot_df.columns:
                     vals = pd.to_numeric(plot_df[col], errors='coerce').dropna()
                     if len(vals) >= 3:
                         sm = vals.rolling(window=3, min_periods=1).mean()
                         ax.plot(range(len(vals)), sm.values, linestyle='--')
         elif "Круговая" in chart_type:
-            # Для круговой берем первую строку или суммируем столбцы
             row = plot_df.iloc[0].fillna(0)
             ax.pie(row.values, labels=[str(c) for c in row.index], autopct='%1.1f%%')
         elif "Площадная" in chart_type:
@@ -539,7 +542,6 @@ class MainWindow(QMainWindow):
                 vals = plot_df[col].fillna(0).values
                 ax.fill_between(x, vals, step='pre', alpha=0.5)
         else:
-            # По умолчанию линейный
             x = range(plot_df.shape[0])
             for col in plot_df.columns:
                 vals = plot_df[col].fillna(np.nan).values
@@ -553,7 +555,6 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(canvas)
 
-        # Кнопки
         btn_layout = QHBoxLayout()
         save_btn = QPushButton("Сохранить как PNG")
         close_btn = QPushButton("Закрыть")
@@ -580,8 +581,6 @@ class MainWindow(QMainWindow):
 
         index = self.tab_widget.addTab(spreadsheet, name)
         self.tab_widget.setCurrentIndex(index)
-
-        # Добавляем лист в workbook
         self.workbook.add_sheet(name)
 
     def open_ai_chat(self):
@@ -592,7 +591,6 @@ class MainWindow(QMainWindow):
             self.ai_chat_widget.show()
             self.ai_chat_widget.input_field.setFocus()
 
-
     def get_current_spreadsheet(self) -> Optional[SpreadsheetWidget]:
         """Получение текущего виджета таблицы"""
         current_widget = self.tab_widget.currentWidget()
@@ -600,6 +598,7 @@ class MainWindow(QMainWindow):
             return current_widget
         return None
 
+    # ============ Вкладки и сессии ============
     def close_tab(self, index: int):
         """Закрывает вкладку по индексу и удаляет соответствующий лист в модели"""
         if index < 0:
@@ -678,7 +677,6 @@ class MainWindow(QMainWindow):
 
     def setup_shortcuts(self):
         """Настройка горячих клавиш"""
-        # Простая настройка: Ctrl+0 сброс масштаба
         try:
             from PyQt5.QtWidgets import QShortcut
             from PyQt5.QtGui import QKeySequence
@@ -687,20 +685,18 @@ class MainWindow(QMainWindow):
             pass
 
     def load_last_session(self):
-        """Загружает последний файл, если он сохранялся в настройках"""
+        """Загружает последний файл"""
         last = self.settings.value("last_file")
         if last:
             try:
                 p = Path(last)
                 if p.exists():
-                    # Пытаемся открыть файл аналогично open_file
                     if str(last).endswith(('.xlsx', '.xls')):
                         importer = ExcelImporter()
                         workbook = importer.import_excel(last)
                         self.workbook = workbook
-                        # Обновление UI
                         self.tab_widget.clear()
-                        for sheet_name in workbook.sheet_names():
+                        for sheet_name in workbook.sheet_names:
                             spreadsheet = SpreadsheetWidget()
                             spreadsheet.load_data(workbook.get_sheet_data(sheet_name))
                             self.tab_widget.addTab(spreadsheet, sheet_name)
@@ -716,7 +712,6 @@ class MainWindow(QMainWindow):
         self.formula_bar.set_cell_reference(cell_ref)
         self.formula_bar.set_formula(value)
 
-        # Обновление статус бара с информацией о выделении
         spreadsheet = self.get_current_spreadsheet()
         if spreadsheet:
             stats = spreadsheet.calculate_selection_stats()
@@ -730,14 +725,9 @@ class MainWindow(QMainWindow):
 
     def on_data_changed(self, row: int, col: int, value: str):
         """Обработка изменения данных"""
-        # Обновление в workbook
         current_sheet = self.tab_widget.currentIndex()
         self.workbook.set_cell_value(current_sheet, row, col, value)
-
-        # Добавление в историю
         self.add_to_undo_stack(row, col, value)
-
-        # Обновление заголовка окна
         self.update_window_title(modified=True)
 
     def on_formula_entered(self, formula: str):
@@ -747,60 +737,49 @@ class MainWindow(QMainWindow):
             spreadsheet.set_current_cell_formula(formula)
 
     def on_function_selected(self, function: str):
-        """Обработка выбора функции из комбобокса"""
+        """Обработка выбора функции"""
         spreadsheet = self.get_current_spreadsheet()
         if not function or function == "Функции...":
             return
-        
-        # Получаем выделенный диапазон
+
         selected_range = spreadsheet.get_selection_range()
-        
-        # Если есть выделение, подставляем его в формулу
+
         if selected_range:
             formula = f"={function}({selected_range})"
-            
-            # Применяем в ПОСЛЕДНЮЮ выделенную ячейку (bottomRight)
+
             selected = spreadsheet.selectedRanges()
             if selected:
                 range_obj = selected[0]
                 last_row = range_obj.bottomRow()
                 last_col = range_obj.rightColumn()
-                
-                # Устанавливаем и применяем формулу в последнюю ячейку
+
                 spreadsheet.set_cell_value(last_row, last_col, formula)
-                
-                # Обновляем formula bar
+
                 cell_ref = f"{chr(65 + last_col)}{last_row + 1}"
                 self.formula_bar.set_cell_reference(cell_ref)
                 self.formula_bar.set_formula(formula)
-                
-                # Устанавливаем текущую ячейку
+
                 spreadsheet.setCurrentCell(last_row, last_col)
         else:
-            # Если нет выделения, просто вставляем пустую функцию
             self.formula_bar.insert_function(function)
 
     def on_format_selected(self, format_type: str):
-        """Обработка выбора формата из панели функций"""
+        """Обработка выбора формата"""
         spreadsheet = self.get_current_spreadsheet()
         if not spreadsheet:
             return
-        
-        # Применяем формат к выделенным ячейкам
+
         spreadsheet.apply_format('number_format', format_type)
         self.status_bar.showMessage(f"Применён формат: {format_type}")
 
     def apply_format(self, format_type: str, value=None):
-    
         spreadsheet = self.get_current_spreadsheet()
         if not spreadsheet:
             self.status_bar.showMessage("Нет активного листа для применения формата")
             return
 
-        # Делегируем логику в SpreadsheetWidget
         try:
             spreadsheet.apply_format(format_type, value)
-            # Выводим информативное сообщение в строку состояния
             if format_type in ('bold', 'italic', 'underline', 'strike'):
                 self.status_bar.showMessage(f"Применён стиль: {format_type}")
             elif format_type in ('font', 'font_size') and value is not None:
@@ -815,8 +794,7 @@ class MainWindow(QMainWindow):
     # ============ ФУНКЦИИ ФАЙЛОВ ============
 
     def new_file(self):
-        """Создание нового листа (вкладки)"""
-        # Просто добавляем новый лист
+        """Создание нового листа"""
         sheet_count = self.tab_widget.count() + 1
         sheet_name = f"Лист{sheet_count}"
         self.add_new_sheet(sheet_name)
@@ -847,7 +825,6 @@ class MainWindow(QMainWindow):
                     importer = ExcelImporter()
                     workbook = importer.import_excel(file_path)
                 elif file_path.endswith('.csv'):
-                    # Импорт CSV
                     df = pd.read_csv(file_path)
                     workbook = Workbook()
                     workbook.add_sheet_from_dataframe(df, "Лист1")
@@ -857,9 +834,8 @@ class MainWindow(QMainWindow):
                 self.workbook = workbook
                 self.current_file_path = file_path
 
-                # Обновление UI
                 self.tab_widget.clear()
-                for sheet_name in workbook.sheet_names():
+                for sheet_name in workbook.sheet_names:
                     spreadsheet = SpreadsheetWidget()
                     spreadsheet.load_data(workbook.get_sheet_data(sheet_name))
                     self.tab_widget.addTab(spreadsheet, sheet_name)
@@ -907,14 +883,12 @@ class MainWindow(QMainWindow):
                 exporter = ExcelExporter()
                 exporter.export_excel(self.workbook, file_path)
             elif file_path.endswith('.csv'):
-                # Экспорт в CSV
                 current_sheet = self.tab_widget.currentIndex()
                 if current_sheet >= 0:
                     spreadsheet = self.tab_widget.widget(current_sheet)
                     df = spreadsheet.get_dataframe()
                     df.to_csv(file_path, index=False, encoding='utf-8')
             elif file_path.endswith('.json'):
-                # Экспорт в JSON
                 data = self.workbook.to_dict()
                 with open(file_path, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
@@ -941,10 +915,8 @@ class MainWindow(QMainWindow):
             file_path = None
 
         if file_path:
-            # Гарантируем расширение .xlsx
             if not file_path.lower().endswith('.xlsx'):
                 file_path += '.xlsx'
-            # Проверка наличия листов и данных
             if not self.workbook.sheets or all(sheet.rows == 0 or sheet.columns == 0 for sheet in self.workbook.sheets):
                 show_error_message(self, "Нет данных для экспорта!")
                 return
@@ -975,7 +947,6 @@ class MainWindow(QMainWindow):
             file_path = None
 
         if file_path:
-            # Гарантируем расширение .csv
             if not file_path.lower().endswith('.csv'):
                 file_path += '.csv'
             try:
@@ -1005,26 +976,20 @@ class MainWindow(QMainWindow):
             file_path = None
 
         if file_path:
-            # Гарантируем расширение .pdf
             if not file_path.lower().endswith('.pdf'):
                 file_path += '.pdf'
             try:
                 from reportlab.lib.pagesizes import letter, A4
-                from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
-                from reportlab.lib.styles import getSampleStyleSheet
+                from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
                 from reportlab.lib import colors
-                
-                # Получаем данные
+
                 df = spreadsheet.get_dataframe()
-                
-                # Создаем PDF
+
                 doc = SimpleDocTemplate(file_path, pagesize=A4)
                 elements = []
-                
-                # Преобразуем DataFrame в таблицу
+
                 data = [df.columns.tolist()] + df.values.tolist()
-                
-                # Создаем таблицу
+
                 table = Table(data)
                 table.setStyle(TableStyle([
                     ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
@@ -1036,16 +1001,14 @@ class MainWindow(QMainWindow):
                     ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
                     ('GRID', (0, 0), (-1, -1), 1, colors.black)
                 ]))
-                
+
                 elements.append(table)
                 doc.build(elements)
-                
+
                 self.status_bar.showMessage(f"Экспорт в PDF завершен: {Path(file_path).name}")
             except ImportError:
-                from pysheets.src.utils.helpers import show_error_message
                 show_error_message(self, "Ошибка: необходимо установить reportlab\nУстановите: pip install reportlab")
             except Exception as e:
-                from pysheets.src.utils.helpers import show_error_message
                 show_error_message(self, f"Ошибка при экспорте в PDF: {str(e)}")
 
     def export_to_png(self):
@@ -1068,36 +1031,28 @@ class MainWindow(QMainWindow):
             file_path = None
 
         if file_path:
-            # Гарантируем расширение .png
             if not file_path.lower().endswith('.png'):
                 file_path += '.png'
             try:
-                # Получаем таблицу и создаем скриншот
                 table = spreadsheet
-                
-                # Определяем размер изображения
                 width = table.width()
                 height = table.height()
-                
-                # Создаем pixmap
+
                 pixmap = QPixmap(width, height)
                 pixmap.fill()
-                
-                # Рисуем таблицу на pixmap
+
                 painter = QPainter(pixmap)
                 table.render(painter)
                 painter.end()
-                
-                # Сохраняем в файл
+
                 pixmap.save(file_path, "PNG")
-                
+
                 self.status_bar.showMessage(f"Экспорт в PNG завершен: {Path(file_path).name}")
             except Exception as e:
-                from pysheets.src.utils.helpers import show_error_message
                 show_error_message(self, f"Ошибка при экспорте в PNG: {str(e)}")
 
     def export_to_odt(self):
-        """Экспорт в ODT (OpenDocument Text)"""
+        """Экспорт в ODT"""
         spreadsheet = self.get_current_spreadsheet()
         if not spreadsheet:
             return
@@ -1116,7 +1071,6 @@ class MainWindow(QMainWindow):
             file_path = None
 
         if file_path:
-            # Гарантируем расширение .odt
             if not file_path.lower().endswith('.odt'):
                 file_path += '.odt'
             try:
@@ -1292,7 +1246,7 @@ class MainWindow(QMainWindow):
                 show_error_message(self, f"Ошибка при экспорте в SQL: {str(e)}")
 
     def export_to_text(self):
-        """Экспорт в текст (TXT)"""
+        """Экспорт в текст"""
         spreadsheet = self.get_current_spreadsheet()
         if not spreadsheet:
             return
@@ -1325,31 +1279,23 @@ class MainWindow(QMainWindow):
 
     def print_table(self):
         """Печать таблицы"""
-        print("[INFO] Печать таблицы...")
         spreadsheet = self.get_current_spreadsheet()
         if not spreadsheet:
-            print("[WARNING] Нет открытой таблицы для печати")
             show_error_message(self, "Нет открытой таблицы для печати")
             return
 
         try:
-            print("[INFO] Создание принтера...")
             printer = TablePrinter(spreadsheet)
-            print("[INFO] Открытие диалога печати...")
             printer.print_table(self)
-            print("[INFO] Печать инициирована")
             self.status_bar.showMessage("Печать завершена")
         except Exception as e:
-            print(f"[ERROR] Ошибка при печати: {e}")
-            import traceback
-            traceback.print_exc()
             show_error_message(self, f"Ошибка при печати: {str(e)}")
 
     def apply_theme(self, theme_name, color):
         """Применяет тему приложению"""
         from pysheets.src.ui.themes import ThemeManager
         from PyQt5.QtWidgets import QApplication
-        
+
         manager = ThemeManager()
         manager.current_theme = theme_name
         if color is not None:
@@ -1358,17 +1304,14 @@ class MainWindow(QMainWindow):
         self.current_theme = theme_name
         if color is not None:
             self.app_theme_color = color
-        
-        # Также применяем stylesheet на само окно для гарантии
+
         app = QApplication.instance()
         if app and app.styleSheet():
             self.setStyleSheet(app.styleSheet())
-        
-        # Обновляем тему в AI Chat
+
         if hasattr(self, 'ai_chat_widget'):
             self.ai_chat_widget.update_theme(theme_name, color)
-        
-        # Сохраняем тему в настройки
+
         self.settings.setValue("theme", theme_name)
         if color is not None:
             self.settings.setValue("theme_color", color.name())
@@ -1379,71 +1322,257 @@ class MainWindow(QMainWindow):
         dialog = ThemeSettingsDialog(self)
         if dialog.exec_() == QDialog.Accepted:
             settings = dialog.get_settings()
-            # Применяем выбранную тему
             self.apply_theme(settings['theme'], settings['color'])
+
+    def apply_gallery_theme_full(self, theme_info):
+        """Применяет полную тему из галереи с расширенными стилями"""
+        try:
+            from PyQt5.QtWidgets import QApplication
+            
+            theme_data = theme_info.get('data', {})
+            theme_colors = theme_data.get('theme', {})
+            
+            # Выбираем светлую или темную тему в зависимости от текущих настроек
+            light_theme = theme_colors.get('light', {})
+            dark_theme = theme_colors.get('dark', {})
+            
+            # Используем светлую тему по умолчанию
+            selected_theme = light_theme or dark_theme
+            
+            if not selected_theme:
+                print("Тема не содержит данных о цветах")
+                return
+            
+            # Применяем основной цвет
+            primary_color = selected_theme.get('primary', '#DC143C')
+            color = QColor(primary_color)
+            
+            if color.isValid():
+                # Создаем стилевую таблицу на основе цветов темы
+                stylesheet = self._generate_stylesheet_from_theme(selected_theme)
+                
+                app = QApplication.instance()
+                if app:
+                    app.setStyleSheet(stylesheet)
+                
+                self.setStyleSheet(stylesheet)
+                self.current_theme = 'gallery'
+                self.app_theme_color = color
+                
+                # Обновляем все дочерние виджеты
+                if hasattr(self, 'ai_chat_widget') and self.ai_chat_widget:
+                    self.ai_chat_widget.update_theme('gallery', color)
+                
+                # Сохраняем настройки
+                self.settings.setValue("theme", 'gallery')
+                self.settings.setValue("theme_data", json.dumps(theme_data))
+                self.settings.setValue("theme_color", color.name())
+                
+        except Exception as e:
+            print(f"Ошибка при применении расширенной темы: {e}")
+
+    def _generate_stylesheet_from_theme(self, theme_colors: dict) -> str:
+        """Генерирует стилевую таблицу на основе цветов темы"""
+        primary = theme_colors.get('primary', '#DC143C')
+        background = theme_colors.get('background', '#FFFFFF')
+        surface = theme_colors.get('surface', '#FFFFFF')
+        text_primary = theme_colors.get('text_primary', '#000000')
+        text_secondary = theme_colors.get('text_secondary', '#666666')
+        border = theme_colors.get('border', '#CCCCCC')
+        
+        stylesheet = f"""
+        QMainWindow {{
+            background-color: {background};
+            color: {text_primary};
+        }}
+        
+        QMenuBar {{
+            background-color: {surface};
+            color: {text_primary};
+            border-bottom: 1px solid {border};
+        }}
+        
+        QMenuBar::item:selected {{
+            background-color: {primary};
+        }}
+        
+        QMenu {{
+            background-color: {surface};
+            color: {text_primary};
+            border: 1px solid {border};
+        }}
+        
+        QMenu::item:selected {{
+            background-color: {primary};
+        }}
+        
+        QTabWidget {{
+            background-color: {background};
+        }}
+        
+        QTabBar::tab {{
+            background-color: {surface};
+            color: {text_primary};
+            border: 1px solid {border};
+        }}
+        
+        QTabBar::tab:selected {{
+            background-color: {primary};
+            color: white;
+        }}
+        
+        QStatusBar {{
+            background-color: {surface};
+            color: {text_primary};
+            border-top: 1px solid {border};
+        }}
+        
+        QToolBar {{
+            background-color: {surface};
+            border-bottom: 1px solid {border};
+        }}
+        
+        QPushButton {{
+            background-color: {primary};
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 12px;
+        }}
+        
+        QPushButton:hover {{
+            background-color: {theme_colors.get('primary_light', primary)};
+        }}
+        
+        QPushButton:pressed {{
+            background-color: {theme_colors.get('primary_dark', primary)};
+        }}
+        
+        QLineEdit, QTextEdit {{
+            background-color: {surface};
+            color: {text_primary};
+            border: 1px solid {border};
+            border-radius: 4px;
+            padding: 4px;
+        }}
+        
+        QLineEdit:focus, QTextEdit:focus {{
+            border: 2px solid {primary};
+        }}
+        
+        QTableWidget {{
+            background-color: {background};
+            color: {text_primary};
+            gridline-color: {border};
+        }}
+        
+        QHeaderView::section {{
+            background-color: {surface};
+            color: {text_primary};
+            border: 1px solid {border};
+        }}
+        """
+        
+        return stylesheet
+
+    def open_theme_gallery(self):
+        """Открывает галерею пользовательских тем"""
+        try:
+            from pysheets.src.ui.gallery import ThemeGalleryManager, ThemeGalleryWidget
+            gallery_manager = ThemeGalleryManager()
+            gallery = ThemeGalleryWidget(gallery_manager, self)
+            
+            # Подключаем сигнал выбора темы
+            def apply_gallery_theme(theme_info):
+                """Применяет выбранную из галереи тему"""
+                try:
+                    print(f"[DEBUG] Применение темы: {theme_info.get('id', 'unknown')}")
+                    theme_data = theme_info.get('data', {})
+                    print(f"[DEBUG] theme_data keys: {theme_data.keys()}")
+                    
+                    # Извлекаем цвет из темы
+                    theme_colors = theme_data.get('theme', {})
+                    print(f"[DEBUG] theme_colors keys: {theme_colors.keys()}")
+                    
+                    light_theme = theme_colors.get('light', {})
+                    primary_color = light_theme.get('primary', '#DC143C')
+                    print(f"[DEBUG] primary_color: {primary_color}")
+                    
+                    color = QColor(primary_color)
+                    if color.isValid():
+                        # Применяем тему с расширенными данными
+                        print(f"[DEBUG] Цвет валиден, применяемся...")
+                        self.apply_gallery_theme_full(theme_info)
+                        self.status_bar.showMessage(
+                            f"Тема '{theme_info['metadata'].name}' успешно применена!"
+                        )
+                    else:
+                        print(f"[ERROR] Цвет невалиден: {primary_color}")
+                except Exception as e:
+                    print(f"[ERROR] Ошибка при применении темы: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
+            gallery.theme_selected.connect(apply_gallery_theme)
+            gallery.exec_()
+        except ImportError as e:
+            QMessageBox.warning(
+                self,
+                "Ошибка",
+                f"Не удалось открыть галерею тем: {str(e)}"
+            )
 
     def closeEvent(self, event):
         """Обработка закрытия окна"""
-        # Сохранение настроек
         if self.current_file_path:
             self.settings.setValue("last_file", self.current_file_path)
 
-        # Проверка несохраненных изменений
         try:
             is_modified = self.workbook.is_modified()
         except Exception:
             is_modified = False
 
         if is_modified:
-            # Создаём диалог с поддержкой темы
             result = self._show_save_dialog()
-            
+
             if result == "save":
                 try:
                     self.save_file()
                 except Exception:
-                    pass  # Если не удалось сохранить, всё равно закрываем
+                    pass
                 event.accept()
             elif result == "discard":
                 event.accept()
-            else:  # cancel
+            else:
                 event.ignore()
         else:
             event.accept()
 
     def _show_save_dialog(self) -> str:
-        """Показывает диалог сохранения с поддержкой темы.
-        
-        Returns:
-            'save', 'discard' или 'cancel'
-        """
+        """Показывает диалог сохранения"""
         from pysheets.src.ui.themes import ThemeManager
-        
-        # Определяем текущую тему для стилизации диалога
+
         actual_theme = self.current_theme
         if actual_theme == "system":
             manager = ThemeManager()
             actual_theme = manager._get_real_system_theme()
-        
-        # Создаём стилизованный диалог
+
         dlg = QMessageBox(self)
         dlg.setWindowTitle("Сохранение")
         dlg.setText("Есть несохраненные изменения.")
         dlg.setInformativeText("Сохранить изменения перед закрытием?")
         dlg.setIcon(QMessageBox.Question)
-        
-        # Добавляем кнопки с русскими названиями
+
         save_btn = dlg.addButton("Сохранить", QMessageBox.AcceptRole)
         discard_btn = dlg.addButton("Не сохранять", QMessageBox.DestructiveRole)
         cancel_btn = dlg.addButton("Отмена", QMessageBox.RejectRole)
-        
+
         dlg.setDefaultButton(save_btn)
-        
-        # Применяем стили в соответствии с темой
+
         accent_color = self.app_theme_color.name()
         accent_hover = self.app_theme_color.lighter(120).name()
         accent_dark = self.app_theme_color.darker(150).name()
-        
+
         if actual_theme == "dark":
             dialog_style = f"""
                 QMessageBox {{
@@ -1520,12 +1649,11 @@ class MainWindow(QMainWindow):
                     background-color: {accent_dark};
                 }}
             """
-        
+
         dlg.setStyleSheet(dialog_style)
-        
-        # Показываем диалог
+
         dlg.exec_()
-        
+
         clicked = dlg.clickedButton()
         if clicked == save_btn:
             return "save"
@@ -1533,3 +1661,5 @@ class MainWindow(QMainWindow):
             return "discard"
         else:
             return "cancel"
+
+

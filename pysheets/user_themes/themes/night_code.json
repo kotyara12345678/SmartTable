@@ -1,0 +1,41 @@
+{
+  "metadata": {
+    "name": "Ночной код",
+    "description": "Профессиональная тёмная тема вдохновленная IDE для кодирования",
+    "author": "SmartTable Team",
+    "version": "1.0",
+    "category": "dark",
+    "tags": ["тёмная", "код", "профессиональная"],
+    "preview_color": "#6E7DEE"
+  },
+  "theme": {
+    "light": {
+      "primary": "#6E7DEE",
+      "primary_light": "#8B9EFF",
+      "primary_dark": "#5568D3",
+      "secondary": "#F72E6D",
+      "background": "#F5F5F5",
+      "surface": "#FFFFFF",
+      "text_primary": "#1E1E1E",
+      "text_secondary": "#757575",
+      "border": "#DADADA",
+      "success": "#4CAF50",
+      "warning": "#FF9800",
+      "error": "#F44336"
+    },
+    "dark": {
+      "primary": "#6E7DEE",
+      "primary_light": "#8B9EFF",
+      "primary_dark": "#5568D3",
+      "secondary": "#F72E6D",
+      "background": "#0D1117",
+      "surface": "#161B22",
+      "text_primary": "#FFFFFF",
+      "text_secondary": "#C9D1D9",
+      "border": "#30363D",
+      "success": "#3FB950",
+      "warning": "#D29922",
+      "error": "#F85149"
+    }
+  }
+}

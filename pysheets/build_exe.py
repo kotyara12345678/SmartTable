@@ -1,14 +1,10 @@
-#!/usr/bin/env python3
-# build_exe.py
-"""
-Скрипт для сборки SmartTable в exe-файл с помощью PyInstaller
-Использование: python build_exe.py [--clean]
-"""
+
 
 import PyInstaller.__main__
 import sys
 import shutil
 from pathlib import Path
+
 
 def cleanup():
     """Очистить старые сборки"""
@@ -24,14 +20,15 @@ def cleanup():
                 path.unlink()
                 print(f"[CLEANED] Удалён файл {folder}")
 
+
 def build():
     """Собрать exe-файл"""
     print("[SmartTable] Начало сборки exe-файла для Windows...")
-    
+
     PyInstaller.__main__.run([
         'main.py',
-        '--onefile',                    # Один исполняемый файл
-        '--windowed',                   # Без консольного окна
+        '--onefile',  # Один исполняемый файл
+        '--windowed',  # Без консольного окна
         '--name=SmartTable',
         '--add-data=assets;assets',
         '--add-data=templates;templates',
@@ -53,14 +50,15 @@ def build():
         '--workpath=build',
         '--specpath=.',
     ])
-    
+
     print("[SUCCESS] Сборка завершена!")
     print("[INFO] Exe-файл находится в: dist/SmartTable.exe")
+
 
 if __name__ == '__main__':
     # Проверяем аргументы
     if '--clean' in sys.argv or '-c' in sys.argv:
         cleanup()
-    
+
     # Собираем
     build()

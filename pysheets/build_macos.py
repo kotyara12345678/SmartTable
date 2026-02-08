@@ -63,13 +63,18 @@ def build_app():
     print("\n[SmartTable] Начало сборки .app для macOS...")
     print("[INFO] Это может занять 5-10 минут...")
     
+    # Создаём папку macos
+    macos_dir = Path("macos")
+    macos_dir.mkdir(exist_ok=True)
+    
     cmd = [
         "python3", "-m", "PyInstaller",
-        "--onedir",
+        "--onefile",
         "--windowed",
         "--name=SmartTable",
         "--add-data=assets:assets",
         "--add-data=templates:templates",
+        "--distpath=macos",
         "--hidden-import=pysheets.src.ui.main_window",
         "--hidden-import=pysheets.src.ui.spreadsheet_widget",
         "--hidden-import=pysheets.src.core.cell",
@@ -87,90 +92,49 @@ def build_app():
         "main.py",
     ]
     
-    if not run_command(cmd, "Сборка с помощью PyInstaller"):
-        return False
-    
-    # Переместить dist/SmartTable.app в macos/
-    macos_dir = Path("macos")
-    macos_dir.mkdir(exist_ok=True)
-    
-    dist_app = Path("dist/SmartTable.app")
-    macos_app = macos_dir / "SmartTable.app"
-    
-    if dist_app.exists():
-        print(f"\n[INFO] Перемещение {dist_app} в {macos_app}...")
-        if macos_app.exists():
-            shutil.rmtree(macos_app)
-        shutil.move(str(dist_app), str(macos_app))
-        print(f"[OK] Приложение перемещено в {macos_app}")
-        
-        # Проверяем структуру
-        macos_bin = macos_app / "Contents" / "MacOS" / "SmartTable"
-        if macos_bin.exists():
-            print(f"[OK] Исполняемый файл найден: {macos_bin}")
-        else:
-            print(f"[WARNING] Исполняемый файл не найден в {macos_bin}")
-            print("[INFO] Проверьте структуру .app bundle")
-    else:
-        print(f"[WARNING] {dist_app} не найден, проверьте сборку")
-    
-    return True
+    return run_command(cmd, "Сборка с помощью PyInstaller")
 
 def create_plist():
-    """Создать/обновить Info.plist"""
-    print("\n[INFO] Обновление Info.plist...")
+    """Создать Info.plist"""
+    print("\n[INFO] Создание Info.plist...")
     
-    # PyInstaller уже создаёт Info.plist в правильном месте, но мы можем его обновить
-    plist_path = Path("macos/SmartTable.app/Contents/Info.plist")
+    plist_dir = Path("macos/SmartTable.app/Contents")
+    plist_dir.mkdir(parents=True, exist_ok=True)
     
-    if not plist_path.exists():
-        print(f"[WARNING] Info.plist не найден в {plist_path}")
-        print("[INFO] Проверьте что сборка завершилась успешно")
-        return
+    plist_content = '''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>SmartTable</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.smarttable.app</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>SmartTable</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>NSMainNibFile</key>
+    <string>MainMenu</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2026 SmartTable. All rights reserved.</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>10.9</string>
+</dict>
+</plist>'''
     
-    print(f"[OK] Info.plist найден: {plist_path}")
-    
-    # Проверяем что файл валидный
-    try:
-        import plistlib
-        with open(plist_path, 'rb') as f:
-            plist = plistlib.load(f)
-        
-        # Обновляем некоторые значения
-        plist['CFBundleShortVersionString'] = '1.0.0'
-        plist['CFBundleVersion'] = '1'
-        plist['NSHumanReadableCopyright'] = 'Copyright © 2026 SmartTable. All rights reserved.'
-        
-        with open(plist_path, 'wb') as f:
-            plistlib.dump(plist, f)
-        
-        print("[OK] Info.plist обновлен")
-    except Exception as e:
-        print(f"[WARNING] Не удалось обновить Info.plist: {e}")
-
-def fix_permissions():
-    """Исправить права доступа для .app"""
-    print("\n[INFO] Исправление прав доступа для .app...")
-    
-    app_path = Path("macos/SmartTable.app")
-    if not app_path.exists():
-        print(f"[WARNING] {app_path} не найден")
-        return
-    
-    try:
-        # Даем права на выполнение для исполняемого файла
-        macos_dir = app_path / "Contents/MacOS"
-        if macos_dir.exists():
-            for executable in macos_dir.glob("SmartTable*"):
-                if executable.is_file():
-                    os.chmod(executable, 0o755)
-                    print(f"[OK] Права установлены: {executable.name}")
-        
-        # Удаляем extended attributes (может помешать на других Mac)
-        if shutil.which("xattr"):
-            run_command(["xattr", "-rd", "@", str(app_path)], "Удаление extended attributes")
-    except Exception as e:
-        print(f"[WARNING] Ошибка при исправлении прав: {e}")
+    plist_file = plist_dir / "Info.plist"
+    plist_file.write_text(plist_content)
+    print(f"[OK] Info.plist создан: {plist_file}")
 
 def create_dmg():
     """Создать DMG архив"""
@@ -210,11 +174,8 @@ def main():
         print("\n[ERROR] Не удалось собрать приложение!")
         sys.exit(1)
     
-    # Обновляем Info.plist
+    # Создаём Info.plist
     create_plist()
-    
-    # Исправляем права доступа
-    fix_permissions()
     
     # Создаём DMG (опционально)
     print("\n[INFO] Попытка создания DMG архива...")

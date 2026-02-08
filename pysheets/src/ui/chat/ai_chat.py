@@ -2,6 +2,7 @@
 Виджет для чата с ИИ
 """
 
+from typing import Optional
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton, QLabel, QScrollArea
 from PyQt5.QtCore import Qt, QDateTime, QSize
 from PyQt5.QtGui import QFont, QColor, QIcon

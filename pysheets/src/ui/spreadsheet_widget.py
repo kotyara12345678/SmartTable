@@ -16,6 +16,7 @@ from PyQt5.QtGui import QBrush, QColor, QFont, QKeySequence, QMouseEvent
 
 from pysheets.src.core.cell import Cell
 from pysheets.src.core.formula_engine import FormulaEngine
+from pysheets.src.core.spreadsheet import Spreadsheet
 from pysheets.src.utils.validators import validate_formula, parse_cell_reference
 
 
@@ -35,20 +36,15 @@ class SpreadsheetWidget(QTableWidget):
     cell_hidden = pyqtSignal(int, int, bool)  # row, col, hidden
     format_changed = pyqtSignal()
 
-    def __init__(self, rows: int = 100, cols: int = 26, parent=None):
-        super().__init__(rows, cols, parent)
+    def __init__(self, parent=None):
+        super().__init__(1000, 26, parent)  # 1000 строк, 26 колонок по умолчанию
 
-        # Инициализация
-        self.rows = rows
-        self.columns = cols
+        # Модель данных
+        self.spreadsheet: Optional[Spreadsheet] = None
+        self.rows = 1000
+        self.columns = 26
         self.zoom_level = 100
-        self.formula_engine = FormulaEngine()
-        self._updating = False  # Флаг чтобы избежать циклических обновлений
-
-        # Данные ячеек
-        self.cells: List[List[Cell]] = [
-            [Cell(row, col) for col in range(cols)] for row in range(rows)
-        ]
+        self._updating = False
 
         # НОВЫЕ: состояния для расширенных функций
         self.frozen_cells = set()  # {(row, col)} замороженные ячейки
@@ -76,21 +72,25 @@ class SpreadsheetWidget(QTableWidget):
         self.itemSelectionChanged.connect(self.on_selection_changed)
 
     def init_ui(self):
-        """Инициализация интерфейса"""
+        """Инициализация интерфейса для 1000×26 таблицы"""
         # Настройка заголовков
         column_labels = []
         for i in range(self.columns):
             label = ""
-            while i >= 0:
-                label = chr(65 + i % 26) + label
-                i = i // 26 - 1
-                if i < 0:
+            n = i
+            while n >= 0:
+                label = chr(65 + n % 26) + label
+                n = n // 26 - 1
+                if n < 0:
                     break
             column_labels.append(label)
 
-        self.setHorizontalHeaderLabels(column_labels[:500])
-        row_labels = [str(i + 1) for i in range(min(self.rows, 1000))]
-        self.setVerticalHeaderLabels([str(i + 1) for i in range(self.rows)])
+        # Устанавливаем заголовки для 26 колонок
+        self.setHorizontalHeaderLabels(column_labels[:26])
+
+        # Устанавливаем заголовки строк для 1000 строк
+        row_labels = [str(i + 1) for i in range(1000)]
+        self.setVerticalHeaderLabels(row_labels)
 
         # Настройка внешнего вида
         self.setAlternatingRowColors(True)
@@ -107,10 +107,6 @@ class SpreadsheetWidget(QTableWidget):
         vertical_header.setDefaultSectionSize(25)
         vertical_header.setMinimumSectionSize(20)
 
-        # Включение сортировки
-        # ОТКЛЮЧЕНО: сортировка может менять порядок данных и нарушать формулы
-        # self.setSortingEnabled(True)
-
         # Настройка сетки
         self.setShowGrid(True)
         self.setGridStyle(Qt.PenStyle.SolidLine)
@@ -118,7 +114,7 @@ class SpreadsheetWidget(QTableWidget):
         # Скрываем corner button полностью
         self._hide_corner_button()
 
-        # Устанавливаем делегат, чтобы редакторы заполняли всю ячейку
+        # Устанавливаем делегат
         class FullCellDelegate(QStyledItemDelegate):
             def createEditor(self, parent, option, index):
                 editor = QLineEdit(parent)
@@ -126,14 +122,11 @@ class SpreadsheetWidget(QTableWidget):
                 return editor
 
             def updateEditorGeometry(self, editor, option, index):
-                # Сделать редактор размером на всю ячейку
                 editor.setGeometry(option.rect)
 
             def paint(self, painter, option, index):
-                # Remove focus rectangle while keeping selection highlight
                 from PyQt5.QtWidgets import QStyle
                 opt = option
-                # Clear focus state so the small focus rect isn't drawn
                 opt.state &= ~QStyle.State_HasFocus
                 super().paint(painter, opt, index)
 
@@ -149,16 +142,19 @@ class SpreadsheetWidget(QTableWidget):
             child.setMaximumHeight(0)
             child.setMaximumWidth(0)
 
+    def set_spreadsheet(self, spreadsheet: Spreadsheet):
+        """Установка модели таблицы"""
+        self.spreadsheet = spreadsheet
+        self.refresh_display()
+
     def get_cell(self, row: int, col: int) -> Optional[Cell]:
-        """Получение объекта ячейки"""
-        if 0 <= row < self.rows and 0 <= col < self.columns:
-            if self.cells[row][col] is None:
-                self.cells[row][col] = Cell(row, col)
-            return self.cells[row][col]
+        """Получение объекта ячейки из модели"""
+        if self.spreadsheet:
+            return self.spreadsheet.get_cell(row, col)
         return None
 
     def set_cell_value(self, row: int, col: int, value: str):
-        """Установка значения ячейки"""
+        """Установка значения ячейки в модели"""
         # Проверяем, не скрыта ли ячейка
         if (row, col) in self.hidden_cells:
             cell = self.get_cell(row, col)
@@ -170,12 +166,11 @@ class SpreadsheetWidget(QTableWidget):
                     item.setData(Qt.UserRole + 1, value)  # Сохраняем скрытое значение
             return
 
-        cell = self.get_cell(row, col)
-        if not cell:
+        if not self.spreadsheet:
             return
 
-        old_value = cell.value
-        cell.set_value(value)
+        old_value = self.spreadsheet.get_cell_value(row, col)
+        self.spreadsheet.set_cell_value(row, col, value)
 
         # Обновление отображения (только если ячейка видима)
         item = self.item(row, col)
@@ -183,27 +178,15 @@ class SpreadsheetWidget(QTableWidget):
             item = QTableWidgetItem()
             self.setItem(row, col, item)
 
-        # Проверка на формулу
-        if value and value.startswith('='):
-            try:
-                result = self.formula_engine.evaluate(value[1:], self.get_cell_data)
-                cell.set_formula(value)
-                cell.set_calculated_value(str(result))
-                self._updating = True
-                item.setText(str(result))
-                self._updating = False
-            except Exception as e:
-                print(f"[WARNING] Ошибка при вычислении формулы '{value}': {e}")
-                self._updating = True
-                item.setText(f"#ERROR!")
-                self._updating = False
-                cell.set_calculated_value(f"#ERROR!")
-        else:
-            self._updating = True
-            item.setText(value)
-            self._updating = False
-            cell.set_formula(None)
-            cell.set_calculated_value(value)
+        # Получаем значение для отображения
+        cell = self.get_cell(row, col)
+        display_value = ""
+        if cell:
+            display_value = cell.get_display_value() or ""
+
+        self._updating = True
+        item.setText(str(display_value))
+        self._updating = False
 
         # Применение форматирования
         self.apply_cell_formatting(row, col)
@@ -213,11 +196,8 @@ class SpreadsheetWidget(QTableWidget):
 
     def get_cell_data(self, cell_ref: str) -> Optional[str]:
         """Получение данных ячейки по ссылке"""
-        row, col = parse_cell_reference(cell_ref)
-        if row is not None and col is not None:
-            cell = self.get_cell(row, col)
-            if cell:
-                return cell.calculated_value
+        if self.spreadsheet:
+            return self.spreadsheet.get_cell_data(cell_ref)
         return None
 
     def apply_cell_formatting(self, row: int, col: int):
@@ -228,12 +208,13 @@ class SpreadsheetWidget(QTableWidget):
         if cell and item:
             # Применение шрифта
             font = QFont()
+            font.setFamily(cell.font_family or "Arial")
             font.setBold(bool(cell.bold))
             font.setItalic(bool(cell.italic))
             font.setUnderline(bool(cell.underline))
             if hasattr(cell, 'strike'):
                 font.setStrikeOut(bool(cell.strike))
-            font.setPointSize(cell.font_size)
+            font.setPointSize(cell.font_size or 11)
             item.setFont(font)
 
             # Выравнивание
@@ -252,9 +233,36 @@ class SpreadsheetWidget(QTableWidget):
             if cell.background_color:
                 item.setBackground(QBrush(QColor(cell.background_color)))
 
+    def refresh_display(self):
+        """Обновление отображения на основе модели"""
+        if not self.spreadsheet:
+            return
+
+        self._updating = True
+
+        # Получаем используемый диапазон
+        used_rows, used_cols = self.spreadsheet.get_used_range()
+
+        # Обновляем отображение только для используемых ячеек
+        for row in range(min(used_rows, 1000)):  # Ограничиваем 1000 строками
+            for col in range(min(used_cols, 26)):  # Ограничиваем 26 колонками
+                cell = self.spreadsheet.get_cell(row, col)
+                if cell:
+                    value = cell.get_display_value() or ""
+
+                    item = self.item(row, col)
+                    if item is None:
+                        item = QTableWidgetItem()
+                        self.setItem(row, col, item)
+
+                    item.setText(str(value))
+                    self.apply_cell_formatting(row, col)
+
+        self._updating = False
+
     def on_cell_changed(self, row: int, col: int):
         """Обработка изменения ячейки"""
-        # Пропускаем если это обновление от set_cell_value
+        # Пропускаем если это обновление от set_cell_value или refresh_display
         if self._updating:
             return
 
@@ -268,7 +276,7 @@ class SpreadsheetWidget(QTableWidget):
         cell = self.get_cell(row, col)
         if cell:
             value = cell.formula if cell.formula else cell.value
-            self.cell_selected.emit(row, col, value)
+            self.cell_selected.emit(row, col, value or "")
 
     def on_selection_changed(self):
         """Обработка изменения выделения"""
@@ -583,7 +591,7 @@ class SpreadsheetWidget(QTableWidget):
                 width, _ = self.custom_sizes[(row_index, col)]
                 self.custom_sizes[(row_index, col)] = (width, new_height)
 
-    # 2. РАСТЯГИВАНИЕ ЯЧЕЙКИ МЫШКОЙ
+    # 2. РАСТЯГИВАНИЕ ЯЧЕЙКИ МЫШКОЮ
     def mousePressEvent(self, event: QMouseEvent):
         """Обработка нажатия мыши для изменения размера ячеек"""
         pos = event.pos()
@@ -712,10 +720,7 @@ class SpreadsheetWidget(QTableWidget):
 
         # Сохраняем текущее значение
         cell = self.get_cell(row, col)
-        if not cell:
-            cell = self.get_cell(row, col)  # Создаем если нет
-
-        original_value = cell.value if cell else ""
+        original_value = cell.get_display_value() if cell else ""
 
         # Добавляем в список разделенных ячеек
         self.split_cells[(row, col)] = split_type
@@ -779,7 +784,7 @@ class SpreadsheetWidget(QTableWidget):
         """
         cell = self.get_cell(row, col)
         if not cell:
-            cell = self.get_cell(row, col)
+            return
 
         item = self.item(row, col)
         if not item:
@@ -791,16 +796,18 @@ class SpreadsheetWidget(QTableWidget):
             # Делаем read-only
             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
             # Применяем специальное форматирование
-            cell.bold = True
-            cell.background_color = "#F0F8FF"  # AliceBlue
+            if cell:
+                cell.bold = True
+                cell.background_color = "#F0F8FF"  # AliceBlue
         else:
             # Убираем из замороженных
             self.frozen_cells.discard((row, col))
             # Разрешаем редактирование
             item.setFlags(item.flags() | Qt.ItemIsEditable)
             # Сбрасываем специальное форматирование
-            cell.bold = False
-            cell.background_color = "#FFFFFF"
+            if cell:
+                cell.bold = False
+                cell.background_color = "#FFFFFF"
 
         self.apply_cell_formatting(row, col)
         self.cell_frozen.emit(row, col, freeze)
@@ -831,7 +838,7 @@ class SpreadsheetWidget(QTableWidget):
 
         cell = self.get_cell(row, col)
         if not cell:
-            cell = self.get_cell(row, col)
+            return
 
         if hide:
             # Добавляем в скрытые
@@ -884,10 +891,10 @@ class SpreadsheetWidget(QTableWidget):
 
         # Восстанавливаем стандартные размеры
         for col in range(self.columnCount()):
-            self.setColumnWidth(col, 80)
+            self.setColumnWidth(col, 100)
 
         for row in range(self.rowCount()):
-            self.setRowHeight(row, 20)
+            self.setRowHeight(row, 25)
 
         self.viewport().update()
 
@@ -903,6 +910,12 @@ class SpreadsheetWidget(QTableWidget):
             'row_height': self.rowHeight(row),
             'col_width': self.columnWidth(col)
         }
+
+        if self.spreadsheet:
+            cell = self.spreadsheet.get_cell(row, col)
+            if cell:
+                state['value'] = cell.get_display_value()
+                state['formula'] = cell.formula
 
         return state
 
@@ -973,7 +986,7 @@ class SpreadsheetWidget(QTableWidget):
             except:
                 pass
 
-    # 8. ОРИГИНАЛЬНЫЕ МЕТОДЫ (короткие версии для полноты)
+    # 8. ОРИГИНАЛЬНЫЕ МЕТОДЫ
     def add_ai_data(self, data: List[List[str]], start_row: int = 0, start_col: int = 0) -> bool:
         """Добавить данные от AI"""
         try:
@@ -1013,11 +1026,7 @@ class SpreadsheetWidget(QTableWidget):
         self.apply_sort(cfg, selected[0] if selected else None)
 
     def apply_sort(self, cfg: dict, range_obj=None):
-        """Применяет сортировку к диапазону или ко всему листу.
-
-        cfg: {'has_header': bool, 'levels': [{'column': idx, 'type': str, 'order': 'ASC'|'DESC'}, ...]}
-        range_obj: QTableWidgetSelectionRange or None
-        """
+        """Применяет сортировку к диапазону или ко всему листу."""
         import math
 
         if range_obj:
@@ -1037,7 +1046,7 @@ class SpreadsheetWidget(QTableWidget):
             row_vals = []
             for c in range(left, right + 1):
                 cell = self.get_cell(r, c)
-                val = cell.value if cell and cell.value is not None else ''
+                val = cell.get_display_value() if cell else ''
                 row_vals.append(val)
             rows.append((r, row_vals))
 
@@ -1055,7 +1064,6 @@ class SpreadsheetWidget(QTableWidget):
                 except:
                     return math.nan
             elif typ == 'Date':
-                # Простая попытка распарсить как ISO или DD/MM/YYYY
                 from datetime import datetime
                 for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%Y/%m/%d"):
                     try:
@@ -1066,9 +1074,8 @@ class SpreadsheetWidget(QTableWidget):
             else:
                 return s.lower()
 
-        # Сортируем по уровням: применяем stable sort от последнего уровня к первому
+        # Сортируем по уровням
         levels = cfg.get('levels', [])
-        # Map column index relative to left
         for level in reversed(levels):
             col_idx = left + int(level.get('column', 0))
             typ = level.get('type', 'Automatic')
@@ -1080,7 +1087,6 @@ class SpreadsheetWidget(QTableWidget):
                 if rel_idx < 0 or rel_idx >= len(rowvals):
                     return None
                 v = rowvals[rel_idx]
-                # If Automatic, try numeric first
                 if typ == 'Automatic':
                     try:
                         return float(str(v).replace(',', '.'))
@@ -1092,15 +1098,14 @@ class SpreadsheetWidget(QTableWidget):
             try:
                 rows.sort(key=key_fn, reverse=reverse)
             except TypeError:
-                # Fallback: convert keys to strings to avoid comparison errors
                 rows.sort(key=lambda it: str(key_fn(it)), reverse=reverse)
 
-        # Записываем отсортированные значения обратно в таблицу
+        # Записываем отсортированные значения обратно
         for i, (orig_r, rowvals) in enumerate(rows):
             target_r = data_top + i
             for j, v in enumerate(rowvals):
                 col = left + j
-                # Устанавливаем значение без триггера on_cell_changed
+                # Устанавливаем значение
                 item = self.item(target_r, col)
                 if not item:
                     item = QTableWidgetItem()
@@ -1109,13 +1114,9 @@ class SpreadsheetWidget(QTableWidget):
                 item.setText(str(v))
                 self._updating = False
                 # Обновляем модель
-                cell = self.get_cell(target_r, col)
-                if cell:
-                    cell.set_value(str(v))
-                    cell.set_calculated_value(str(v))
-                    cell.set_formula(None)
+                if self.spreadsheet:
+                    self.spreadsheet.set_cell_value(target_r, col, str(v))
                 self.apply_cell_formatting(target_r, col)
-
 
     def get_selection_range(self) -> str:
         """Получить строку диапазона выделенных ячеек (например A1:C5)"""
@@ -1126,10 +1127,10 @@ class SpreadsheetWidget(QTableWidget):
             end_row = range_obj.bottomRow()
             start_col = range_obj.leftColumn()
             end_col = range_obj.rightColumn()
-            
+
             start_cell = f"{chr(65 + start_col)}{start_row + 1}"
             end_cell = f"{chr(65 + end_col)}{end_row + 1}"
-            
+
             if start_cell == end_cell:
                 return start_cell
             return f"{start_cell}:{end_cell}"
@@ -1180,7 +1181,6 @@ class SpreadsheetWidget(QTableWidget):
     def change_text_color(self):
         """Изменение цвета текста"""
         dlg = QColorDialog(self)
-        # Apply application stylesheet so color dialog matches theme
         app = QApplication.instance()
         if app and app.styleSheet():
             dlg.setStyleSheet(app.styleSheet())
@@ -1219,12 +1219,11 @@ class SpreadsheetWidget(QTableWidget):
             row = selected[0].topRow()
             self.insertRow(row)
             self.rows += 1
-            # Обновление данных cells
-            self.cells.insert(row, [Cell(row, col) for col in range(self.columns)])
-            # Обновление индексов
-            for r in range(row + 1, self.rows):
-                for c in range(self.columns):
-                    self.cells[r][c].row = r
+            # Обновляем модель если есть
+            if self.spreadsheet:
+                # Добавляем строку в модель
+                self.spreadsheet.rows += 1
+                self.spreadsheet.cells.insert(row, [None for _ in range(self.spreadsheet.columns)])
 
     def delete_row(self):
         """Удаление строки"""
@@ -1233,12 +1232,11 @@ class SpreadsheetWidget(QTableWidget):
             row = selected[0].topRow()
             self.removeRow(row)
             self.rows -= 1
-            # Обновление данных cells
-            self.cells.pop(row)
-            # Обновление индексов
-            for r in range(row, self.rows):
-                for c in range(self.columns):
-                    self.cells[r][c].row = r
+            # Обновляем модель если есть
+            if self.spreadsheet:
+                if row < len(self.spreadsheet.cells):
+                    self.spreadsheet.cells.pop(row)
+                    self.spreadsheet.rows -= 1
 
     def set_current_cell_formula(self, formula: str):
         """Установка формулы для текущей ячейки"""
@@ -1247,27 +1245,11 @@ class SpreadsheetWidget(QTableWidget):
             self.set_cell_value(current.row(), current.column(), formula)
 
     def calculate_formulas(self):
-        """Пересчет всех формул"""
-        for row in range(self.rows):
-            for col in range(self.columns):
-                cell = self.cells[row][col]
-                if cell.formula:
-                    try:
-                        result = self.formula_engine.evaluate(
-                            cell.formula[1:],
-                            self.get_cell_data
-                        )
-                        cell.set_calculated_value(str(result))
+        """Пересчет всех формул в модели"""
+        if self.spreadsheet:
+            self.spreadsheet.calculate_formulas()
+            self.refresh_display()
 
-                        item = self.item(row, col)
-                        if item:
-                            item.setText(str(result))
-                    except Exception as e:
-                        cell.set_calculated_value("#ERROR!")
-                        item = self.item(row, col)
-                        if item:
-                            item.setText("#ERROR!")
-    
     def get_selected_cells_range(self) -> str:
         """Получить диапазон выделенных ячеек"""
         selected = self.selectedRanges()
@@ -1277,16 +1259,16 @@ class SpreadsheetWidget(QTableWidget):
             start_col = range_obj.leftColumn()
             end_row = range_obj.bottomRow()
             end_col = range_obj.rightColumn()
-            
+
             start_cell = f"{chr(65 + start_col)}{start_row + 1}"
             end_cell = f"{chr(65 + end_col)}{end_row + 1}"
-            
+
             if start_cell == end_cell:
                 return start_cell
             else:
                 return f"{start_cell}:{end_cell}"
         return ""
-    
+
     def calculate_selection_stats(self) -> dict:
         """Вычислить статистику по выделению (SUM, AVERAGE, COUNT)"""
         stats = {
@@ -1296,33 +1278,34 @@ class SpreadsheetWidget(QTableWidget):
             'min': 0,
             'max': 0
         }
-        
+
         values = []
         selected = self.selectedRanges()
-        
+
         if not selected:
             return stats
-        
+
         # Собрать все значения из выделения
         for range_obj in selected:
             for row in range(range_obj.topRow(), range_obj.bottomRow() + 1):
                 for col in range(range_obj.leftColumn(), range_obj.rightColumn() + 1):
                     cell = self.get_cell(row, col)
-                    if cell and cell.calculated_value:
-                        try:
-                            # Попытаться преобразовать в число
-                            value = float(str(cell.calculated_value).replace(',', '.').replace('$', '').replace('%', ''))
-                            values.append(value)
-                        except:
-                            pass
-        
+                    if cell:
+                        value = cell.get_display_value()
+                        if value:
+                            try:
+                                num_value = float(str(value).replace(',', '.').replace('$', '').replace('%', ''))
+                                values.append(num_value)
+                            except:
+                                pass
+
         if values:
             stats['sum'] = sum(values)
             stats['average'] = sum(values) / len(values)
             stats['count'] = len(values)
             stats['min'] = min(values)
             stats['max'] = max(values)
-        
+
         return stats
 
     def zoom_in(self):
@@ -1347,10 +1330,10 @@ class SpreadsheetWidget(QTableWidget):
 
         # Обновление высоты строк
         self.verticalHeader().setDefaultSectionSize(int(25 * self.zoom_level / 100))
-        
+
         # Обновление ширины колонок
         self.horizontalHeader().setDefaultSectionSize(int(100 * self.zoom_level / 100))
-        
+
         # Применение размеров ко всем строкам и колонкам
         for i in range(self.rowCount()):
             self.setRowHeight(i, int(25 * self.zoom_level / 100))
@@ -1358,47 +1341,26 @@ class SpreadsheetWidget(QTableWidget):
             self.setColumnWidth(i, int(100 * self.zoom_level / 100))
 
     def load_data(self, data: List[List[str]]):
-        """Загрузка данных"""
+        """Загрузка данных в модель и отображение"""
         if not data:
             return
 
-        rows = len(data)
-        cols = max(len(row) for row in data) if data else 0
+        # Создаем модель если нет
+        if not self.spreadsheet:
+            self.spreadsheet = Spreadsheet("Sheet1", 0, rows=1000, columns=1000)
 
-        self.setRowCount(rows)
-        self.setColumnCount(cols)
-        self.rows = rows
-        self.columns = cols
+        # Загружаем данные в модель
+        self.spreadsheet.load_from_data(data)
 
-        # Обновление массива cells
-        self.cells = [
-            [Cell(row, col) for col in range(cols)] for row in range(rows)
-        ]
-
-        # Обновление заголовков
-        self.setHorizontalHeaderLabels([chr(65 + i) for i in range(cols)])
-        self.setVerticalHeaderLabels([str(i + 1) for i in range(rows)])
-
-        # Загрузка данных
-        for row in range(rows):
-            for col in range(len(data[row])):
-                value = data[row][col]
-                if value is not None:
-                    self.set_cell_value(row, col, str(value))
+        # Обновляем отображение
+        self.refresh_display()
 
     def get_dataframe(self) -> pd.DataFrame:
-        """Получение данных в виде DataFrame"""
-        data = []
-        for row in range(self.rows):
-            row_data = []
-            for col in range(self.columns):
-                cell = self.get_cell(row, col)
-                if cell:
-                    row_data.append(cell.value)
-                else:
-                    row_data.append("")
-            data.append(row_data)
+        """Получение данных в виде DataFrame из модели"""
+        if not self.spreadsheet:
+            return pd.DataFrame()
 
+        data = self.spreadsheet.get_data(max_rows=1000, max_cols=26)
         return pd.DataFrame(data)
 
     def apply_format(self, format_type: str, value):
@@ -1462,3 +1424,30 @@ class SpreadsheetWidget(QTableWidget):
                 if hasattr(cell, 'strike'):
                     cell.strike = False
             self.apply_cell_formatting(row, col)
+
+    def save_state(self) -> Dict[str, Any]:
+        """Сохранить состояние виджета"""
+        return {
+            'cell_states': self.save_cell_states(),
+            'zoom_level': self.zoom_level,
+            'column_widths': {col: self.columnWidth(col) for col in range(self.columns)},
+            'row_heights': {row: self.rowHeight(row) for row in range(self.rows)}
+        }
+
+    def load_state(self, state: Dict[str, Any]):
+        """Загрузить состояние виджета"""
+        self.load_cell_states(state.get('cell_states', {}))
+
+        if 'zoom_level' in state:
+            self.zoom_level = state['zoom_level']
+            self.apply_zoom()
+
+        # Загружаем размеры колонок
+        for col, width in state.get('column_widths', {}).items():
+            if col < self.columnCount():
+                self.setColumnWidth(col, width)
+
+        # Загружаем размеры строк
+        for row, height in state.get('row_heights', {}).items():
+            if row < self.rowCount():
+                self.setRowHeight(row, height)

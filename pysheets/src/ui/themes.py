@@ -1,6 +1,4 @@
-"""
-Менеджер тем приложения
-"""
+
 
 import sys
 from PyQt5.QtWidgets import QApplication
@@ -68,8 +66,10 @@ class ThemeManager:
         text_color = palette.color(QPalette.Text)
         text_brightness = (text_color.red() + text_color.green() + text_color.blue()) / 3
 
-        print(f"DEBUG: Palette Window RGB=({window_color.red()},{window_color.green()},{window_color.blue()}) brightness={window_brightness}")
-        print(f"DEBUG: Palette Text RGB=({text_color.red()},{text_color.green()},{text_color.blue()}) brightness={text_brightness}")
+        print(
+            f"DEBUG: Palette Window RGB=({window_color.red()},{window_color.green()},{window_color.blue()}) brightness={window_brightness}")
+        print(
+            f"DEBUG: Palette Text RGB=({text_color.red()},{text_color.green()},{text_color.blue()}) brightness={text_brightness}")
 
         if window_brightness < 100:
             return "dark"
@@ -83,18 +83,18 @@ class ThemeManager:
             self.current_theme = theme_name
             if color:
                 self.app_theme_color = color
-            
+
             # Определяем реальную тему
             actual_theme = theme_name
-            
+
             if theme_name == "system":
                 # Для системной темы: сначала применяем светлую, потом проверяем и переприменяем если нужна тёмная
                 self.apply_palette("light")
                 self.apply_stylesheet("light")
-                
+
                 # Теперь проверяем реальную системную тему после применения светлой темы
                 actual_theme = self._get_real_system_theme()
-                
+
                 # Если реальная тема тёмная, переприменяем
                 if actual_theme == "dark":
                     self.apply_palette("dark")
@@ -115,7 +115,7 @@ class ThemeManager:
             stylesheet = f"""
                 QMainWindow {{ background-color: #ffffff; }}
                 QWidget {{ color: #202124; font-family: 'Segoe UI', 'Helvetica Neue', sans-serif; font-size: 11px; }}
-                
+
                 /* TOOLBAR */
                 QToolBar {{ 
                     background-color: #ffffff; 
@@ -141,7 +141,7 @@ class ThemeManager:
                 QToolButton:checked {{ 
                     background-color: {accent_light}; 
                 }}
-                
+
                 /* STATUS BAR */
                 QStatusBar {{ 
                     background-color: #f8f9fa; 
@@ -150,7 +150,7 @@ class ThemeManager:
                     padding: 6px 12px;
                 }}
                 QStatusBar::item {{ border: none; }}
-                
+
                 /* TABLE */
                 QTableWidget {{ 
                     background-color: #ffffff; 
@@ -178,7 +178,7 @@ class ThemeManager:
                     color: #202124;
                     font-weight: 500;
                 }}
-                
+
                 /* HEADERS */
                 QHeaderView::section {{ 
                     background: linear-gradient(to bottom, #ffffff, #f8f9fa);
@@ -197,7 +197,7 @@ class ThemeManager:
                 }}
                 QHeaderView {{ background-color: #f8f9fa; border: none; border-left: 1px solid #dadce0; border-bottom: 2px solid #dadce0; }}
                 QAbstractButton {{ color: #202124; font-weight: 700; }}
-                
+
                 /* TABS */
                 QTabWidget::pane {{ 
                     border: 1px solid #e8eaed; 
@@ -221,7 +221,7 @@ class ThemeManager:
                 QTabBar::tab:hover:!selected {{ 
                     background-color: #eeeff1;
                 }}
-                
+
                 /* BUTTONS */
                 QPushButton {{ 
                     background-color: #f8f9fa; 
@@ -256,7 +256,7 @@ class ThemeManager:
                 QPushButton[accent="true"]:pressed {{ 
                     background-color: {accent_dark};
                 }}
-                
+
                 /* GROUPS */
                 QGroupBox {{ 
                     border: 1px solid #e8eaed; 
@@ -272,7 +272,7 @@ class ThemeManager:
                     left: 12px; 
                     padding: 0 6px 0 6px;
                 }}
-                
+
                 /* INPUTS */
                 QLineEdit {{ 
                     border: 1px solid #dadce0; 
@@ -286,7 +286,7 @@ class ThemeManager:
                     border: 2px solid {accent_color};
                     padding: 7px 11px;
                 }}
-                
+
                 QComboBox {{ 
                     border: 1px solid #dadce0; 
                     border-radius: 6px;
@@ -310,7 +310,7 @@ class ThemeManager:
                     border: 1px solid #dadce0;
                     border-radius: 6px;
                 }}
-                
+
                 /* LIST */
                 QListWidget {{ 
                     border: 1px solid #dadce0; 
@@ -328,7 +328,7 @@ class ThemeManager:
                     background-color: {accent_light}; 
                     color: #202124;
                 }}
-                
+
                 /* MENU */
                 QMenuBar {{ 
                     background-color: #ffffff; 
@@ -357,7 +357,7 @@ class ThemeManager:
                 QMenu::item:selected {{ 
                     background-color: #f1f3f4;
                 }}
-                
+
                 /* CHECKBOXES AND RADIOS */
                 QCheckBox, QRadioButton {{ 
                     spacing: 8px;
@@ -388,7 +388,7 @@ class ThemeManager:
                     background-color: {accent_color};
                     border-color: {accent_color};
                 }}
-                
+
                 /* SCROLLBAR */
                 QScrollBar:vertical {{ 
                     border: none; 
@@ -433,7 +433,7 @@ class ThemeManager:
             stylesheet = f"""
                 QMainWindow {{ background-color: #1e1e1e; }}
                 QWidget {{ color: #e8eaed; font-family: 'Segoe UI', 'Helvetica Neue', sans-serif; font-size: 11px; }}
-                
+
                 /* TOOLBAR */
                 QToolBar {{ 
                     background-color: #252525; 
@@ -459,7 +459,7 @@ class ThemeManager:
                 QToolButton:checked {{ 
                     background-color: {accent_dark}; 
                 }}
-                
+
                 /* STATUS BAR */
                 QStatusBar {{ 
                     background-color: #252525; 
@@ -468,7 +468,7 @@ class ThemeManager:
                     padding: 6px 12px;
                 }}
                 QStatusBar::item {{ border: none; }}
-                
+
                 /* TABLE */
                 QTableWidget {{ 
                     background-color: #1e1e1e; 
@@ -498,7 +498,7 @@ class ThemeManager:
                     color: #e8eaed;
                     font-weight: 500;
                 }}
-                
+
                 /* HEADERS */
                 QHeaderView::section {{ 
                     background-color: #262626; 
@@ -517,7 +517,7 @@ class ThemeManager:
                 }}
                 QHeaderView {{ background-color: #262626; border: none; border-left: 1px solid #4a4a4a; border-bottom: 2px solid #454545; }}
                 QAbstractButton {{ color: #e8eaed; font-weight: 700; }}
-                
+
                 /* TABS */
                 QTabWidget::pane {{ 
                     border: 1px solid #3f3f3f; 
@@ -541,7 +541,7 @@ class ThemeManager:
                 QTabBar::tab:hover:!selected {{ 
                     background-color: #323232;
                 }}
-                
+
                 /* BUTTONS */
                 QPushButton {{ 
                     background-color: #2d2d2d; 
@@ -576,7 +576,7 @@ class ThemeManager:
                 QPushButton[accent="true"]:pressed {{ 
                     background-color: {accent_dark};
                 }}
-                
+
                 /* GROUPS */
                 QGroupBox {{ 
                     border: 1px solid #3f3f3f; 
@@ -592,7 +592,7 @@ class ThemeManager:
                     left: 12px; 
                     padding: 0 6px 0 6px;
                 }}
-                
+
                 /* INPUTS */
                 QLineEdit {{ 
                     border: 1px solid #3f3f3f; 
@@ -607,7 +607,7 @@ class ThemeManager:
                     border: 2px solid {accent_color};
                     padding: 7px 11px;
                 }}
-                
+
                 QComboBox {{ 
                     border: 1px solid #3f3f3f; 
                     border-radius: 6px;
@@ -633,7 +633,7 @@ class ThemeManager:
                     border: 1px solid #3f3f3f;
                     border-radius: 6px;
                 }}
-                
+
                 /* LIST */
                 QListWidget {{ 
                     border: 1px solid #3f3f3f; 
@@ -652,7 +652,7 @@ class ThemeManager:
                     background-color: {accent_dark}; 
                     color: #e8eaed;
                 }}
-                
+
                 /* MENU */
                 QMenuBar {{ 
                     background-color: #252525; 
@@ -683,7 +683,7 @@ class ThemeManager:
                 QMenu::item:selected {{ 
                     background-color: #353535;
                 }}
-                
+
                 /* CHECKBOXES AND RADIOS */
                 QCheckBox, QRadioButton {{ 
                     spacing: 8px;
@@ -714,7 +714,7 @@ class ThemeManager:
                     background-color: {accent_color};
                     border-color: {accent_color};
                 }}
-                
+
                 /* SCROLLBAR */
                 QScrollBar:vertical {{ 
                     border: none; 
@@ -806,7 +806,8 @@ class ThemeManager:
 
 
 # ThemeSettingsDialog для диалога настроек
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QGroupBox, QRadioButton, QPushButton, QHBoxLayout, QLabel, QDialogButtonBox, QCheckBox
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QGroupBox, QRadioButton, QPushButton, QHBoxLayout, QLabel, \
+    QDialogButtonBox, QCheckBox
 from PyQt5.QtCore import Qt
 
 
@@ -817,7 +818,7 @@ class ThemeSettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Настроить тему")
         self.setFixedSize(400, 350)
-        
+
         self.selected_color = QColor("#DC143C")
         self.parent_theme = "light"  # Будет установлено в _apply_dialog_theme
 
@@ -924,7 +925,7 @@ class ThemeSettingsDialog(QDialog):
         if self.color_buttons:
             self.color_buttons[0].setChecked(True)
             self.selected_color = QColor(colors[0][0])
-        
+
         # Применяем тему к диалогу
         self._apply_dialog_theme()
 
@@ -940,9 +941,9 @@ class ThemeSettingsDialog(QDialog):
                 bg_color = palette.color(__import__('PyQt5.QtGui', fromlist=['QPalette']).QPalette.Window)
                 brightness = (bg_color.red() + bg_color.green() + bg_color.blue()) / 3
                 current_theme = "dark" if brightness < 128 else "light"
-        
+
         self.parent_theme = current_theme
-        
+
         # Применяем тему к диалогу
         manager = ThemeManager()
         if current_theme == "dark":
@@ -986,6 +987,5 @@ class ThemeSettingsDialog(QDialog):
             "show_grid": self.grid_checkbox.isChecked(),
             "alternating_rows": self.alternating_rows_checkbox.isChecked(),
         }
-        
 
         return "light"
