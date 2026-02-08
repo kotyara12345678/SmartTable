@@ -4,7 +4,7 @@ UI компонент галереи пользовательских тем
 
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QScrollArea, 
                              QWidget, QPushButton, QLabel, QLineEdit, QComboBox,
-                             QGridLayout, QMessageBox, QFileDialog, QFrame)
+                             QGridLayout, QMessageBox, QFileDialog, QFrame, QTabWidget)
 from PyQt5.QtGui import QColor, QFont, QPixmap, QIcon
 from PyQt5.QtCore import Qt, QSize, pyqtSignal
 from pathlib import Path
@@ -130,15 +130,6 @@ class ThemeGalleryWidget(QDialog):
         toolbar_layout.addWidget(search_label)
         toolbar_layout.addWidget(self.search_input)
         
-        # Фильтр по категории
-        category_label = QLabel("Категория:")
-        category_label.setStyleSheet("font-weight: bold;")
-        self.category_combo = QComboBox()
-        self.category_combo.addItems(["Все", "Светлые", "Тёмные", "Пользовательские"])
-        self.category_combo.currentTextChanged.connect(self.on_category_changed)
-        toolbar_layout.addWidget(category_label)
-        toolbar_layout.addWidget(self.category_combo)
-        
         toolbar_layout.addStretch()
         
         main_layout.addLayout(toolbar_layout)
@@ -162,17 +153,40 @@ class ThemeGalleryWidget(QDialog):
         
         main_layout.addLayout(actions_layout)
         
-        # Область прокрутки с темами
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
+        # Создаем табы для День/Ночь
+        self.tabs_widget = QTabWidget()
         
-        self.themes_container = QWidget()
-        self.themes_layout = QGridLayout()
-        self.themes_layout.setSpacing(12)
-        self.themes_container.setLayout(self.themes_layout)
+        # Вкладка "День" (светлые темы)
+        day_scroll = QScrollArea()
+        day_scroll.setWidgetResizable(True)
+        self.day_container = QWidget()
+        self.day_layout = QGridLayout()
+        self.day_layout.setSpacing(12)
+        self.day_container.setLayout(self.day_layout)
+        day_scroll.setWidget(self.day_container)
+        self.tabs_widget.addTab(day_scroll, "☀️ День (Светлые)")
         
-        scroll_area.setWidget(self.themes_container)
-        main_layout.addWidget(scroll_area)
+        # Вкладка "Ночь" (темные темы)
+        night_scroll = QScrollArea()
+        night_scroll.setWidgetResizable(True)
+        self.night_container = QWidget()
+        self.night_layout = QGridLayout()
+        self.night_layout.setSpacing(12)
+        self.night_container.setLayout(self.night_layout)
+        night_scroll.setWidget(self.night_container)
+        self.tabs_widget.addTab(night_scroll, "🌙 Ночь (Темные)")
+        
+        # Вкладка "Все" (все темы)
+        all_scroll = QScrollArea()
+        all_scroll.setWidgetResizable(True)
+        self.all_container = QWidget()
+        self.all_layout = QGridLayout()
+        self.all_layout.setSpacing(12)
+        self.all_container.setLayout(self.all_layout)
+        all_scroll.setWidget(self.all_container)
+        self.tabs_widget.addTab(all_scroll, "📚 Все")
+        
+        main_layout.addWidget(self.tabs_widget)
         
         # Кнопка закрытия
         close_btn = QPushButton("Закрыть")
@@ -183,11 +197,12 @@ class ThemeGalleryWidget(QDialog):
     
     def load_themes(self):
         """Загрузка тем в галерею"""
-        # Очищаем существующие виджеты
-        while self.themes_layout.count():
-            item = self.themes_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        # Очищаем все вкладки
+        for layout in [self.day_layout, self.night_layout, self.all_layout]:
+            while layout.count():
+                item = layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
         
         themes = self.gallery_manager.get_all_themes()
         
@@ -195,31 +210,69 @@ class ThemeGalleryWidget(QDialog):
             no_themes_label = QLabel("Нет установленных тем. Импортируйте тему для начала.")
             no_themes_label.setAlignment(Qt.AlignCenter)
             no_themes_label.setStyleSheet("color: #5f6368; font-size: 12px; padding: 40px;")
-            self.themes_layout.addWidget(no_themes_label)
+            self.all_layout.addWidget(no_themes_label)
         else:
-            # Добавляем карточки тем
-            row = col = 0
-            for theme_info in themes:
-                card = ThemeCard(theme_info)
-                card.selected.connect(self.on_theme_selected)
-                self.themes_layout.addWidget(card, row, col)
-                
-                col += 1
-                if col >= 4:  # 4 колонки
-                    col = 0
-                    row += 1
+            # Сортируем темы по категориям
+            day_themes = []  # light
+            night_themes = []  # dark
+            custom_themes = []  # custom
             
-            # Добавляем растяжение в конце сетки
-            if row >= 0:
-                self.themes_layout.setRowStretch(row + 1, 1)
+            for theme_info in themes:
+                category = theme_info['metadata'].category if hasattr(theme_info['metadata'], 'category') else 'custom'
+                
+                if category == "light":
+                    day_themes.append(theme_info)
+                elif category == "dark":
+                    night_themes.append(theme_info)
+                else:
+                    custom_themes.append(theme_info)
+            
+            # Добавляем темы в День
+            if day_themes:
+                self._add_themes_to_layout(self.day_layout, day_themes)
+            else:
+                label = QLabel("Нет светлых тем")
+                label.setAlignment(Qt.AlignCenter)
+                label.setStyleSheet("color: #5f6368; padding: 40px;")
+                self.day_layout.addWidget(label)
+            
+            # Добавляем темы в Ночь
+            if night_themes:
+                self._add_themes_to_layout(self.night_layout, night_themes)
+            else:
+                label = QLabel("Нет темных тем")
+                label.setAlignment(Qt.AlignCenter)
+                label.setStyleSheet("color: #5f6368; padding: 40px;")
+                self.night_layout.addWidget(label)
+            
+            # Добавляем все темы
+            all_themes = day_themes + night_themes + custom_themes
+            self._add_themes_to_layout(self.all_layout, all_themes)
+    
+    def _add_themes_to_layout(self, layout: QGridLayout, themes: list):
+        """Добавляет карточки тем в layout"""
+        row = col = 0
+        for theme_info in themes:
+            card = ThemeCard(theme_info)
+            card.selected.connect(self.on_theme_selected)
+            layout.addWidget(card, row, col)
+            
+            col += 1
+            if col >= 4:  # 4 колонки
+                col = 0
+                row += 1
+        
+        # Добавляем растяжение в конце сетки
+        if row >= 0:
+            layout.setRowStretch(row + 1, 1)
     
     def on_theme_selected(self, theme_id: str):
         """Обработка выбора темы"""
-        print(f"[DEBUG] on_theme_selected: {theme_id}")
+        print(f"[GALLERY] Выбрана тема: {theme_id}")
         theme = self.gallery_manager.get_theme(theme_id)
-        print(f"[DEBUG] theme получена: {theme is not None}")
+        print(f"[GALLERY] Тема загружена: {theme is not None}")
         if theme:
-            print(f"[DEBUG] Эмитим сигнал theme_selected")
+            print(f"[GALLERY] Эмитим сигнал с темой {theme.get('id')}")
             self.theme_selected.emit(theme)
         else:
             print(f"[ERROR] Не удалось загрузить тему {theme_id}")
@@ -257,27 +310,40 @@ class ThemeGalleryWidget(QDialog):
         else:
             themes = self.gallery_manager.get_all_themes()
         
-        # Очищаем и перезагружаем
-        while self.themes_layout.count():
-            item = self.themes_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        # Очищаем все вкладки
+        for layout in [self.day_layout, self.night_layout, self.all_layout]:
+            while layout.count():
+                item = layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
         
         if not themes:
             no_themes_label = QLabel("Темы не найдены.")
             no_themes_label.setAlignment(Qt.AlignCenter)
-            self.themes_layout.addWidget(no_themes_label)
+            self.all_layout.addWidget(no_themes_label)
         else:
-            row = col = 0
-            for theme_info in themes:
-                card = ThemeCard(theme_info)
-                card.selected.connect(self.on_theme_selected)
-                self.themes_layout.addWidget(card, row, col)
-                
-                col += 1
-                if col >= 4:
-                    col = 0
-                    row += 1
+            # Сортируем по категориям
+            day_themes = [t for t in themes if getattr(t['metadata'], 'category', 'custom') == 'light']
+            night_themes = [t for t in themes if getattr(t['metadata'], 'category', 'custom') == 'dark']
+            custom_themes = [t for t in themes if getattr(t['metadata'], 'category', 'custom') == 'custom']
+            
+            if day_themes:
+                self._add_themes_to_layout(self.day_layout, day_themes)
+            else:
+                label = QLabel("-")
+                label.setAlignment(Qt.AlignCenter)
+                self.day_layout.addWidget(label)
+            
+            if night_themes:
+                self._add_themes_to_layout(self.night_layout, night_themes)
+            else:
+                label = QLabel("-")
+                label.setAlignment(Qt.AlignCenter)
+                self.night_layout.addWidget(label)
+            
+            # Все в третьей вкладке
+            all_themes = day_themes + night_themes + custom_themes
+            self._add_themes_to_layout(self.all_layout, all_themes)
     
     def on_category_changed(self):
         """Изменение фильтра по категории"""

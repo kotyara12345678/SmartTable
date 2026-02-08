@@ -119,7 +119,11 @@ class ThemeGalleryManager:
                 meta_data = json.load(f)
             
             with open(theme_file, 'r', encoding='utf-8') as f:
-                theme_data = json.load(f)
+                theme_file_data = json.load(f)
+            
+            # JSON файл содержит корневые ключи (id, name, description, version, author, data)
+            # Нам нужна только структура 'data' для применения темы
+            theme_data = theme_file_data.get('data', {})
             
             return {
                 'id': theme_id,

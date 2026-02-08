@@ -99,9 +99,12 @@ class ThemeManager:
                 self.apply_palette("dark")
                 self.apply_stylesheet("dark")
         elif theme_name == "gallery":
-            # Галерея использует светлую базу с кастомным цветом
-            self.apply_palette("light")
-            self.apply_stylesheet("light")
+            # Галерея может быть светлой или ночной в зависимости от категории
+            # Режим хранится в current_theme_mode (установлен в apply_gallery_theme_full)
+            theme_mode = getattr(self, 'current_theme_mode', 'light')
+            print(f"[THEMES] apply_theme для gallery: режим={theme_mode}")
+            self.apply_palette(theme_mode)
+            self.apply_stylesheet(theme_mode)
         elif theme_name in self.themes:
             # Для явных светлых/тёмных тем просто применяем
             self.apply_palette(actual_theme)
@@ -117,6 +120,8 @@ class ThemeManager:
         accent_light = self.app_theme_color.lighter(150).name()
         accent_dark = self.app_theme_color.darker(150).name()
         accent_hover = self.app_theme_color.lighter(120).name()
+
+        print(f"[THEMES] apply_stylesheet: theme={theme_name}, accent={accent_color}")
 
         if theme_name == "light":
             stylesheet = f"""
@@ -355,7 +360,6 @@ class ThemeManager:
                     border: 1px solid #dadce0;
                     border-radius: 8px;
                     padding: 4px 0px;
-                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
                 }}
                 QMenu::item {{ 
                     padding: 8px 20px;
@@ -680,7 +684,6 @@ class ThemeManager:
                     border: 1px solid #3f3f3f;
                     border-radius: 8px;
                     padding: 4px 0px;
-                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
                     color: #e8eaed;
                 }}
                 QMenu::item {{ 
@@ -765,7 +768,17 @@ class ThemeManager:
 
         app = QApplication.instance()
         if app:
+            print(f"[THEMES] Устанавливаю stylesheet, длина={len(stylesheet)}")
             app.setStyleSheet(stylesheet)
+            # Принудительно обновляем все виджеты
+            all_widgets = app.allWidgets()
+            print(f"[THEMES] Перерисовываю {len(all_widgets)} виджетов")
+            for widget in all_widgets:
+                widget.style().unpolish(widget)
+                widget.style().polish(widget)
+                widget.repaint()
+            app.processEvents()
+            print(f"[THEMES] Стиль применен")
 
     def apply_palette(self, theme_name: str):
         """Применение палитры цветов"""
@@ -773,6 +786,8 @@ class ThemeManager:
         if not app:
             return
 
+        print(f"[THEMES] apply_palette: theme={theme_name}, accent={self.app_theme_color.name()}")
+        
         palette = QPalette()
         accent_color = self.app_theme_color
 
@@ -805,6 +820,7 @@ class ThemeManager:
             palette.setColor(QPalette.Highlight, accent_color)
             palette.setColor(QPalette.HighlightedText, QColor(32, 33, 36))
 
+        print(f"[THEMES] Применяю palette для {theme_name}")
         app.setPalette(palette)
 
     def get_available_themes(self) -> list:

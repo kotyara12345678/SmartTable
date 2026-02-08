@@ -52,6 +52,7 @@ class MainWindow(QMainWindow):
         saved_color = self.settings.value("theme_color")
 
         self.current_theme = saved_theme if saved_theme else "system"
+        self.current_theme_mode = "light"  # 'light' или 'dark' для галереи
         if saved_color:
             self.app_theme_color = QColor(saved_color)
         else:
@@ -575,6 +576,7 @@ class MainWindow(QMainWindow):
 
     def add_new_sheet(self, name: str):
         """Добавление нового листа"""
+        print(f"[MAIN] add_new_sheet: {name}")
         spreadsheet = SpreadsheetWidget()
         spreadsheet.cell_selected.connect(self.on_cell_selected)
         spreadsheet.data_changed.connect(self.on_data_changed)
@@ -582,6 +584,7 @@ class MainWindow(QMainWindow):
         index = self.tab_widget.addTab(spreadsheet, name)
         self.tab_widget.setCurrentIndex(index)
         self.workbook.add_sheet(name)
+        print(f"[MAIN] add_new_sheet: добавлена вкладка, теперь всего {self.tab_widget.count()}")
 
     def open_ai_chat(self):
         """Открывает/закрывает боковую панель с чатом ИИ"""
@@ -1294,26 +1297,70 @@ class MainWindow(QMainWindow):
         """Применяет тему приложению"""
         from pysheets.src.ui.themes import ThemeManager
         from PyQt5.QtWidgets import QApplication
+        
+        print(f"[MAIN apply_theme] Начало: theme={theme_name}, color={color.name() if color else None}")
+        
+        try:
+            manager = ThemeManager()
+            manager.current_theme = theme_name
+            if color is not None:
+                manager.app_theme_color = color
+            
+            # Если это галерея, передаём режим (light/dark)
+            if theme_name == 'gallery' and hasattr(self, 'current_theme_mode'):
+                manager.current_theme_mode = self.current_theme_mode
+                print(f"[MAIN apply_theme] Передаю режим галереи: {self.current_theme_mode}")
+            
+            print(f"[MAIN apply_theme] Вызываю manager.apply_theme()")
+            manager.apply_theme(theme_name, color)
+            print(f"[MAIN apply_theme] manager.apply_theme() завершена")
+            
+            self.current_theme = theme_name
+            if color is not None:
+                self.app_theme_color = color
 
-        manager = ThemeManager()
-        manager.current_theme = theme_name
-        if color is not None:
-            manager.app_theme_color = color
-        manager.apply_theme(theme_name, color)
-        self.current_theme = theme_name
-        if color is not None:
-            self.app_theme_color = color
+            # Получаем stylesheet из приложения
+            app = QApplication.instance()
+            if app:
+                current_stylesheet = app.styleSheet()
+                print(f"[MAIN apply_theme] Получили stylesheet, длина={len(current_stylesheet) if current_stylesheet else 0}")
+                
+                if current_stylesheet:
+                    # Применяем к главному окну
+                    print(f"[MAIN apply_theme] Применяю stylesheet к главному окну")
+                    self.setStyleSheet(current_stylesheet)
+                    
+                    # Применяем ко всем вкладкам (SpreadsheetWidget)
+                    print(f"[MAIN apply_theme] Обновляю {self.tab_widget.count()} вкладок")
+                    for i in range(self.tab_widget.count()):
+                        sheet = self.tab_widget.widget(i)
+                        if sheet:
+                            sheet.update()
+                    
+                    # Обновляем все виджеты
+                    all_widgets = app.allWidgets()
+                    print(f"[MAIN apply_theme] Обновляю {len(all_widgets)} виджетов")
+                    for widget in all_widgets:
+                        widget.style().unpolish(widget)
+                        widget.style().polish(widget)
+                        widget.repaint()
+                    app.processEvents()
+                    self.repaint()
+                    print(f"[MAIN apply_theme] Все виджеты обновлены")
 
-        app = QApplication.instance()
-        if app and app.styleSheet():
-            self.setStyleSheet(app.styleSheet())
+            if hasattr(self, 'ai_chat_widget'):
+                self.ai_chat_widget.update_theme(theme_name, color)
 
-        if hasattr(self, 'ai_chat_widget'):
-            self.ai_chat_widget.update_theme(theme_name, color)
-
-        self.settings.setValue("theme", theme_name)
-        if color is not None:
-            self.settings.setValue("theme_color", color.name())
+            self.settings.setValue("theme", theme_name)
+            if color is not None:
+                self.settings.setValue("theme_color", color.name())
+            
+            print(f"[MAIN apply_theme] Завершено для {theme_name}")
+            
+        except Exception as e:
+            import traceback
+            print(f"[ERROR apply_theme] {e}")
+            traceback.print_exc()
 
     def show_theme_settings(self):
         """Показывает диалог настроек темы"""
@@ -1326,20 +1373,51 @@ class MainWindow(QMainWindow):
     def apply_gallery_theme_full(self, theme_info):
         """Применяет полную тему из галереи"""
         try:
+            print(f"[MAIN] apply_gallery_theme_full: тема {theme_info.get('id')}")
+            
+            # Получаем метаданные и категорию темы
+            metadata = theme_info.get('metadata')
+            category = metadata.category if metadata else 'custom'
+            print(f"[MAIN] Категория темы: {category}")
+            
+            # Получаем данные темы
             theme_data = theme_info.get('data', {})
+            
+            if not theme_data:
+                print(f"[ERROR] theme_data пуста!")
+                return
+            
             theme_colors = theme_data.get('theme', {})
-            light_theme = theme_colors.get('light', {})
-            primary_color = light_theme.get('primary', '#DC143C')
+            
+            # Для ночных тем используем dark, для светлых - light
+            if category == 'dark':
+                base_theme = theme_colors.get('dark', {})
+                base_mode = 'dark'
+                print(f"[MAIN] Применяю НОЧНУЮ тему")
+            else:
+                base_theme = theme_colors.get('light', {})
+                base_mode = 'light'
+                print(f"[MAIN] Применяю СВЕТЛУЮ тему")
+            
+            primary_color = base_theme.get('primary', '#DC143C')
+            print(f"[MAIN] primary_color: {primary_color}")
+            
             color = QColor(primary_color)
             
             if color.isValid():
+                print(f"[MAIN] Устанавливаем current_theme='gallery', color={primary_color}, mode={base_mode}")
                 self.current_theme = 'gallery'
+                self.current_theme_mode = base_mode  # 'light' или 'dark'
                 self.app_theme_color = color
-                # Применяем тему используя стандартный метод
+                print(f"[MAIN] Вызываем apply_theme()")
                 self.apply_theme(self.current_theme, self.app_theme_color)
-                print(f"[OK] Цвет темы применен: {primary_color}")
+                print(f"[MAIN] apply_theme() завершена")
+            else:
+                print(f"[ERROR] Цвет не валидный: {primary_color}")
         except Exception as e:
+            import traceback
             print(f"[ERROR] {e}")
+            traceback.print_exc()
 
     def _generate_stylesheet_from_theme(self, theme_colors: dict) -> str:
         """Генерирует стилевую таблицу на основе цветов темы"""
@@ -1456,35 +1534,25 @@ class MainWindow(QMainWindow):
             def apply_gallery_theme(theme_info):
                 """Применяет выбранную из галереи тему"""
                 try:
-                    print(f"[DEBUG] Применение темы: {theme_info.get('id', 'unknown')}")
-                    theme_data = theme_info.get('data', {})
-                    print(f"[DEBUG] theme_data keys: {theme_data.keys()}")
-                    
-                    # Извлекаем цвет из темы
-                    theme_colors = theme_data.get('theme', {})
-                    print(f"[DEBUG] theme_colors keys: {theme_colors.keys()}")
-                    
-                    light_theme = theme_colors.get('light', {})
-                    primary_color = light_theme.get('primary', '#DC143C')
-                    print(f"[DEBUG] primary_color: {primary_color}")
-                    
-                    color = QColor(primary_color)
-                    if color.isValid():
-                        # Применяем тему с расширенными данными
-                        print(f"[DEBUG] Цвет валиден, применяемся...")
-                        self.apply_gallery_theme_full(theme_info)
-                        self.status_bar.showMessage(
-                            f"Тема '{theme_info['metadata'].name}' успешно применена!"
-                        )
-                    else:
-                        print(f"[ERROR] Цвет невалиден: {primary_color}")
+                    print(f"[MAIN] apply_gallery_theme вызвана с темой {theme_info.get('id')}")
+                    self.apply_gallery_theme_full(theme_info)
+                    self.status_bar.showMessage(
+                        f"Тема '{theme_info['metadata'].name}' успешно применена!"
+                    )
                 except Exception as e:
                     print(f"[ERROR] Ошибка при применении темы: {e}")
                     import traceback
                     traceback.print_exc()
             
+            print(f"[MAIN] Подключаем сигнал gallery.theme_selected")
             gallery.theme_selected.connect(apply_gallery_theme)
             gallery.exec_()
+            
+            # Обновляем главное окно после закрытия галереи
+            print(f"[MAIN] Галерея закрыта, обновляю главное окно")
+            self.update()
+            self.repaint()
+            QApplication.instance().processEvents()
         except ImportError as e:
             QMessageBox.warning(
                 self,
