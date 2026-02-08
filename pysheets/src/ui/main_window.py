@@ -700,7 +700,7 @@ class MainWindow(QMainWindow):
                         self.workbook = workbook
                         # Обновление UI
                         self.tab_widget.clear()
-                        for sheet_name in workbook.sheet_names:
+                        for sheet_name in workbook.sheet_names():
                             spreadsheet = SpreadsheetWidget()
                             spreadsheet.load_data(workbook.get_sheet_data(sheet_name))
                             self.tab_widget.addTab(spreadsheet, sheet_name)
@@ -859,7 +859,7 @@ class MainWindow(QMainWindow):
 
                 # Обновление UI
                 self.tab_widget.clear()
-                for sheet_name in workbook.sheet_names:
+                for sheet_name in workbook.sheet_names():
                     spreadsheet = SpreadsheetWidget()
                     spreadsheet.load_data(workbook.get_sheet_data(sheet_name))
                     self.tab_widget.addTab(spreadsheet, sheet_name)
