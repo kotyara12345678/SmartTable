@@ -1,0 +1,23 @@
+{
+  "id": "млечный_путь",
+  "name": "🌌 Млечный путь",
+  "description": "Фиолетовые тона космоса",
+  "version": "1.0",
+  "author": "SmartTable",
+  "data": {
+    "theme": {
+      "light": {
+        "primary": "#9B59B6",
+        "secondary": "#BB86FC",
+        "accent": "#7B2CBF",
+        "background": "#0D0221"
+      },
+      "dark": {
+        "primary": "#9B59B6",
+        "secondary": "#BB86FC",
+        "accent": "#7B2CBF",
+        "background": "#0D0221"
+      }
+    }
+  }
+}

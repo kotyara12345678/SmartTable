@@ -1,0 +1,23 @@
+{
+  "id": "грозовой_шторм",
+  "name": "🌧️ Грозовой шторм",
+  "description": "Серые и синие тона грозы",
+  "version": "1.0",
+  "author": "SmartTable",
+  "data": {
+    "theme": {
+      "light": {
+        "primary": "#5B7C99",
+        "secondary": "#7A94B8",
+        "accent": "#4A6FA5",
+        "background": "#1A222E"
+      },
+      "dark": {
+        "primary": "#5B7C99",
+        "secondary": "#7A94B8",
+        "accent": "#4A6FA5",
+        "background": "#1A222E"
+      }
+    }
+  }
+}

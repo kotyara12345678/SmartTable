@@ -64,7 +64,7 @@ def build_app():
     print("[INFO] Это может занять 5-10 минут...")
     
     # Создаём папку macos
-    macos_dir = Path("macos")
+    macos_dir = Path("../../macos")
     macos_dir.mkdir(exist_ok=True)
     
     cmd = [

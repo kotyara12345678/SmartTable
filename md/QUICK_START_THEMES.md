@@ -189,7 +189,7 @@ SmartTable-master/pysheets/user_themes/
 
 | Документ | Описание |
 |----------|---------|
-| [Полная документация](user_themes/README.md) | Полное руководство |
+| [Полная документация](../pysheets/user_themes/README.md) | Полное руководство |
 | [Структура проекта](THEME_GALLERY_STRUCTURE.md) | Архитектура системы |
 | [Тестирование](TEST_THEME_GALLERY.md) | Тестовые сценарии |
 

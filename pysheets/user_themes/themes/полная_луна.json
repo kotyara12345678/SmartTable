@@ -1,0 +1,23 @@
+{
+  "id": "полная_луна",
+  "name": "🌑 Полная луна",
+  "description": "Серебристые лунные тона",
+  "version": "1.0",
+  "author": "SmartTable",
+  "data": {
+    "theme": {
+      "light": {
+        "primary": "#B8B8D1",
+        "secondary": "#D4D4E8",
+        "accent": "#9C9CAF",
+        "background": "#1F1F2E"
+      },
+      "dark": {
+        "primary": "#B8B8D1",
+        "secondary": "#D4D4E8",
+        "accent": "#9C9CAF",
+        "background": "#1F1F2E"
+      }
+    }
+  }
+}

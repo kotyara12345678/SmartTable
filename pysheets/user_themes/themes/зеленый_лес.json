@@ -1,0 +1,23 @@
+{
+  "id": "зеленый_лес",
+  "name": "🍃 Зеленый лес",
+  "description": "Спокойные зеленые тона природы",
+  "version": "1.0",
+  "author": "SmartTable",
+  "data": {
+    "theme": {
+      "light": {
+        "primary": "#228B22",
+        "secondary": "#90EE90",
+        "accent": "#3CB371",
+        "background": "#F0FFF0"
+      },
+      "dark": {
+        "primary": "#228B22",
+        "secondary": "#90EE90",
+        "accent": "#3CB371",
+        "background": "#F0FFF0"
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "подсолнухи",
+  "name": "🌻 Подсолнухи",
+  "description": "Золотистые теплые оттенки",
+  "version": "1.0",
+  "author": "SmartTable",
+  "data": {
+    "theme": {
+      "light": {
+        "primary": "#DAA520",
+        "secondary": "#FFD700",
+        "accent": "#FFA500",
+        "background": "#FFFACD"
+      },
+      "dark": {
+        "primary": "#DAA520",
+        "secondary": "#FFD700",
+        "accent": "#FFA500",
+        "background": "#FFFACD"
+      }
+    }
+  }
+}

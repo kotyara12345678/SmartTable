@@ -1,0 +1,23 @@
+{
+  "id": "рассвет",
+  "name": "🌅 Рассвет",
+  "description": "Теплые цвета утреннего рассвета",
+  "version": "1.0",
+  "author": "SmartTable",
+  "data": {
+    "theme": {
+      "light": {
+        "primary": "#FF6B6B",
+        "secondary": "#FFB366",
+        "accent": "#FFC947",
+        "background": "#FFF8F0"
+      },
+      "dark": {
+        "primary": "#FF6B6B",
+        "secondary": "#FFB366",
+        "accent": "#FFC947",
+        "background": "#FFF8F0"
+      }
+    }
+  }
+}

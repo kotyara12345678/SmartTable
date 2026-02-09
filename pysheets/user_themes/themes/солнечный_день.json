@@ -1,0 +1,23 @@
+{
+  "id": "солнечный_день",
+  "name": "☀️ Солнечный день",
+  "description": "Яркие и веселые цвета солнечного дня",
+  "version": "1.0",
+  "author": "SmartTable",
+  "data": {
+    "theme": {
+      "light": {
+        "primary": "#FFD93D",
+        "secondary": "#FFA500",
+        "accent": "#FF8C00",
+        "background": "#FFFEF5"
+      },
+      "dark": {
+        "primary": "#FFD93D",
+        "secondary": "#FFA500",
+        "accent": "#FF8C00",
+        "background": "#FFFEF5"
+      }
+    }
+  }
+}

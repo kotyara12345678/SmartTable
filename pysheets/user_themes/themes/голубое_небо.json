@@ -1,0 +1,23 @@
+{
+  "id": "голубое_небо",
+  "name": "🌙 Голубое небо",
+  "description": "Спокойные синие тона ночного неба",
+  "version": "1.0",
+  "author": "SmartTable",
+  "data": {
+    "theme": {
+      "light": {
+        "primary": "#6E7DEE",
+        "secondary": "#8B9FFF",
+        "accent": "#4D5EC4",
+        "background": "#1E2139"
+      },
+      "dark": {
+        "primary": "#6E7DEE",
+        "secondary": "#8B9FFF",
+        "accent": "#4D5EC4",
+        "background": "#1E2139"
+      }
+    }
+  }
+}

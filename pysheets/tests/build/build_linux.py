@@ -77,7 +77,7 @@ def check_appimage_tool():
         return True
     
     print("\n[INFO] Скачивание appimagetool...")
-    build_appimage_dir = Path("build_appimage")
+    build_appimage_dir = Path("../../build_appimage")
     build_appimage_dir.mkdir(exist_ok=True)
     
     url = "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
@@ -99,11 +99,11 @@ def build_appimage():
     print("[INFO] Это может занять 8-15 минут...")
     
     # Создаём папку linux
-    linux_dir = Path("linux")
+    linux_dir = Path("../../linux")
     linux_dir.mkdir(exist_ok=True)
     
     # Создаём папку build_appimage
-    build_dir = Path("build_appimage")
+    build_dir = Path("../../build_appimage")
     build_dir.mkdir(exist_ok=True)
     os.chdir(build_dir)
     
@@ -177,7 +177,7 @@ def build_appimage():
         os.chmod(dist_dir / "SmartTable.AppImage", 0o755)
         print("[OK] AppImage скопирован в linux/")
     
-    os.chdir("..")
+    os.chdir("../../..")
     return True
 
 def main():

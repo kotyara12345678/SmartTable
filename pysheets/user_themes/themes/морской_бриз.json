@@ -1,0 +1,23 @@
+{
+  "id": "морской_бриз",
+  "name": "🌊 Морской бриз",
+  "description": "Освежающие морские оттенки",
+  "version": "1.0",
+  "author": "SmartTable",
+  "data": {
+    "theme": {
+      "light": {
+        "primary": "#4DA6FF",
+        "secondary": "#87CEEB",
+        "accent": "#00CED1",
+        "background": "#F0F8FF"
+      },
+      "dark": {
+        "primary": "#4DA6FF",
+        "secondary": "#87CEEB",
+        "accent": "#00CED1",
+        "background": "#F0F8FF"
+      }
+    }
+  }
+}

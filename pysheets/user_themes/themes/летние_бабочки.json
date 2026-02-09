@@ -1,0 +1,23 @@
+{
+  "id": "летние_бабочки",
+  "name": "🦋 Летние бабочки",
+  "description": "Яркие летние краски",
+  "version": "1.0",
+  "author": "SmartTable",
+  "data": {
+    "theme": {
+      "light": {
+        "primary": "#FF1493",
+        "secondary": "#FF69B4",
+        "accent": "#FF8C00",
+        "background": "#FFFAF0"
+      },
+      "dark": {
+        "primary": "#FF1493",
+        "secondary": "#FF69B4",
+        "accent": "#FF8C00",
+        "background": "#FFFAF0"
+      }
+    }
+  }
+}

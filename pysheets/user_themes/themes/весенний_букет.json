@@ -1,0 +1,23 @@
+{
+  "id": "весенний_букет",
+  "name": "🌸 Весенний букет",
+  "description": "Нежные весенние цвета",
+  "version": "1.0",
+  "author": "SmartTable",
+  "data": {
+    "theme": {
+      "light": {
+        "primary": "#FF69B4",
+        "secondary": "#FFB6C1",
+        "accent": "#DDA0DD",
+        "background": "#FFF5F7"
+      },
+      "dark": {
+        "primary": "#FF69B4",
+        "secondary": "#FFB6C1",
+        "accent": "#DDA0DD",
+        "background": "#FFF5F7"
+      }
+    }
+  }
+}
