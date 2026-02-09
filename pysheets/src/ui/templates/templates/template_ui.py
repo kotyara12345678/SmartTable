@@ -5,6 +5,7 @@ UI компоненты для работы с шаблонами
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont
+from pathlib import Path
 
 from .template_manager import TemplateManager, ExportTemplate, TemplateField, DataPattern, CellRange
 # Убираем LogicOperation из импорта, так как он не используется в UI
@@ -299,20 +300,24 @@ class TemplateBuilderDialog(QDialog):
         name = self.name_input.text().strip()
         description = self.description_input.toPlainText().strip()
 
-        if not self.selection_range:
-            QMessageBox.warning(self, "Ошибка", "Не указан диапазон ячеек")
-            return
+        # Создаем шаблон. Если нет диапазона — сохраняем шаблон без source_range
+        if self.selection_range:
+            try:
+                source_range = CellRange(
+                    start_row=self.selection_range.get('start_row', 0),
+                    start_col=self.selection_range.get('start_col', 0),
+                    end_row=self.selection_range.get('end_row', 0),
+                    end_col=self.selection_range.get('end_col', 0)
+                )
+            except Exception:
+                source_range = None
+        else:
+            source_range = None
 
-        # Создаем шаблон
         template = ExportTemplate(
             name=name,
             description=description,
-            source_range=CellRange(
-                start_row=self.selection_range['start_row'],
-                start_col=self.selection_range['start_col'],
-                end_row=self.selection_range['end_row'],
-                end_col=self.selection_range['end_col']
-            )
+            source_range=source_range
         )
 
         # Добавляем поля из таблицы
@@ -601,3 +606,835 @@ class TemplateManagerDialog(QDialog):
         """Выбирает шаблон по двойному клику"""
         self.template_selected.emit(item.text())
         self.accept()
+
+
+class TemplateGalleryDialog(QDialog):
+    """Расширенная галерея шаблонов с визуальным отображением"""
+
+    template_selected = pyqtSignal(str)  # Сигнал с именем выбранного шаблона
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.template_manager = TemplateManager()
+        self.init_ui()
+        self.load_templates()
+
+    def init_ui(self):
+        self.setWindowTitle("Галерея шаблонов")
+        self.setFixedSize(900, 650)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
+
+        # Заголовок и поиск
+        header_layout = QHBoxLayout()
+
+        title = QLabel("Галерея шаблонов")
+        title.setStyleSheet("font-size: 16px; font-weight: bold;")
+        header_layout.addWidget(title)
+
+        header_layout.addStretch()
+
+        # Поле поиска
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("🔍 Поиск по названию...")
+        self.search_input.setMaximumWidth(250)
+        self.search_input.textChanged.connect(self.filter_templates)
+        header_layout.addWidget(self.search_input)
+
+        layout.addLayout(header_layout)
+
+        # Основной контент - два столбца
+        content_layout = QHBoxLayout()
+        content_layout.setSpacing(15)
+
+        # Левая часть - список шаблонов
+        left_layout = QVBoxLayout()
+
+        list_label = QLabel("Доступные шаблоны:")
+        list_label.setStyleSheet("font-weight: bold;")
+        left_layout.addWidget(list_label)
+
+        self.templates_list = QListWidget()
+        self.templates_list.itemSelectionChanged.connect(self.show_template_details)
+        left_layout.addWidget(self.templates_list)
+
+        content_layout.addLayout(left_layout, 1)
+
+        # Правая часть - информация о шаблоне
+        right_layout = QVBoxLayout()
+
+        info_label = QLabel("Информация о шаблоне:")
+        info_label.setStyleSheet("font-weight: bold;")
+        right_layout.addWidget(info_label)
+
+        # Карточка с информацией
+        self.info_card = QTextEdit()
+        self.info_card.setReadOnly(True)
+        self.info_card.setStyleSheet("""
+            QTextEdit {
+                background-color: #f5f5f5;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                padding: 10px;
+                font-family: 'Courier New', monospace;
+                font-size: 10pt;
+            }
+        """)
+        right_layout.addWidget(self.info_card)
+
+        content_layout.addLayout(right_layout, 1)
+
+        layout.addLayout(content_layout, 1)
+
+        # Нижние кнопки
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
+
+        import_btn = QPushButton("📥 Импортировать")
+        import_btn.clicked.connect(self.import_template)
+        button_layout.addWidget(import_btn)
+
+        export_btn = QPushButton("📤 Экспортировать")
+        export_btn.clicked.connect(self.export_template)
+        button_layout.addWidget(export_btn)
+
+        button_layout.addStretch()
+
+        cancel_btn = QPushButton("Отмена")
+        cancel_btn.clicked.connect(self.reject)
+        cancel_btn.setMinimumWidth(100)
+        button_layout.addWidget(cancel_btn)
+
+        select_btn = QPushButton("✓ Создать таблицу")
+        select_btn.clicked.connect(self.select_template_and_apply)
+        select_btn.setDefault(True)
+        select_btn.setMinimumWidth(140)
+        select_btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
+        button_layout.addWidget(select_btn)
+
+        layout.addLayout(button_layout)
+
+    def load_templates(self):
+        """Загружает список шаблонов"""
+        self.templates_list.clear()
+        template_names = sorted(self.template_manager.get_template_names())
+
+        for name in template_names:
+            item = QListWidgetItem(f"📋 {name}")
+            self.templates_list.addItem(item)
+
+    def filter_templates(self, text: str):
+        """Фильтрует шаблоны по поисковому запросу"""
+        text = text.lower()
+        for i in range(self.templates_list.count()):
+            item = self.templates_list.item(i)
+            item.setHidden(text not in item.text().lower())
+
+    def show_template_details(self):
+        """Показывает детали выбранного шаблона"""
+        current = self.templates_list.currentItem()
+        if not current:
+            self.info_card.clear()
+            return
+
+        template_name = current.text().replace("📋 ", "").strip()
+        template = self.template_manager.get_template(template_name)
+
+        if not template:
+            self.info_card.clear()
+            return
+
+        # Форматируем информацию
+        from .template_applier import TemplateApplier
+        info_text = TemplateApplier.get_template_description_text(template)
+
+        self.info_card.setPlainText(info_text)
+
+    def import_template(self):
+        """Импортирует шаблон из файла"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Импортировать шаблон",
+            "",
+            "JSON файлы (*.json)"
+        )
+
+        if file_path:
+            from pathlib import Path
+            if self.template_manager.import_template(Path(file_path), is_user_template=True):
+                QMessageBox.information(self, "Успех", "Шаблон успешно импортирован")
+                self.load_templates()
+            else:
+                QMessageBox.critical(self, "Ошибка", "Не удалось импортировать шаблон")
+
+    def export_template(self):
+        """Экспортирует выбранный шаблон"""
+        current = self.templates_list.currentItem()
+        if not current:
+            QMessageBox.warning(self, "Ошибка", "Выберите шаблон для экспорта")
+            return
+
+        template_name = current.text().replace("📋 ", "").strip()
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Экспортировать шаблон",
+            f"{template_name}.json",
+            "JSON файлы (*.json)"
+        )
+
+        if file_path:
+            from pathlib import Path
+            if self.template_manager.export_template(template_name, Path(file_path)):
+                QMessageBox.information(self, "Успех", "Шаблон успешно экспортирован")
+            else:
+                QMessageBox.critical(self, "Ошибка", "Не удалось экспортировать шаблон")
+
+    def select_template_and_apply(self):
+        """Выбирает и применяет шаблон"""
+        current = self.templates_list.currentItem()
+        if not current:
+            QMessageBox.warning(self, "Ошибка", "Выберите шаблон")
+            return
+
+        template_name = current.text().replace("📋 ", "").strip()
+        self.template_selected.emit(template_name)
+        self.accept()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+
+        # Основной контент
+        content_layout = QHBoxLayout()
+
+        # Левая часть - основные параметры
+        left_layout = QFormLayout()
+        left_layout.setSpacing(6)
+
+        # Имя поля
+        self.name_input = QLineEdit()
+        self.name_input.setText(self.field_data.get("name", ""))
+        self.name_input.setMinimumWidth(150)
+        left_layout.addRow("Имя поля:", self.name_input)
+
+        # Тип данных
+        self.type_combo = QComboBox()
+        self.type_combo.addItems([
+            "text", "number", "date", "time",
+            "email", "phone", "url", "currency", "percentage"
+        ])
+        self.type_combo.setCurrentText(self.field_data.get("pattern", "text"))
+        left_layout.addRow("Тип данных:", self.type_combo)
+
+        # Формат
+        self.format_input = QLineEdit()
+        self.format_input.setText(self.field_data.get("format_string", ""))
+        self.format_input.setPlaceholderText("Например: dd.mm.yyyy для дат")
+        left_layout.addRow("Формат:", self.format_input)
+
+        content_layout.addLayout(left_layout)
+
+        # Правая часть - дополнительные параметры
+        right_layout = QVBoxLayout()
+
+        # Ключевое поле
+        self.key_check = QCheckBox("Ключевое поле")
+        self.key_check.setChecked(self.field_data.get("is_key_field", False))
+        right_layout.addWidget(self.key_check)
+
+        # Описание
+        desc_label = QLabel("Описание:")
+        desc_label.setStyleSheet("font-weight: bold; font-size: 9pt;")
+        right_layout.addWidget(desc_label)
+
+        self.description_input = QTextEdit()
+        self.description_input.setPlainText(self.field_data.get("description", ""))
+        self.description_input.setMaximumHeight(70)
+        self.description_input.setMaximumWidth(200)
+        right_layout.addWidget(self.description_input)
+
+        content_layout.addLayout(right_layout)
+
+        # Кнопка удаления
+        delete_btn = QPushButton("🗑️ Удалить")
+        delete_btn.setMaximumWidth(100)
+        delete_btn.setStyleSheet("color: #d32f2f;")
+        delete_btn.clicked.connect(self.emit_removed)
+        content_layout.addWidget(delete_btn)
+
+        layout.addLayout(content_layout)
+
+        # Разделитель
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        layout.addWidget(separator)
+
+    def emit_removed(self):
+        """Сигнал удаления"""
+        self.removed.emit()
+
+    def get_field_data(self) -> dict:
+        """Возвращает данные поля"""
+        return {
+            "name": self.name_input.text().strip(),
+            "pattern": self.type_combo.currentText(),
+            "format_string": self.format_input.text().strip(),
+            "is_key_field": self.key_check.isChecked(),
+            "description": self.description_input.toPlainText().strip()
+        }
+
+
+class TemplateCreatorDialog(QDialog):
+    """Диалог для создания нового пользовательского шаблона"""
+
+    template_created = pyqtSignal(str)  # Сигнал с именем созданного шаблона
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.template_manager = TemplateManager()
+        self.field_widgets = []
+        self.init_ui()
+
+    def init_ui(self):
+        self.setWindowTitle("Создать новый шаблон")
+        self.setMinimumSize(900, 700)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(12)
+
+        # === Заголовок ===
+        header_label = QLabel("✨ Создание нового шаблона")
+        header_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #1976d2;")
+        layout.addWidget(header_label)
+
+        # === Основная информация ===
+        info_group = QGroupBox("Основная информация")
+        info_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 3px 0 3px;
+            }
+        """)
+        info_layout = QFormLayout()
+        info_layout.setSpacing(10)
+
+        # Название
+        self.name_input = QLineEdit()
+        self.name_input.setPlaceholderText("Введите название шаблона (обязательно)")
+        self.name_input.setMinimumHeight(35)
+        self.name_input.setStyleSheet("""
+            QLineEdit {
+                padding: 5px;
+                border: 1px solid #bbb;
+                border-radius: 3px;
+                font-size: 11pt;
+            }
+        """)
+        info_layout.addRow("Название:", self.name_input)
+
+        # Описание
+        self.description_input = QTextEdit()
+        self.description_input.setPlaceholderText("Описание шаблона и его назначение...")
+        self.description_input.setMaximumHeight(80)
+        self.description_input.setStyleSheet("""
+            QTextEdit {
+                padding: 5px;
+                border: 1px solid #bbb;
+                border-radius: 3px;
+                font-size: 10pt;
+            }
+        """)
+        info_layout.addRow("Описание:", self.description_input)
+
+        info_group.setLayout(info_layout)
+        layout.addWidget(info_group)
+
+        # === Поля шаблона ===
+        fields_header_layout = QHBoxLayout()
+        fields_header = QLabel("📋 Поля шаблона")
+        fields_header.setStyleSheet("font-weight: bold; font-size: 12pt; color: #1976d2;")
+        fields_header_layout.addWidget(fields_header)
+        fields_header_layout.addStretch()
+
+        add_field_btn = QPushButton("➕ Добавить поле")
+        add_field_btn.setMinimumWidth(120)
+        add_field_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 3px;
+                padding: 5px 10px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        add_field_btn.clicked.connect(self.add_field)
+        fields_header_layout.addWidget(add_field_btn)
+
+        layout.addLayout(fields_header_layout)
+
+        # Область для полей со скроллом
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: 1px solid #ddd;
+                border-radius: 5px;
+            }
+        """)
+
+        self.fields_container = QWidget()
+        self.fields_layout = QVBoxLayout(self.fields_container)
+        self.fields_layout.setContentsMargins(0, 0, 0, 0)
+        self.fields_layout.setSpacing(0)
+
+        scroll_area.setWidget(self.fields_container)
+        layout.addWidget(scroll_area, 1)
+
+        # Добавляем пустое поле по умолчанию
+        self.add_field()
+
+        # === Кнопки действий ===
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(12)
+
+        cancel_btn = QPushButton("Отмена")
+        cancel_btn.setMinimumWidth(100)
+        cancel_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f5f5f5;
+                border: 1px solid #bbb;
+                border-radius: 3px;
+                padding: 5px;
+            }
+        """)
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+
+        button_layout.addStretch()
+
+        reset_btn = QPushButton("⟲ Очистить все")
+        reset_btn.setMinimumWidth(100)
+        reset_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #fff3cd;
+                border: 1px solid #ffc107;
+                border-radius: 3px;
+                padding: 5px;
+            }
+        """)
+        reset_btn.clicked.connect(self.reset_fields)
+        button_layout.addWidget(reset_btn)
+
+        create_btn = QPushButton("✓ Создать шаблон")
+        create_btn.setMinimumWidth(140)
+        create_btn.setDefault(True)
+        create_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1976d2;
+                color: white;
+                border: none;
+                border-radius: 3px;
+                padding: 5px 15px;
+                font-weight: bold;
+                font-size: 11pt;
+            }
+            QPushButton:hover {
+                background-color: #1565c0;
+            }
+        """)
+        create_btn.clicked.connect(self.create_template)
+        button_layout.addWidget(create_btn)
+
+        layout.addLayout(button_layout)
+
+    def add_field(self):
+        """Добавляет новое поле"""
+        field_widget = TemplateFieldEditorWidget()
+        field_widget.removed.connect(lambda: self.remove_field(field_widget))
+        self.field_widgets.append(field_widget)
+        self.fields_layout.addWidget(field_widget)
+
+    def remove_field(self, field_widget):
+        """Удаляет поле"""
+        if len(self.field_widgets) <= 1:
+            QMessageBox.warning(self, "Ошибка", "Шаблон должен содержать минимум одно поле")
+            return
+
+        self.field_widgets.remove(field_widget)
+        field_widget.deleteLater()
+
+    def reset_fields(self):
+        """Очищает все поля"""
+        reply = QMessageBox.question(
+            self, "Подтверждение",
+            "Очистить все поля и начать заново?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            for widget in self.field_widgets:
+                widget.deleteLater()
+            self.field_widgets.clear()
+            self.add_field()
+
+    def validate_input(self) -> bool:
+        """Проверяет ввод"""
+        name = self.name_input.text().strip()
+
+        if not name:
+            QMessageBox.warning(self, "Ошибка", "Введите название шаблона")
+            return False
+
+        if name in self.template_manager.get_template_names():
+            reply = QMessageBox.question(
+                self, "Подтверждение",
+                f"Шаблон '{name}' уже существует. Перезаписать?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply == QMessageBox.No:
+                return False
+
+        # Проверяем, что все поля заполнены
+        for widget in self.field_widgets:
+            field_data = widget.get_field_data()
+            if not field_data["name"]:
+                QMessageBox.warning(self, "Ошибка", "Заполните имена всех полей")
+                return False
+
+        return True
+
+    def create_template(self):
+        """Создает новый шаблон"""
+        if not self.validate_input():
+            return
+
+        name = self.name_input.text().strip()
+        description = self.description_input.toPlainText().strip()
+
+        # Собираем поля
+        fields = []
+        for idx, widget in enumerate(self.field_widgets):
+            field_data = widget.get_field_data()
+            try:
+                field = TemplateField(
+                    name=field_data["name"],
+                    column_index=idx,
+                    pattern=DataPattern(field_data["pattern"]),
+                    format_string=field_data["format_string"],
+                    is_key_field=field_data["is_key_field"]
+                )
+                fields.append(field)
+            except ValueError:
+                field = TemplateField(
+                    name=field_data["name"],
+                    column_index=idx,
+                    pattern=DataPattern.TEXT,
+                    format_string=field_data["format_string"],
+                    is_key_field=field_data["is_key_field"]
+                )
+                fields.append(field)
+
+        # Создаем шаблон
+        template = ExportTemplate(
+            name=name,
+            description=description,
+            fields=fields,
+            source_range=CellRange(0, 0, 0, len(fields) - 1)
+        )
+        template.settings.update({
+            "auto_detect_patterns": True,
+            "preserve_formulas": False,
+            "include_headers": True,
+            "skip_empty_rows": False
+        })
+
+        # Сохраняем с флагом is_user_template=True
+        if self.template_manager.save_template(template, is_user_template=True):
+            QMessageBox.information(
+                self, "Успех",
+                f"✓ Шаблон '{name}' успешно создан и сохранен!"
+            )
+            self.template_created.emit(name)
+            self.accept()
+        else:
+            QMessageBox.critical(self, "Ошибка", "Не удалось сохранить шаблон")
+
+
+class TemplateEditorDialog(QDialog):
+    """Диалог для редактирования существующего шаблона"""
+
+    template_updated = pyqtSignal(str)  # Сигнал с именем обновленного шаблона
+
+    def __init__(self, parent=None, template_name: str = None):
+        super().__init__(parent)
+        self.template_manager = TemplateManager()
+        self.template_name = template_name
+        self.field_widgets = []
+
+        if template_name:
+            self.template = self.template_manager.get_template(template_name)
+        else:
+            # Показываем диалог выбора шаблона
+            self.show_template_selector()
+
+        if self.template:
+            self.init_ui()
+
+    def show_template_selector(self):
+        """Показывает диалог выбора шаблона для редактирования"""
+        templates = self.template_manager.get_template_names()
+
+        if not templates:
+            QMessageBox.warning(self, "Ошибка", "Нет доступных шаблонов для редактирования")
+            self.template = None
+            return
+
+        items, ok = QInputDialog.getItem(
+            self,
+            "Выберите шаблон",
+            "Шаблон для редактирования:",
+            templates,
+            0,
+            False
+        )
+
+        if ok and items:
+            self.template = self.template_manager.get_template(items)
+            self.template_name = items
+        else:
+            self.template = None
+
+    def init_ui(self):
+        self.setWindowTitle(f"Редактирование шаблона: {self.template.name}")
+        self.setMinimumSize(900, 700)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(12)
+
+        # === Заголовок ===
+        header_label = QLabel(f"✏️ Редактирование шаблона '{self.template.name}'")
+        header_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #f57c00;")
+        layout.addWidget(header_label)
+
+        # === Основная информация ===
+        info_group = QGroupBox("Основная информация")
+        info_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 3px 0 3px;
+            }
+        """)
+        info_layout = QFormLayout()
+        info_layout.setSpacing(10)
+
+        # Название (не редактируется)
+        name_label = QLabel(self.template.name)
+        name_label.setStyleSheet("font-weight: bold; color: #333;")
+        info_layout.addRow("Название:", name_label)
+
+        # Описание
+        self.description_input = QTextEdit()
+        self.description_input.setPlainText(self.template.description)
+        self.description_input.setMaximumHeight(80)
+        self.description_input.setStyleSheet("""
+            QTextEdit {
+                padding: 5px;
+                border: 1px solid #bbb;
+                border-radius: 3px;
+                font-size: 10pt;
+            }
+        """)
+        info_layout.addRow("Описание:", self.description_input)
+
+        # Статистика
+        stats = f"Создан: {self.template.created_at} | Изменен: {self.template.modified_at}"
+        stats_label = QLabel(stats)
+        stats_label.setStyleSheet("color: #666; font-size: 9pt;")
+        info_layout.addRow("", stats_label)
+
+        info_group.setLayout(info_layout)
+        layout.addWidget(info_group)
+
+        # === Поля шаблона ===
+        fields_header_layout = QHBoxLayout()
+        fields_header = QLabel("📋 Поля шаблона")
+        fields_header.setStyleSheet("font-weight: bold; font-size: 12pt; color: #f57c00;")
+        fields_header_layout.addWidget(fields_header)
+        fields_header_layout.addStretch()
+
+        add_field_btn = QPushButton("➕ Добавить поле")
+        add_field_btn.setMinimumWidth(120)
+        add_field_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 3px;
+                padding: 5px 10px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        add_field_btn.clicked.connect(self.add_field)
+        fields_header_layout.addWidget(add_field_btn)
+
+        layout.addLayout(fields_header_layout)
+
+        # Область для полей со скроллом
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: 1px solid #ddd;
+                border-radius: 5px;
+            }
+        """)
+
+        self.fields_container = QWidget()
+        self.fields_layout = QVBoxLayout(self.fields_container)
+        self.fields_layout.setContentsMargins(0, 0, 0, 0)
+        self.fields_layout.setSpacing(0)
+
+        # Загружаем существующие поля
+        for field in self.template.fields:
+            field_data = {
+                "name": field.name,
+                "pattern": field.pattern.value,
+                "format_string": field.format_string or "",
+                "is_key_field": field.is_key_field,
+                "description": ""
+            }
+            self.add_field(field_data)
+
+        scroll_area.setWidget(self.fields_container)
+        layout.addWidget(scroll_area, 1)
+
+        # === Кнопки действий ===
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(12)
+
+        cancel_btn = QPushButton("Отмена")
+        cancel_btn.setMinimumWidth(100)
+        cancel_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f5f5f5;
+                border: 1px solid #bbb;
+                border-radius: 3px;
+                padding: 5px;
+            }
+        """)
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+
+        button_layout.addStretch()
+
+        save_btn = QPushButton("💾 Сохранить изменения")
+        save_btn.setMinimumWidth(140)
+        save_btn.setDefault(True)
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f57c00;
+                color: white;
+                border: none;
+                border-radius: 3px;
+                padding: 5px 15px;
+                font-weight: bold;
+                font-size: 11pt;
+            }
+            QPushButton:hover {
+                background-color: #e65100;
+            }
+        """)
+        save_btn.clicked.connect(self.save_template)
+        button_layout.addWidget(save_btn)
+
+        layout.addLayout(button_layout)
+
+    def add_field(self, field_data: dict = None):
+        """Добавляет поле"""
+        field_widget = TemplateFieldEditorWidget(field_data)
+        field_widget.removed.connect(lambda: self.remove_field(field_widget))
+        self.field_widgets.append(field_widget)
+        self.fields_layout.addWidget(field_widget)
+
+    def remove_field(self, field_widget):
+        """Удаляет поле"""
+        if len(self.field_widgets) <= 1:
+            QMessageBox.warning(self, "Ошибка", "Шаблон должен содержать минимум одно поле")
+            return
+
+        self.field_widgets.remove(field_widget)
+        field_widget.deleteLater()
+
+    def save_template(self):
+        """Сохраняет изменения"""
+        # Проверяем, что все поля заполнены
+        for widget in self.field_widgets:
+            field_data = widget.get_field_data()
+            if not field_data["name"]:
+                QMessageBox.warning(self, "Ошибка", "Заполните имена всех полей")
+                return
+
+        # Обновляем описание
+        self.template.description = self.description_input.toPlainText().strip()
+
+        # Обновляем поля
+        self.template.fields.clear()
+        for idx, widget in enumerate(self.field_widgets):
+            field_data = widget.get_field_data()
+            try:
+                field = TemplateField(
+                    name=field_data["name"],
+                    column_index=idx,
+                    pattern=DataPattern(field_data["pattern"]),
+                    format_string=field_data["format_string"],
+                    is_key_field=field_data["is_key_field"]
+                )
+                self.template.fields.append(field)
+            except ValueError:
+                field = TemplateField(
+                    name=field_data["name"],
+                    column_index=idx,
+                    pattern=DataPattern.TEXT,
+                    format_string=field_data["format_string"],
+                    is_key_field=field_data["is_key_field"]
+                )
+                self.template.fields.append(field)
+
+        # Сохраняем
+        if self.template_manager.save_template(self.template, is_user_template=True):
+            QMessageBox.information(
+                self, "Успех",
+                f"✓ Шаблон '{self.template.name}' успешно обновлен!"
+            )
+            self.template_updated.emit(self.template.name)
+            self.accept()
+        else:
+            QMessageBox.critical(self, "Ошибка", "Не удалось сохранить шаблон")

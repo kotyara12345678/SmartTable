@@ -29,7 +29,7 @@ from pysheets.src.io.text_export import TextExporter
 from pysheets.src.ui.formula_bar import FormulaBar
 from pysheets.src.ui.spreadsheet_widget import SpreadsheetWidget
 from pysheets.src.ui.toolbar import MainToolBar, FormatToolBar, FunctionsToolBar
-from pysheets.src.utils import show_error_message
+from pysheets.src.utils import show_error_message, show_info_message
 
 
 class MainWindow(QMainWindow):
@@ -370,9 +370,16 @@ class MainWindow(QMainWindow):
         sort_action.triggered.connect(self.open_sort_for_current)
         tools_menu.addAction(sort_action)
 
-        templates_action = QAction("Шаблоны...", self)
+        templates_action = QAction("Галерея шаблонов...", self)
         templates_action.triggered.connect(self.open_templates_dialog)
         tools_menu.addAction(templates_action)
+        
+        manage_templates_action = QAction("Управление шаблонами...", self)
+        manage_templates_action.triggered.connect(self.open_templates_manager)
+        tools_menu.addAction(manage_templates_action)
+        create_template_action = QAction("📋 Создать шаблон из выделения", self)
+        create_template_action.triggered.connect(self.create_template_from_selection)
+        tools_menu.addAction(create_template_action)
 
         sort_quick_action = QAction("Сортировка (текущий лист)", self)
         sort_quick_action.triggered.connect(self.open_sort_for_current)
@@ -381,14 +388,120 @@ class MainWindow(QMainWindow):
 
 
     def open_templates_dialog(self):
-        """Открыть менеджер шаблонов"""
+        """Открыть галерею шаблонов"""
+        try:
+            from pysheets.src.ui.templates.templates.template_ui import TemplateGalleryDialog
+        except Exception as e:
+            show_error_message(self, f"Не удалось импортировать модуль шаблонов: {e}")
+            return
+        
+        dialog = TemplateGalleryDialog(self)
+        dialog.template_selected.connect(self.apply_template)
+        dialog.exec_()
+
+
+    def open_templates_manager(self):
+        """Открыть менеджер шаблонов (удаление/переименование)"""
         try:
             from pysheets.src.ui.templates.templates.template_ui import TemplateManagerDialog
-        except Exception:
-            show_error_message(self, "Не удалось импортировать модуль шаблонов")
+        except Exception as e:
+            show_error_message(self, f"Не удалось импортировать менеджер шаблонов: {e}")
             return
+
         dialog = TemplateManagerDialog(self)
         dialog.exec_()
+        dialog.exec_()
+
+    def apply_template(self, template_name: str):
+        """Применяет выбранный шаблон, создавая новую таблицу"""
+        try:
+            from pysheets.src.ui.templates.templates.template_manager import TemplateManager
+            from pysheets.src.ui.templates.templates.template_applier import TemplateApplier
+            
+            # Загружаем менеджер и получаем шаблон
+            template_manager = TemplateManager("templates", "user_templates")
+            template = template_manager.get_template(template_name)
+            
+            if not template:
+                show_error_message(self, f"Шаблон '{template_name}' не найден")
+                return
+            
+            # Создаем новый документ с структурой из шаблона
+            self.new_file()
+            
+            # Получаем активную таблицу
+            spreadsheet = self.get_current_spreadsheet()
+            if not spreadsheet:
+                show_error_message(self, "Не удалось создать новую таблицу")
+                return
+            
+            # Применяем структуру шаблона
+            template_data = TemplateApplier.apply_template_structure(template, max_rows=50)
+            
+            # Заполняем заголовки
+            headers = template_data['headers']
+            for col_idx, header in enumerate(headers):
+                try:
+                    spreadsheet.set_cell_value(0, col_idx, header)
+                except:
+                    pass
+            
+            # Показываем информацию о созданной таблице
+            info_msg = f"✓ Таблица создана из шаблона '{template_name}'\n"
+            info_msg += f"Колонки: {', '.join(headers)}\n"
+            info_msg += f"Создано {len(headers)} полей"
+            
+            QMessageBox.information(self, "Шаблон применен", info_msg)
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            show_error_message(self, f"Ошибка при применении шаблона: {e}")
+
+    def create_template_from_selection(self):
+        """Создает шаблон из выделенных колонок"""
+        try:
+            spreadsheet = self.get_current_spreadsheet()
+            if not spreadsheet:
+                show_error_message(self, "Нет активного листа")
+                return
+            
+            # Получаем диапазон выделения (если есть) и собираем данные
+            selected_ranges = spreadsheet.selectedRanges()
+            data = []
+            if selected_ranges:
+                # Берем первый выделенный диапазон
+                range_obj = selected_ranges[0]
+                start_col = range_obj.leftColumn()
+                end_col = range_obj.rightColumn()
+
+                # Собираем данные из выделённых колонок
+                for row_idx in range(spreadsheet.rowCount()):
+                    row_data = []
+                    for col_idx in range(start_col, end_col + 1):
+                        item = spreadsheet.item(row_idx, col_idx)
+                        row_data.append(item.text() if item else "")
+                    if any(row_data):  # Добавляем только не-пустые строки
+                        data.append(row_data)
+            else:
+                # Нет выделения — открываем диалог с пустыми данными, пользователь может заполнить поля вручную
+                data = []
+            
+            # Открываем диалог создания шаблона
+            try:
+                from pysheets.src.ui.templates.templates.template_ui import TemplateBuilderDialog
+            except Exception as e:
+                show_error_message(self, f"Не удалось импортировать TemplateBuilderDialog: {e}")
+                return
+            
+            dialog = TemplateBuilderDialog(self, data=data)
+            if dialog.exec_() == QDialog.Accepted:
+                show_info_message(self, "✓ Шаблон успешно создан и сохранен!")
+        
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            show_error_message(self, f"Ошибка при создании шаблона: {e}")
 
     def open_sort_for_current(self):
         """Открывает диалог сортировки для текущего листа"""

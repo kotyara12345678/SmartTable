@@ -236,19 +236,22 @@ class EnhancedJSONEncoder(json.JSONEncoder):
 
 
 class TemplateManager:
-    """Менеджер шаблонов"""
+    """Менеджер шаблонов с поддержкой встроенных и пользовательских шаблонов"""
 
-    def __init__(self, templates_dir: str = "templates"):
+    def __init__(self, templates_dir: str = "templates", user_templates_dir: str = "user_templates"):
         self.templates_dir = Path(templates_dir)
+        self.user_templates_dir = Path(user_templates_dir)
         self.templates_dir.mkdir(exist_ok=True)
+        self.user_templates_dir.mkdir(exist_ok=True)
         self.current_template: Optional[ExportTemplate] = None
         self.templates: Dict[str, ExportTemplate] = {}
         self.load_templates()
 
     def load_templates(self):
-        """Загружает все шаблоны из папки"""
+        """Загружает все шаблоны из обеих папок (встроенные и пользовательские)"""
         self.templates.clear()
 
+        # Загружаем встроенные шаблоны
         for file in self.templates_dir.glob("*.json"):
             try:
                 with open(file, 'r', encoding='utf-8') as f:
@@ -256,18 +259,34 @@ class TemplateManager:
 
                 template = ExportTemplate.from_dict(data)
                 self.templates[template.name] = template
-                print(f"Загружен шаблон: {template.name}")
+                print(f"✓ Загружен встроенный шаблон: {template.name}")
 
             except json.JSONDecodeError as e:
-                print(f"Ошибка синтаксиса JSON в файле {file}: {e}")
-                # Пытаемся починить поврежденный JSON
+                print(f"✗ Ошибка синтаксиса JSON в файле {file}: {e}")
                 self._try_fix_json(file)
             except Exception as e:
-                print(f"Ошибка загрузки шаблона {file}: {e}")
+                print(f"✗ Ошибка загрузки шаблона {file}: {e}")
+
+        # Загружаем пользовательские шаблоны
+        for file in self.user_templates_dir.glob("templates/*.json"):
+            try:
+                with open(file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+
+                template = ExportTemplate.from_dict(data)
+                # Если пользовательский шаблон имеет то же имя, то переписываем встроенный
+                self.templates[template.name] = template
+                print(f"✓ Загружен пользовательский шаблон: {template.name}")
+
+            except json.JSONDecodeError as e:
+                print(f"✗ Ошибка синтаксиса JSON в файле {file}: {e}")
+                self._try_fix_json(file)
+            except Exception as e:
+                print(f"✗ Ошибка загрузки шаблона {file}: {e}")
 
         # Если шаблонов не найдено, создаём несколько примеров по умолчанию
         if not self.templates:
-            print("Шаблоны не найдены — создаём шаблоны по умолчанию")
+            print("⚠ Шаблоны не найдены — создаём шаблоны по умолчанию")
             self.create_default_templates()
 
     def _try_fix_json(self, file_path: Path):
@@ -316,26 +335,54 @@ class TemplateManager:
             except:
                 pass
 
-    def save_template(self, template: ExportTemplate) -> bool:
-        """Сохраняет шаблон"""
+    def save_template(self, template: ExportTemplate, is_user_template: bool = True) -> bool:
+        """
+        Сохраняет шаблон
+        
+        Args:
+            template: Объект шаблона для сохранения
+            is_user_template: Если True, сохраняет в user_templates иначе в встроенные
+        """
         try:
             template.modified_at = datetime.now().isoformat()
 
-            filename = self.templates_dir / f"{template.name}.json"
+            # Выбираем директорию
+            if is_user_template:
+                target_dir = self.user_templates_dir / "templates"
+                target_dir.mkdir(parents=True, exist_ok=True)
+            else:
+                target_dir = self.templates_dir
+
+            filename = target_dir / f"{template.name}.json"
 
             # Используем кастомный энкодер для сериализации
             with open(filename, 'w', encoding='utf-8') as f:
-                # Преобразуем шаблон в словарь с помощью нашего метода
                 data = template.to_dict()
-                # Сериализуем с использованием кастомного энкодера
                 json.dump(data, f, cls=EnhancedJSONEncoder, ensure_ascii=False, indent=2)
 
+            # Сохраняем метаданные для пользовательских шаблонов
+            if is_user_template:
+                metadata_dir = self.user_templates_dir / "metadata"
+                metadata_dir.mkdir(parents=True, exist_ok=True)
+                metadata_file = metadata_dir / f"{template.name}.json"
+                
+                metadata = {
+                    "name": template.name,
+                    "description": template.description,
+                    "created_at": template.created_at,
+                    "fields_count": len(template.fields),
+                    "tags": []
+                }
+                
+                with open(metadata_file, 'w', encoding='utf-8') as f:
+                    json.dump(metadata, f, ensure_ascii=False, indent=2)
+
             self.templates[template.name] = template
-            print(f"Шаблон сохранен: {template.name}")
+            print(f"✓ Шаблон сохранен: {template.name}")
             return True
 
         except Exception as e:
-            print(f"Ошибка сохранения шаблона: {e}")
+            print(f"✗ Ошибка сохранения шаблона: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -405,5 +452,64 @@ class TemplateManager:
                 json.load(f)
             return True
         except Exception as e:
-            print(f"Файл {file_path} невалиден: {e}")
+            print(f"✗ Файл {file_path} невалиден: {e}")
             return False
+
+    def export_template(self, template_name: str, output_path: Path) -> bool:
+        """Экспортирует шаблон в JSON файл"""
+        try:
+            template = self.get_template(template_name)
+            if not template:
+                print(f"✗ Шаблон '{template_name}' не найден")
+                return False
+
+            with open(output_path, 'w', encoding='utf-8') as f:
+                data = template.to_dict()
+                json.dump(data, f, cls=EnhancedJSONEncoder, ensure_ascii=False, indent=2)
+
+            print(f"✓ Шаблон экспортирован: {output_path}")
+            return True
+
+        except Exception as e:
+            print(f"✗ Ошибка экспорта шаблона: {e}")
+            return False
+
+    def import_template(self, file_path: Path, is_user_template: bool = True) -> bool:
+        """Импортирует шаблон из JSON файла"""
+        try:
+            if not self.validate_template_file(file_path):
+                return False
+
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            template = ExportTemplate.from_dict(data)
+            return self.save_template(template, is_user_template)
+
+        except Exception as e:
+            print(f"✗ Ошибка импорта шаблона: {e}")
+            return False
+
+    def get_template_info(self, template_name: str) -> Dict[str, Any]:
+        """Возвращает подробную информацию о шаблоне"""
+        template = self.get_template(template_name)
+        if not template:
+            return {}
+
+        return {
+            "name": template.name,
+            "description": template.description,
+            "created_at": template.created_at,
+            "modified_at": template.modified_at,
+            "fields_count": len(template.fields),
+            "fields": [
+                {
+                    "name": f.name,
+                    "type": f.pattern.value,
+                    "is_key": f.is_key_field
+                }
+                for f in template.fields
+            ],
+            "rules_count": len(template.logic_rules),
+            "settings": template.settings
+        }
