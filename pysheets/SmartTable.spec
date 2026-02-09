@@ -1,20 +1,30 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import sys
+import os
+from pathlib import Path
+
+# Определяем пути
+pysheets_dir = Path(__file__).parent.absolute()
+
 block_cipher = None
 
 a = Analysis(
-    ['main.py'],
-    pathex=[],
+    [str(pysheets_dir / 'main.py')],
+    pathex=[str(pysheets_dir)],
     binaries=[],
     datas=[
-        ('assets', 'assets'),
-        ('templates', 'templates'),
-        ('src', 'pysheets/src'),
+        (str(pysheets_dir / 'assets'), 'assets'),
+        (str(pysheets_dir / 'templates'), 'templates'),
+        (str(pysheets_dir / 'src'), 'pysheets/src'),
     ],
     hiddenimports=[
         'PyQt5.QtCore',
         'PyQt5.QtGui',
         'PyQt5.QtWidgets',
+        'pysheets.src.ui',
+        'pysheets.src.core',
+        'pysheets.src.io',
     ],
     hookspath=[],
     runtime_hooks=[],

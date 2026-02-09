@@ -161,6 +161,12 @@ def build_appimage():
     original_dir = os.getcwd()
     os.chdir(build_dir)
     
+    # Копируем spec файл в рабочую папку сборки
+    spec_file = project_root / "SmartTable.spec"
+    if spec_file.exists():
+        shutil.copy(str(spec_file), str(build_dir / "SmartTable.spec"))
+        print("[OK] spec файл скопирован в рабочую папку")
+    
     # Создаём структуру AppDir
     appdir = Path("SmartTable.AppDir")
     (appdir / "usr" / "bin").mkdir(parents=True, exist_ok=True)
@@ -180,20 +186,20 @@ def build_appimage():
     
     # Собираем с PyInstaller используя spec файл
     main_py = project_root / "main.py"
-    spec_file = project_root / "SmartTable.spec"
+    spec_file_local = Path("SmartTable.spec")
     
-    if not spec_file.exists():
-        print("[ERROR] SmartTable.spec файл не найден!")
+    if not spec_file_local.exists():
+        print(f"[ERROR] SmartTable.spec файл не найден в рабочей папке")
         os.chdir(original_dir)
         return False
     
-    # Переходим в папку pysheets для сборки
-    os.chdir(project_root)
+    print(f"[INFO] Используем spec файл: SmartTable.spec")
+    
     cmd = [
         "python3", "-m", "PyInstaller",
         "--clean",
         "--noconfirm",
-        str(spec_file),
+        "SmartTable.spec",
     ]
     
     if not run_command(cmd, "Сборка с помощью PyInstaller"):
