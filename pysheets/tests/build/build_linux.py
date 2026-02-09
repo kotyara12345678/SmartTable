@@ -66,27 +66,36 @@ def install_dependencies():
     original_dir = os.getcwd()
     os.chdir(Path(__file__).parent / "../..")
     
+    print("\n[INFO] Ожидание освобождения dpkg...")
+    # Дожидаемся пока dpkg освободится
+    for i in range(30):  # 30 попыток с 2-секундной задержкой
+        result = subprocess.run(["lsof", "/var/lib/apt/lists/lock"], 
+                              capture_output=True, text=True)
+        if result.returncode != 0:  # Файл не заблокирован
+            print("[INFO] dpkg освобожден, продолжаем...")
+            break
+        print(f"[INFO] dpkg ещё заблокирован... ({i+1}/30)")
+        subprocess.run(["sleep", "2"])
+    
     print("\n[INFO] Очистка pip кеша...")
     run_command(["pip3", "cache", "purge"], "Очистка pip кеша", check=False)
     
     commands = [
         (["apt-get", "update"], "Обновление apt"),
-        (["apt-get", "install", "-y", "python3-pip"], "Установка pip"),
-        (["apt-get", "install", "-y", "python3-venv"], "Установка venv"),
-        (["apt-get", "install", "-y", "python3-dev"], "Установка python3-dev"),
-        (["apt-get", "install", "-y", "libqt5gui5"], "Установка libqt5gui5"),
+        (["apt-get", "install", "-y", "--no-install-recommends", "python3-pip"], "Установка pip"),
+        (["apt-get", "install", "-y", "--no-install-recommends", "python3-venv"], "Установка venv"),
+        (["apt-get", "install", "-y", "--no-install-recommends", "python3-dev"], "Установка python3-dev"),
+        (["apt-get", "install", "-y", "--no-install-recommends", "libqt5gui5"], "Установка libqt5gui5"),
         (["pip3", "install", "--upgrade", "--force-reinstall", "pip"], "Обновление pip"),
         (["pip3", "install", "--force-reinstall", "-r", "requirements.txt"], "Переустановка зависимостей"),
         (["pip3", "install", "pyinstaller"], "Установка PyInstaller"),
     ]
     
-    result = True
     for cmd, desc in commands:
-        if not run_command(cmd, desc, check=False):
-            print(f"[WARNING] {desc} завершилась с ошибкой, продолжаем...")
+        run_command(cmd, desc, check=False)
     
     os.chdir(original_dir)
-    return result
+    return True
 
 def check_appimage_tool():
     """Проверить/скачать appimagetool"""

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Главный файл приложения SmartTable
-Простой табличный редактор с поддержкой Excel
+Main entry point for SmartTable application
+Simple spreadsheet editor with Excel support
 """
 
 import sys
@@ -20,19 +20,19 @@ sys.path.insert(0, str(current_dir))
 try:
     from pysheets.src.ui.main_window import MainWindow
 except ImportError as e:
-    print(f"Ошибка импорта: {e}")
-    print("Создаем базовую структуру...")
+    print("Error importing MainWindow: " + str(e))
+    print("Creating basic structure...")
 
     class SimpleSpreadsheet(QMainWindow):
         def __init__(self):
             super().__init__()
-            self.setWindowTitle("SmartTable - Простой редактор")
+            self.setWindowTitle("SmartTable - Simple editor")
             self.setGeometry(100, 100, 1200, 800)
     MainWindow = SimpleSpreadsheet
 
 
 def main():
-    """Точка входа приложения"""
+    """Application entry point"""
     app = QApplication(sys.argv)
 
     app.setApplicationName("SmartTable")
@@ -47,8 +47,8 @@ def main():
     except Exception as e:
         QMessageBox.critical(
             None,
-            "Ошибка запуска",
-            f"Не удалось создать главное окно:\n{str(e)}"
+            "Launch Error",
+            f"Failed to create main window:\n{str(e)}"
         )
         return 1
 
