@@ -361,21 +361,21 @@ Terminal=false
     
     print("[INFO] Исходный код подготовлен к сборке")
     
-    print("[DEBUG] Проверка наличия spec файла: {0}".format(spec_file_local))
-    print("[DEBUG] Spec файл существует: {0}".format(spec_file_local.exists()))
+    print("[DEBUG] Проверка наличия spec файла: {0}".format(spec_file_local)) # type: ignore
+    print("[DEBUG] Spec файл существует: {0}".format(spec_file_local.exists())) # type: ignore
     
-    if not spec_file_local.exists():
+    if not spec_file_local.exists(): # type: ignore
         print("[ERROR] SmartTable.spec файл не найден в рабочей папке {0}".format(build_dir))
         os.chdir(original_dir)
         return False
     
-    print("[INFO] Используем spec файл: {0}".format(spec_file_local))
+    print("[INFO] Используем spec файл: {0}".format(spec_file_local)) # type: ignore
     
     cmd = [
         "python3", "-m", "PyInstaller",
         "--clean",
         "--noconfirm",
-        str(spec_file_local.absolute()),
+        str(spec_file_local.absolute()), # type: ignore
     ]
     
     if not run_command(cmd, "Сборка с помощью PyInstaller"):
