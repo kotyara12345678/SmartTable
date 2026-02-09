@@ -153,14 +153,14 @@ def build_appimage():
     # Определяем базовую папку проекта
     script_dir = Path(__file__).parent
     project_root = script_dir / "../.."  # pysheets папка
-    pysheets_root = project_root.parent  # SmartTable папка
+    project_root = project_root.resolve()  # Получаем абсолютный путь
     
     # Создаём папку linux
-    linux_dir = pysheets_root / "pysheets" / "linux"
+    linux_dir = project_root / "linux"
     linux_dir.mkdir(exist_ok=True, parents=True)
     
     # Создаём папку build_appimage
-    build_dir = pysheets_root / "pysheets" / "build_appimage"
+    build_dir = project_root / "build_appimage"
     build_dir.mkdir(exist_ok=True, parents=True)
     
     original_dir = os.getcwd()
@@ -171,9 +171,11 @@ def build_appimage():
     if spec_file.exists():
         shutil.copy(str(spec_file), str(build_dir / "SmartTable.spec"))
         print("[OK] spec файл скопирован в рабочую папку")
+    else:
+        print("[WARNING] SmartTable.spec не найден в {0}".format(project_root))
     
     # Создаём структуру AppDir
-    appdir = Path("SmartTable.AppDir")
+    appdir = (build_dir / "SmartTable.AppDir").resolve()
     (appdir / "usr" / "bin").mkdir(parents=True, exist_ok=True)
     (appdir / "usr" / "share" / "applications").mkdir(parents=True, exist_ok=True)
     (appdir / "usr" / "share" / "icons").mkdir(parents=True, exist_ok=True)
@@ -182,10 +184,18 @@ def build_appimage():
     assets_icon = project_root / "assets" / "icons" / "app_icon.ico"
     desktop_file = project_root / "SmartTable.desktop"
     
+    print("[DEBUG] project_root: {0}".format(project_root))
+    print("[DEBUG] desktop_file: {0}".format(desktop_file))
+    print("[DEBUG] desktop_file exists: {0}".format(desktop_file.exists()))
+    
     if assets_icon.exists():
         shutil.copy(str(assets_icon), str(appdir / "usr" / "share" / "icons/"))
+        print("[OK] Иконка скопирована")
     if desktop_file.exists():
         shutil.copy(str(desktop_file), str(appdir / "usr" / "share" / "applications/"))
+        print("[OK] Desktop файл скопирован")
+    else:
+        print("[WARNING] Desktop файл не найден: {0}".format(desktop_file))
     
     print("[INFO] Структура AppDir создана")
     
