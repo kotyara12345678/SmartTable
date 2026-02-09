@@ -56,12 +56,20 @@ def install_dependencies():
     
     # Сначала скачиваем и устанавливаем pip для Python 3.13
     print("\n[INFO] Скачивание get-pip.py для установки pip в Python 3.13...")
-    get_pip_cmd = ["sh", "-c", "curl https://bootstrap.pypa.io/get-pip.py | python3.13"]
-    if not run_command(get_pip_cmd, "Установка pip для Python 3.13", check=False):
-        # Если curl не работает, попробуем wget
-        print("[INFO] Пробуем альтернативный способ через wget...")
-        wget_cmd = ["wget", "-qO", "-", "https://bootstrap.pypa.io/get-pip.py"]
-        run_command(wget_cmd + ["| python3.13"], "Установка pip через wget", check=False)
+    
+    # Скачиваем get-pip.py
+    get_pip_path = "/tmp/get-pip.py"
+    download_cmd = ["wget", "https://bootstrap.pypa.io/get-pip.py", "-O", get_pip_path]
+    if not run_command(download_cmd, "Скачивание get-pip.py", check=False):
+        # Если wget не работает, попробуем curl
+        print("[INFO] Пробуем curl...")
+        download_cmd = ["curl", "https://bootstrap.pypa.io/get-pip.py", "-o", get_pip_path]
+        run_command(download_cmd, "Скачивание get-pip.py через curl", check=False)
+    
+    # Устанавливаем pip
+    if Path(get_pip_path).exists():
+        install_pip_cmd = ["python3.13", get_pip_path]
+        run_command(install_pip_cmd, "Установка pip в Python 3.13")
     
     commands = [
         (["python3.13", "-m", "pip", "install", "--upgrade", "pip"], "Обновление pip"),
