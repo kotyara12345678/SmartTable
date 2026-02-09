@@ -55,10 +55,9 @@ def install_dependencies():
     os.chdir(Path(__file__).parent / "../..")
     
     commands = [
-        (["python3.13", "-m", "ensurepip", "--upgrade"], "Установка pip для Python 3.13"),
-        (["pip3.13", "install", "--upgrade", "pip"], "Обновление pip"),
-        (["pip3.13", "install", "-r", "requirements.txt"], "Установка зависимостей"),
-        (["pip3.13", "install", "pyinstaller"], "Установка PyInstaller"),
+        (["python3.13", "-m", "pip", "install", "--upgrade", "pip"], "Обновление pip"),
+        (["python3.13", "-m", "pip", "install", "-r", "requirements.txt"], "Установка зависимостей"),
+        (["python3.13", "-m", "pip", "install", "pyinstaller"], "Установка PyInstaller"),
     ]
     
     result = True
