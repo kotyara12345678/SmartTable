@@ -54,6 +54,15 @@ def install_dependencies():
     original_dir = os.getcwd()
     os.chdir(Path(__file__).parent / "../..")
     
+    # Сначала скачиваем и устанавливаем pip для Python 3.13
+    print("\n[INFO] Скачивание get-pip.py для установки pip в Python 3.13...")
+    get_pip_cmd = ["sh", "-c", "curl https://bootstrap.pypa.io/get-pip.py | python3.13"]
+    if not run_command(get_pip_cmd, "Установка pip для Python 3.13", check=False):
+        # Если curl не работает, попробуем wget
+        print("[INFO] Пробуем альтернативный способ через wget...")
+        wget_cmd = ["wget", "-qO", "-", "https://bootstrap.pypa.io/get-pip.py"]
+        run_command(wget_cmd + ["| python3.13"], "Установка pip через wget", check=False)
+    
     commands = [
         (["python3.13", "-m", "pip", "install", "--upgrade", "pip"], "Обновление pip"),
         (["python3.13", "-m", "pip", "install", "-r", "requirements.txt"], "Установка зависимостей"),
