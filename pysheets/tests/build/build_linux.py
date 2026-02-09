@@ -55,9 +55,9 @@ def install_dependencies():
     os.chdir(Path(__file__).parent / "../..")
     
     commands = [
-        (["python3", "-m", "pip", "install", "--upgrade", "pip"], "Обновление pip"),
-        (["python3", "-m", "pip", "install", "-r", "requirements.txt"], "Установка зависимостей"),
-        (["python3", "-m", "pip", "install", "pyinstaller"], "Установка PyInstaller"),
+        (["python3.13", "-m", "pip", "install", "--upgrade", "pip"], "Обновление pip"),
+        (["python3.13", "-m", "pip", "install", "-r", "requirements.txt"], "Установка зависимостей"),
+        (["python3.13", "-m", "pip", "install", "pyinstaller"], "Установка PyInstaller"),
     ]
     
     result = True
@@ -144,7 +144,7 @@ def build_appimage():
     # Собираем с PyInstaller
     main_py = project_root / "main.py"
     cmd = [
-        "python3", "-m", "PyInstaller",
+        "python3.13", "-m", "PyInstaller",
         "--onefile",
         "--name=SmartTable",
         f"--add-data={project_root / 'assets'}:assets",
