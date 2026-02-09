@@ -55,8 +55,8 @@ def check_python():
     """Проверить версию Python"""
     version = sys.version_info
     print(f"[INFO] Python версия: {version.major}.{version.minor}.{version.micro}")
-    if version.major < 3 or (version.major == 3 and version.minor < 8):
-        print("[ERROR] Требуется Python 3.8 или выше!")
+    if version.major < 3:
+        print("[ERROR] Требуется Python 3+!")
         return False
     return True
 
@@ -66,12 +66,21 @@ def install_dependencies():
     original_dir = os.getcwd()
     os.chdir(Path(__file__).parent / "../..")
     
+    # Проверяем версию Python и выбираем нужный requirements
+    version = sys.version_info
+    if version.major == 3 and version.minor < 8:
+        requirements_file = "requirements-min.txt"
+        print(f"\n[WARNING] Python {version.major}.{version.minor} обнаружена")
+        print("[INFO] Используем совместимые версии из requirements-min.txt")
+    else:
+        requirements_file = "requirements.txt"
+        print(f"\n[INFO] Python {version.major}.{version.minor} - используем requirements.txt")
+    
     print("\n[INFO] Ожидание освобождения dpkg...")
-    # Дожидаемся пока dpkg освободится
-    for i in range(30):  # 30 попыток с 2-секундной задержкой
+    for i in range(30):
         result = subprocess.run(["lsof", "/var/lib/apt/lists/lock"], 
                               capture_output=True, text=True)
-        if result.returncode != 0:  # Файл не заблокирован
+        if result.returncode != 0:
             print("[INFO] dpkg освобожден, продолжаем...")
             break
         print(f"[INFO] dpkg ещё заблокирован... ({i+1}/30)")
@@ -87,7 +96,7 @@ def install_dependencies():
         (["apt-get", "install", "-y", "--no-install-recommends", "python3-dev"], "Установка python3-dev"),
         (["apt-get", "install", "-y", "--no-install-recommends", "libqt5gui5"], "Установка libqt5gui5"),
         (["pip3", "install", "--upgrade", "--force-reinstall", "pip"], "Обновление pip"),
-        (["pip3", "install", "--force-reinstall", "-r", "requirements.txt"], "Переустановка зависимостей"),
+        (["pip3", "install", "--force-reinstall", "-r", requirements_file], f"Установка зависимостей из {requirements_file}"),
         (["pip3", "install", "pyinstaller"], "Установка PyInstaller"),
     ]
     
