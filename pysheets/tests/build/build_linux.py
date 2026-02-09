@@ -169,27 +169,17 @@ def build_appimage():
     
     print("[INFO] Структура AppDir создана")
     
-    # Собираем с PyInstaller
+    # Собираем с PyInstaller БЕЗ анализа кода
     main_py = project_root / "main.py"
     cmd = [
         "python3", "-m", "PyInstaller",
         "--onefile",
+        "--windowed",
+        "--noconfirm",
+        "--clean",
         "--name=SmartTable",
-        f"--add-data={project_root / 'assets'}:assets",
-        f"--add-data={project_root / 'templates'}:templates",
-        "--hidden-import=pysheets.src.ui.main_window",
-        "--hidden-import=pysheets.src.ui.spreadsheet_widget",
-        "--hidden-import=pysheets.src.core.cell",
-        "--hidden-import=pysheets.src.core.formula_engine",
-        "--hidden-import=pysheets.src.utils.validators",
-        "--hidden-import=pysheets.src.io.odt_export",
-        "--hidden-import=pysheets.src.io.print_handler",
-        "--hidden-import=pysheets.src.io.json_export",
-        "--hidden-import=pysheets.src.io.html_export",
-        "--hidden-import=pysheets.src.io.xml_export",
-        "--hidden-import=pysheets.src.io.markdown_export",
-        "--hidden-import=pysheets.src.io.sql_export",
-        "--hidden-import=pysheets.src.io.text_export",
+        "--collect-all=pysheets",
+        "--collect-all=PyQt5",
         str(main_py),
     ]
     
