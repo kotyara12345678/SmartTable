@@ -96,7 +96,7 @@ def install_dependencies():
         (["apt-get", "install", "-y", "--no-install-recommends", "python3-dev"], "Установка python3-dev"),
         (["apt-get", "install", "-y", "--no-install-recommends", "libqt5gui5"], "Установка libqt5gui5"),
         (["pip3", "install", "--upgrade", "--force-reinstall", "pip"], "Обновление pip"),
-        ("pip3", "install", "--force-reinstall", "-r", requirements_file], "Установка зависимостей из {0}".format(requirements_file)),
+        (["pip3", "install", "--force-reinstall", "-r", requirements_file], "Установка зависимостей из {0}".format(requirements_file)),
         (["pip3", "install", "pyinstaller"], "Установка PyInstaller"),
     ]
     
