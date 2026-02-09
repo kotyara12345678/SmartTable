@@ -50,9 +50,10 @@ class MainWindow(QMainWindow):
         # Загружаем сохраненную тему
         saved_theme = self.settings.value("theme")
         saved_color = self.settings.value("theme_color")
+        saved_theme_mode = self.settings.value("theme_mode", "light")
 
         self.current_theme = saved_theme if saved_theme else "system"
-        self.current_theme_mode = "light"  # 'light' или 'dark' для галереи
+        self.current_theme_mode = saved_theme_mode  # Загружаем сохраненный режим
         if saved_color:
             self.app_theme_color = QColor(saved_color)
         else:
@@ -181,14 +182,15 @@ class MainWindow(QMainWindow):
         self.ai_chat_widget.setMinimumWidth(300)
         self.ai_chat_widget.hide()
 
-        # Создаем разделитель только с таблицей и AI чатом
+        # Создаем разделитель 
+        # Создаем разделитель 
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(self.tab_widget)
         splitter.addWidget(self.ai_chat_widget)
         splitter.setCollapsible(1, True)
 
         # Начальные размеры (больше места для таблицы)
-        splitter.setSizes([1000, 350])
+        splitter.setSizes([1200, 350])
 
         main_area_layout.addWidget(splitter)
         main_layout.addWidget(main_area, 1)
@@ -290,13 +292,16 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
+        # Меню "Настройки"
+        settings_menu = file_menu.addMenu("⚙️ Настройки")
+
         theme_action = QAction("Настроить тему...", self)
         theme_action.triggered.connect(self.show_theme_settings)
-        file_menu.addAction(theme_action)
+        settings_menu.addAction(theme_action)
 
         gallery_action = QAction("Галерея тем...", self)
         gallery_action.triggered.connect(self.open_theme_gallery)
-        file_menu.addAction(gallery_action)
+        settings_menu.addAction(gallery_action)
 
         file_menu.addSeparator()
 
@@ -741,29 +746,44 @@ class MainWindow(QMainWindow):
 
     def on_function_selected(self, function: str):
         """Обработка выбора функции"""
+        print(f"[DEBUG_FUNC] Функция выбрана: {function}")
         spreadsheet = self.get_current_spreadsheet()
+        if not spreadsheet:
+            print(f"[ERROR] Нет открытой таблицы!")
+            self.status_bar.showMessage("Ошибка: нет открытой таблицы")
+            return
+        
         if not function or function == "Функции...":
             return
 
+        current_row = spreadsheet.currentRow()
+        current_col = spreadsheet.currentColumn()
+        print(f"[DEBUG_FUNC] Текущая ячейка: ({current_row}, {current_col})")
+        
+        # Пытаемся получить выделённый диапазон
         selected_range = spreadsheet.get_selection_range()
+        print(f"[DEBUG_FUNC] Выделённый диапазон: {selected_range}")
 
-        if selected_range:
+        current_cell_ref = f"{chr(65 + current_col)}{current_row + 1}"
+
+        if selected_range and selected_range != current_cell_ref:
+            # Если выделен диапазон (не просто одна ячейка) - используем его
             formula = f"={function}({selected_range})"
-
-            # Вставляем результат в текущую выделённую ячейку
-            current_row = spreadsheet.currentRow()
-            current_col = spreadsheet.currentColumn()
-
-            # set_cell_value будет сам вычислять формулу и обновлять отображение
-            spreadsheet.set_cell_value(current_row, current_col, formula)
-
-            cell_ref = f"{chr(65 + current_col)}{current_row + 1}"
-            self.formula_bar.set_cell_reference(cell_ref)
-            self.formula_bar.set_formula(formula)
-
-            spreadsheet.setCurrentCell(current_row, current_col)
+            print(f"[DEBUG_FUNC] Вставляю формулу с диапазоном: {formula}")
         else:
-            self.formula_bar.insert_function(function)
+            # Если нет выделения - показываем ошибку
+            self.status_bar.showMessage(f"Выберите диапазон ячеек перед использованием функции {function}")
+            return
+
+        # Вставляем в текущую ячейку
+        spreadsheet.set_cell_value(current_row, current_col, formula)
+
+        self.formula_bar.set_cell_reference(current_cell_ref)
+        self.formula_bar.set_formula(formula)
+
+        spreadsheet.setCurrentCell(current_row, current_col)
+        self.status_bar.showMessage(f"Добавлена функция: {function}")
+
 
     def on_format_selected(self, format_type: str):
         """Обработка выбора формата"""
@@ -1349,11 +1369,21 @@ class MainWindow(QMainWindow):
                     print(f"[MAIN apply_theme] Все виджеты обновлены")
 
             if hasattr(self, 'ai_chat_widget'):
-                self.ai_chat_widget.update_theme(theme_name, color)
+                # Для галереи передаём режим (light/dark)
+                if theme_name == 'gallery' and hasattr(self, 'current_theme_mode'):
+                    self.ai_chat_widget.update_theme(theme_name, color, self.current_theme_mode)
+                else:
+                    self.ai_chat_widget.update_theme(theme_name, color)
 
             self.settings.setValue("theme", theme_name)
             if color is not None:
                 self.settings.setValue("theme_color", color.name())
+            # Сохраняем theme_mode (для обычных тем это 'light' или 'dark')
+            if theme_name in ['light', 'dark', 'system']:
+                self.current_theme_mode = theme_name
+                self.settings.setValue("theme_mode", theme_name)
+            elif theme_name == 'gallery' and hasattr(self, 'current_theme_mode'):
+                self.settings.setValue("theme_mode", self.current_theme_mode)
             
             print(f"[MAIN apply_theme] Завершено для {theme_name}")
             
@@ -1363,12 +1393,37 @@ class MainWindow(QMainWindow):
             traceback.print_exc()
 
     def show_theme_settings(self):
-        """Показывает диалог настроек темы"""
-        from pysheets.src.ui.themes import ThemeSettingsDialog
-        dialog = ThemeSettingsDialog(self)
-        if dialog.exec_() == QDialog.Accepted:
-            settings = dialog.get_settings()
-            self.apply_theme(settings['theme'], settings['color'])
+        """Показывает встроенное окно настроек темы в углу главного окна"""
+        from pysheets.src.ui.themes import EmbeddedSettingsPanel
+        
+        # Если уже есть открытая панель - закрываем её
+        if hasattr(self, 'settings_panel') and self.settings_panel:
+            self.settings_panel.close_panel()
+        
+        # Создаём новую панель
+        self.settings_panel = EmbeddedSettingsPanel(self)
+        
+        # Подключаем сигналы
+        self.settings_panel.settings_changed.connect(lambda s: self.apply_theme(s['theme'], s['color']))
+        self.settings_panel.closed.connect(lambda: setattr(self, 'settings_panel', None))
+        
+        # Позиционируем панель в верхнем правом углу главного окна
+        main_rect = self.geometry()
+        panel_width = 320
+        panel_height = 400
+        
+        # Выбираем позицию: если есть место справа - там, иначе слева
+        if main_rect.width() > panel_width + 50:
+            x = main_rect.x() + main_rect.width() - panel_width - 20
+        else:
+            x = main_rect.x() + 20
+        
+        y = main_rect.y() + 20
+        
+        self.settings_panel.move(x, y)
+        self.settings_panel.show()
+        self.settings_panel.raise_()
+        self.settings_panel.setFocus()
 
     def apply_gallery_theme_full(self, theme_info):
         """Применяет полную тему из галереи"""
@@ -1409,6 +1464,12 @@ class MainWindow(QMainWindow):
                 self.current_theme = 'gallery'
                 self.current_theme_mode = base_mode  # 'light' или 'dark'
                 self.app_theme_color = color
+                
+                # Сохраняем тему, цвет и режим
+                self.settings.setValue("theme", self.current_theme)
+                self.settings.setValue("theme_color", color.name())
+                self.settings.setValue("theme_mode", base_mode)
+                
                 print(f"[MAIN] Вызываем apply_theme()")
                 self.apply_theme(self.current_theme, self.app_theme_color)
                 print(f"[MAIN] apply_theme() завершена")
@@ -1524,11 +1585,14 @@ class MainWindow(QMainWindow):
         return stylesheet
 
     def open_theme_gallery(self):
-        """Открывает галерею пользовательских тем"""
+        """Открывает галерею пользовательских тем внутри приложения"""
         try:
             from pysheets.src.ui.gallery import ThemeGalleryManager, ThemeGalleryWidget
             gallery_manager = ThemeGalleryManager()
             gallery = ThemeGalleryWidget(gallery_manager, self)
+            
+            # Диалог остается в границах главного окна
+            gallery.setWindowModality(Qt.WindowModal)
             
             # Подключаем сигнал выбора темы
             def apply_gallery_theme(theme_info):

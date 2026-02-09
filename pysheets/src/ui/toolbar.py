@@ -35,10 +35,7 @@ class MainToolBar(QToolBar):
         """Инициализация UI"""
         actions = [
             ("📄", "Новый", self.new_file_triggered, "Ctrl+N"),
-            ("➕", "Новая вкладка", None, "Ctrl+T"),
             ("📂", "Открыть", self.open_file_triggered, "Ctrl+O"),
-            ("💾", "Сохранить", self.save_file_triggered, "Ctrl+S"),
-            ("📊", "Экспорт в Excel", self.export_excel_triggered, "Ctrl+E"),
             ("🖨️", "Печать", self.print_triggered, "Ctrl+P"),
         ]
 
@@ -383,7 +380,8 @@ class FunctionsToolBar(QToolBar):
             ("MAX", "Макс", "MAX(A1:A10)"),
             ("MIN", "Мин", "MIN(A1:A10)"),
             ("ROUND", "Округл", "ROUND(число, знаки)"),
-            ("ABS", "Модуль", "ABS(-5) = 5"),
+            ("ABS", "Абс", "ABS(-5) = 5"),
+            ("MOD", "Остаток", "MOD(10, 3) = 1"),
             ("SQRT", "Корень", "SQRT(16) = 4"),
             ("POWER", "Степень", "POWER(2, 3)"),
         ]

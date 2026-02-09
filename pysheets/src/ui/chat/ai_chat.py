@@ -21,6 +21,7 @@ class AIChatWidget(QWidget):
     def __init__(self, theme="dark", accent_color=None, parent=None, main_window=None):
         super().__init__(parent)
         self.theme = theme
+        self.theme_mode = "light"  # 'light' или 'dark' для режима gallery
         self.accent_color = accent_color if accent_color else QColor("#DC143C")
         self.main_window = main_window  # Reference to main window for table data
         
@@ -163,6 +164,9 @@ class AIChatWidget(QWidget):
                 # Если текст светлый (RGB > 128) - тёмная тема
                 # Если текст тёмный (RGB < 128) - светлая тема
                 actual_theme = "dark" if text_brightness > 128 else "light"
+        elif self.theme == "gallery":
+            # Для галереи используем сохранённый режим
+            actual_theme = self.theme_mode
         
         accent_hex = self.accent_color.name()
         accent_light = self.accent_color.lighter(130).name()
@@ -289,10 +293,11 @@ class AIChatWidget(QWidget):
         self.ai_msg_bg = ai_msg_bg
         self.ai_msg_border = ai_msg_border
 
-    def update_theme(self, theme: str, accent_color: QColor):
+    def update_theme(self, theme: str, accent_color: QColor, theme_mode: str = "light"):
         """Обновляет тему и цвета"""
         self.theme = theme
         self.accent_color = accent_color
+        self.theme_mode = theme_mode  # Для галереи: 'light' или 'dark'
         self.apply_theme()
         # Пересоздаём весь чат с новыми цветами
         self._rebuild_chat()

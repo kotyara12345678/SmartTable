@@ -228,8 +228,8 @@ class SpreadsheetWidget(QTableWidget):
         if row is not None and col is not None:
             cell = self.get_cell(row, col)
             if cell:
-                # Возвращаем вычисленное значение для использования в формулах
-                return cell.calculated_value
+                # Возвращаем вычисленное значение, или обычное значение если это не формула
+                return cell.calculated_value or cell.value
         return None
 
     def apply_cell_formatting(self, row: int, col: int):
@@ -259,11 +259,27 @@ class SpreadsheetWidget(QTableWidget):
                 alignment |= Qt.AlignmentFlag.AlignRight
             item.setTextAlignment(alignment)
 
-            # Цвета
-            if cell.text_color:
-                item.setForeground(QBrush(QColor(cell.text_color)))
-            if cell.background_color:
-                item.setBackground(QBrush(QColor(cell.background_color)))
+            # Цвета - явное преобразование в валидные QColor
+            try:
+                if cell.text_color and cell.text_color != "#FFFFFF" and cell.text_color != "#000000":
+                    text_color = QColor(cell.text_color)
+                    if text_color.isValid():
+                        item.setForeground(QBrush(text_color))
+                        print(f"[DEBUG] Применен text_color ({row},{col}): {cell.text_color}")
+                elif cell.text_color:
+                    text_color = QColor(cell.text_color)
+                    if text_color.isValid():
+                        item.setForeground(QBrush(text_color))
+                        print(f"[DEBUG] Применен text_color ({row},{col}): {cell.text_color}")
+                        
+                if cell.background_color and cell.background_color != "#FFFFFF":
+                    bg_color = QColor(cell.background_color)
+                    if bg_color.isValid():
+                        item.setBackground(QBrush(bg_color))
+                        print(f"[DEBUG] Применен background_color ({row},{col}): {cell.background_color}")
+            except Exception as e:
+                print(f"[ERROR] Ошибка при применении цветов ({row},{col}): {e}")
+
 
     def refresh_display(self):
         """Обновление отображения на основе модели"""
@@ -335,6 +351,38 @@ class SpreadsheetWidget(QTableWidget):
         cut_action.setShortcut(QKeySequence("Ctrl+X"))
         cut_action.triggered.connect(self.cut_selection)
         menu.addAction(cut_action)
+
+        menu.addSeparator()
+        
+        # НОВОЕ: Удаление содержимого
+        delete_content_action = QAction("Удалить содержимое", self)
+        delete_content_action.triggered.connect(self.delete_content)
+        menu.addAction(delete_content_action)
+        
+        delete_all_action = QAction("Очистить всю таблицу", self)
+        delete_all_action.triggered.connect(self.delete_all)
+        menu.addAction(delete_all_action)
+        
+        menu.addSeparator()
+        
+        # НОВОЕ: Перемещение ячеек
+        move_menu = menu.addMenu("Переместить")
+        
+        move_up_action = QAction("Вверх", self)
+        move_up_action.triggered.connect(self.move_cells_up)
+        move_menu.addAction(move_up_action)
+        
+        move_down_action = QAction("Вниз", self)
+        move_down_action.triggered.connect(self.move_cells_down)
+        move_menu.addAction(move_down_action)
+        
+        move_left_action = QAction("Влево", self)
+        move_left_action.triggered.connect(self.move_cells_left)
+        move_menu.addAction(move_left_action)
+        
+        move_right_action = QAction("Вправо", self)
+        move_right_action.triggered.connect(self.move_cells_right)
+        move_menu.addAction(move_right_action)
 
         menu.addSeparator()
 
@@ -1270,6 +1318,144 @@ class SpreadsheetWidget(QTableWidget):
                     self.spreadsheet.cells.pop(row)
                     self.spreadsheet.rows -= 1
 
+    def delete_content(self):
+        """Удаление содержимого выделенных ячеек"""
+        selected = self.selectedRanges()
+        if selected:
+            for range in selected:
+                for row in range(range.topRow(), range.bottomRow() + 1):
+                    for col in range(range.leftColumn(), range.rightColumn() + 1):
+                        item = self.item(row, col)
+                        if item:
+                            item.setText("")
+                            # Очищаем значение в модели
+                            if self.spreadsheet and row < len(self.spreadsheet.cells):
+                                if col < len(self.spreadsheet.cells[row]):
+                                    self.spreadsheet.cells[row][col].value = ""
+                                    self.spreadsheet.cells[row][col].formula = None
+    
+    def delete_all(self):
+        """Очистить всю таблицу"""
+        from PyQt5.QtWidgets import QMessageBox
+        
+        reply = QMessageBox.warning(
+            self,
+            "Очистить таблицу",
+            "Вы уверены, что хотите очистить всю таблицу?\nЭто действие невозможно отменить!",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            # Очищаем все ячейки
+            for row in range(self.rowCount()):
+                for col in range(self.columnCount()):
+                    item = self.item(row, col)
+                    if item:
+                        item.setText("")
+                    # Очищаем в модели
+                    if self.spreadsheet and row < len(self.spreadsheet.cells):
+                        if col < len(self.spreadsheet.cells[row]):
+                            self.spreadsheet.cells[row][col].value = ""
+                            self.spreadsheet.cells[row][col].formula = None
+
+    def move_cells_up(self):
+        """Переместить выделённые ячейки вверх"""
+        selected = self.selectedRanges()
+        if selected and selected[0].topRow() > 0:
+            range_obj = selected[0]
+            self._move_cells_vertical(range_obj, -1)
+
+    def move_cells_down(self):
+        """Переместить выделённые ячейки вниз"""
+        selected = self.selectedRanges()
+        if selected and selected[0].bottomRow() < self.rowCount() - 1:
+            range_obj = selected[0]
+            self._move_cells_vertical(range_obj, 1)
+
+    def move_cells_left(self):
+        """Переместить выделённые ячейки влево"""
+        selected = self.selectedRanges()
+        if selected and selected[0].leftColumn() > 0:
+            range_obj = selected[0]
+            self._move_cells_horizontal(range_obj, -1)
+
+    def move_cells_right(self):
+        """Переместить выделённые ячейки вправо"""
+        selected = self.selectedRanges()
+        if selected and selected[0].rightColumn() < self.columnCount() - 1:
+            range_obj = selected[0]
+            self._move_cells_horizontal(range_obj, 1)
+
+    def _move_cells_vertical(self, range_obj, direction: int):
+        """Вспомогательная функция для вертикального перемещения"""
+        start_row = range_obj.topRow()
+        end_row = range_obj.bottomRow()
+        start_col = range_obj.leftColumn()
+        end_col = range_obj.rightColumn()
+        
+        new_start_row = start_row + direction
+        new_end_row = end_row + direction
+        
+        # Копируем данные в новые позиции
+        for row in range(start_row, end_row + 1):
+            new_row = row + direction
+            for col in range(start_col, end_col + 1):
+                # Копируем из старой позиции в новую
+                old_item = self.item(row, col)
+                new_item = self.item(new_row, col)
+                if old_item and new_item:
+                    new_item.setText(old_item.text())
+                # Копируем из модели тоже
+                old_cell = self.get_cell(row, col)
+                new_cell = self.get_cell(new_row, col)
+                if old_cell and new_cell:
+                    new_cell.value = old_cell.value
+                    new_cell.formula = old_cell.formula
+                    new_cell.bold = old_cell.bold
+                    new_cell.italic = old_cell.italic
+        
+        # Очищаем старые позиции
+        for col in range(start_col, end_col + 1):
+            item = self.item(start_row, col) if direction > 0 else self.item(end_row, col)
+            if item:
+                item.setText("")
+
+    def _move_cells_horizontal(self, range_obj, direction: int):
+        """Вспомогательная функция для горизонтального перемещения"""
+        start_row = range_obj.topRow()
+        end_row = range_obj.bottomRow()
+        start_col = range_obj.leftColumn()
+        end_col = range_obj.rightColumn()
+        
+        new_start_col = start_col + direction
+        new_end_col = end_col + direction
+        
+        # Копируем данные в новые позиции
+        for row in range(start_row, end_row + 1):
+            for col in range(start_col, end_col + 1):
+                new_col = col + direction
+                # Копируем из старой позиции в новую
+                old_item = self.item(row, col)
+                new_item = self.item(row, new_col)
+                if old_item and new_item:
+                    new_item.setText(old_item.text())
+                # Копируем из модели тоже
+                old_cell = self.get_cell(row, col)
+                new_cell = self.get_cell(row, new_col)
+                if old_cell and new_cell:
+                    new_cell.value = old_cell.value
+                    new_cell.formula = old_cell.formula
+                    new_cell.bold = old_cell.bold
+                    new_cell.italic = old_cell.italic
+        
+        # Очищаем старые позиции
+        for row in range(start_row, end_row + 1):
+            col = start_col if direction > 0 else end_col
+            item = self.item(row, col)
+            if item:
+                item.setText("")
+
     def set_current_cell_formula(self, formula: str):
         """Установка формулы для текущей ячейки"""
         current = self.currentItem()
@@ -1397,9 +1583,29 @@ class SpreadsheetWidget(QTableWidget):
 
     def apply_format(self, format_type: str, value):
         """Применение форматирования к выделенным ячейкам (toolbar и меню)"""
+        
+        # Для цветов: открываем диалог один раз ДО цикла
+        selected_color = None
+        if format_type in ('text_color', 'bg_color') and value is None:
+            dlg = QColorDialog(self)
+            app = QApplication.instance()
+            if app and app.styleSheet():
+                dlg.setStyleSheet(app.styleSheet())
+            if dlg.exec_() == QDialog.Accepted:
+                selected_color = dlg.currentColor()
+                if not selected_color.isValid():
+                    return  # Отмена выбора цвета
+                value = selected_color.name()
+            else:
+                return  # Отмена диалога
+        
+        # Собираем все выделённые ячейки (включая из rangов)
+        rows_cols = set()
         for item in self.selectedItems():
-            row = item.row()
-            col = item.column()
+            rows_cols.add((item.row(), item.column()))
+        
+        # Применяем формат ко всем выделенным ячейкам
+        for row, col in rows_cols:
             cell = self.get_cell(row, col)
             if not cell:
                 continue
@@ -1421,29 +1627,11 @@ class SpreadsheetWidget(QTableWidget):
                 else:
                     cell.strike = value if value is not None else True
             elif format_type == 'text_color':
-                if value is None:
-                    dlg = QColorDialog(self)
-                    app = QApplication.instance()
-                    if app and app.styleSheet():
-                        dlg.setStyleSheet(app.styleSheet())
-                    if dlg.exec_() == QDialog.Accepted:
-                        color = dlg.currentColor()
-                        if color.isValid():
-                            cell.text_color = color.name()
-                else:
-                    cell.text_color = value
+                cell.text_color = value
+                print(f"[DEBUG] Устанавливаю text_color для ({row}, {col}): {value}")
             elif format_type == 'bg_color':
-                if value is None:
-                    dlg = QColorDialog(self)
-                    app = QApplication.instance()
-                    if app and app.styleSheet():
-                        dlg.setStyleSheet(app.styleSheet())
-                    if dlg.exec_() == QDialog.Accepted:
-                        color = dlg.currentColor()
-                        if color.isValid():
-                            cell.background_color = color.name()
-                else:
-                    cell.background_color = value
+                cell.background_color = value
+                print(f"[DEBUG] Устанавливаю background_color для ({row}, {col}): {value}")
             elif format_type == 'clear_format':
                 cell.font_family = "Arial"
                 cell.font_size = 11
@@ -1456,6 +1644,10 @@ class SpreadsheetWidget(QTableWidget):
                 if hasattr(cell, 'strike'):
                     cell.strike = False
             self.apply_cell_formatting(row, col)
+        
+        # Обновляем весь виджет после применения всех изменений
+        self.viewport().update()
+        self.repaint()
 
     def save_state(self) -> Dict[str, Any]:
         """Сохранить состояние виджета"""

@@ -24,6 +24,7 @@ class FormulaEngine:
             'ABS': self._abs,
             'SQRT': self._sqrt,
             'POWER': self._power,
+            'MOD': self._mod,
             
             # Логические функции
             'IF': self._if,
@@ -334,31 +335,85 @@ class FormulaEngine:
     def _round(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> float:
         """Округление числа"""
         if len(args) >= 1:
-            number = float(self.evaluate(args[0], cell_resolver))
-            decimals = int(float(args[1])) if len(args) > 1 else 0
+            # Если это диапазон, берем первое значение
+            arg0 = args[0]
+            if ':' in arg0:
+                values = self._get_range_values(arg0, cell_resolver)
+                number = float(values[0]) if values else 0.0
+            else:
+                number = float(self.evaluate(arg0, cell_resolver))
+            decimals = int(float(self.evaluate(args[1], cell_resolver))) if len(args) > 1 else 0
             return round(number, decimals)
         return 0.0
 
     def _abs(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> float:
         """Абсолютное значение"""
         if args:
-            number = float(self.evaluate(args[0], cell_resolver))
+            # Если это диапазон, берем первое значение
+            arg = args[0]
+            if ':' in arg:
+                values = self._get_range_values(arg, cell_resolver)
+                number = float(values[0]) if values else 0.0
+            else:
+                number = float(self.evaluate(arg, cell_resolver))
             return abs(number)
         return 0.0
 
     def _sqrt(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> float:
         """Квадратный корень"""
         if args:
-            number = float(self.evaluate(args[0], cell_resolver))
+            # Если это диапазон, берем первое значение
+            arg = args[0]
+            if ':' in arg:
+                values = self._get_range_values(arg, cell_resolver)
+                number = float(values[0]) if values else 0.0
+            else:
+                number = float(self.evaluate(arg, cell_resolver))
             return math.sqrt(number) if number >= 0 else float('nan')
         return 0.0
 
     def _power(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> float:
         """Возведение в степень"""
         if len(args) >= 2:
-            base = float(self.evaluate(args[0], cell_resolver))
-            exponent = float(self.evaluate(args[1], cell_resolver))
+            # Если это диапазон, берем первое значение
+            arg0 = args[0]
+            if ':' in arg0:
+                values = self._get_range_values(arg0, cell_resolver)
+                base = float(values[0]) if values else 0.0
+            else:
+                base = float(self.evaluate(arg0, cell_resolver))
+            
+            arg1 = args[1]
+            if ':' in arg1:
+                values = self._get_range_values(arg1, cell_resolver)
+                exponent = float(values[0]) if values else 0.0
+            else:
+                exponent = float(self.evaluate(arg1, cell_resolver))
+            
             return base ** exponent
+        return 0.0
+
+    def _mod(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> float:
+        """Остаток от деления (модуль)"""
+        if len(args) >= 2:
+            # Если это диапазон, берем первое значение
+            arg0 = args[0]
+            if ':' in arg0:
+                values = self._get_range_values(arg0, cell_resolver)
+                dividend = float(values[0]) if values else 0.0
+            else:
+                dividend = float(self.evaluate(arg0, cell_resolver))
+            
+            arg1 = args[1]
+            if ':' in arg1:
+                values = self._get_range_values(arg1, cell_resolver)
+                divisor = float(values[0]) if values else 0.0
+            else:
+                divisor = float(self.evaluate(arg1, cell_resolver))
+            
+            if divisor == 0:
+                raise ValueError("Деление на ноль")
+            return dividend % divisor
         return 0.0
 
     def _today(self, args: list, cell_resolver: Callable[[str], Optional[str]]) -> str:
@@ -738,7 +793,7 @@ class FormulaEngine:
         return ''
 
     def _get_range_values(self, range_str: str, cell_resolver: Callable[[str], Optional[str]]) -> list:
-        """Получение значений из диапазона"""
+        """Получение значений из диапазона (пропускает пустые ячейки)"""
         values = []
 
         # Разделение на начальную и конечную ячейки
@@ -757,8 +812,10 @@ class FormulaEngine:
                         cell_ref = f"{col_letter}{row + 1}"  # +1 для 1-based индекса
 
                         value = cell_resolver(cell_ref)
-                        parsed_value = self._parse_value(value)
-                        values.append(parsed_value)
+                        # Пропускаем пустые ячейки - не добавляем None и пустые строки
+                        if value is not None and str(value).strip():
+                            parsed_value = self._parse_value(value)
+                            values.append(parsed_value)
 
         return values
 

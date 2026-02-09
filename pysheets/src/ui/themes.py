@@ -830,8 +830,8 @@ class ThemeManager:
 
 # ThemeSettingsDialog для диалога настроек
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QGroupBox, QRadioButton, QPushButton, QHBoxLayout, QLabel, \
-    QDialogButtonBox, QCheckBox
-from PyQt5.QtCore import Qt
+    QDialogButtonBox, QCheckBox, QWidget, QColorDialog
+from PyQt5.QtCore import Qt, pyqtSignal
 
 
 class ThemeSettingsDialog(QDialog):
@@ -1026,4 +1026,192 @@ class ThemeSettingsDialog(QDialog):
             "alternating_rows": self.alternating_rows_checkbox.isChecked(),
         }
 
-        return "light"
+
+class EmbeddedSettingsPanel(QWidget):
+    """Встроенное окно настроек (плавающее внутри главного окна)"""
+    
+    settings_changed = pyqtSignal(dict)
+    closed = pyqtSignal()
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Настроить тему")
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint)
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #f5f5f5;
+                border: 1px solid #ccc;
+                border-radius: 8px;
+            }
+        """)
+        
+        self.selected_color = QColor("#DC143C")
+        self.parent_theme = "light"
+        
+        # Основной макет с отступом для эффекта панели
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(12, 12, 12, 12)
+        
+        # Внутренний контейнер
+        inner_widget = QWidget()
+        layout = QVBoxLayout(inner_widget)
+        layout.setSpacing(10)
+        
+        # Заголовок с кнопкой закрытия
+        header = QHBoxLayout()
+        title = QLabel("⚙️ Настроить тему")
+        title.setStyleSheet("font-weight: bold; font-size: 12px;")
+        
+        close_btn = QPushButton("✕")
+        close_btn.setFixedSize(24, 24)
+        close_btn.clicked.connect(self.close_panel)
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                color: #666;
+                font-weight: bold;
+                padding: 2px;
+            }
+            QPushButton:hover {
+                background-color: #ddd;
+                border-radius: 4px;
+            }
+        """)
+        
+        header.addWidget(title)
+        header.addStretch()
+        header.addWidget(close_btn)
+        layout.addLayout(header)
+        
+        # Выбор цветовой схемы
+        theme_group = QGroupBox("Цветовая схема")
+        theme_layout = QVBoxLayout()
+        theme_layout.setSpacing(6)
+        
+        self.light_theme_radio = QRadioButton("☀️ Светлая тема")
+        self.dark_theme_radio = QRadioButton("🌙 Темная тема")
+        self.system_theme_radio = QRadioButton("⚙️ Системная тема")
+        self.system_theme_radio.setChecked(True)
+        
+        theme_layout.addWidget(self.light_theme_radio)
+        theme_layout.addWidget(self.dark_theme_radio)
+        theme_layout.addWidget(self.system_theme_radio)
+        theme_group.setLayout(theme_layout)
+        layout.addWidget(theme_group)
+        
+        # Выбор акцентного цвета
+        color_group = QGroupBox("Акцентный цвет")
+        color_layout = QVBoxLayout()
+        color_layout.setSpacing(6)
+        
+        colors_layout = QHBoxLayout()
+        colors_layout.setSpacing(4)
+        self.color_buttons = []
+        
+        colors = [
+            ("#DC143C", "Малиновый"),
+            ("#1a73e8", "Синий"),
+            ("#0b8043", "Зеленый"),
+            ("#f6bf26", "Желтый"),
+            ("#8e24aa", "Фиолетовый"),
+            ("#e67c73", "Коралловый"),
+        ]
+        
+        for color_code, tooltip in colors:
+            btn = QPushButton()
+            btn.setFixedSize(32, 32)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {color_code};
+                    border: 2px solid #999;
+                    border-radius: 16px;
+                }}
+                QPushButton:hover {{
+                    border: 2px solid #333;
+                }}
+                QPushButton:checked {{
+                    border: 3px solid #000;
+                }}
+            """)
+            btn.setCheckable(True)
+            btn.setToolTip(tooltip)
+            btn.color_code = color_code
+            btn.clicked.connect(lambda checked=False, c=color_code: self.on_color_selected(c))
+            colors_layout.addWidget(btn)
+            self.color_buttons.append(btn)
+        
+        self.color_buttons[0].setChecked(True)
+        colors_layout.addStretch()
+        color_layout.addLayout(colors_layout)
+        
+        # Кнопка "Другой цвет..."
+        custom_color_btn = QPushButton("🎨 Выбрать другой цвет...")
+        custom_color_btn.setMaximumWidth(180)
+        custom_color_btn.clicked.connect(self.choose_custom_color)
+        color_layout.addWidget(custom_color_btn)
+        
+        color_group.setLayout(color_layout)
+        layout.addWidget(color_group)
+        
+        # Чекбоксы
+        options_group = QGroupBox("Опции")
+        options_layout = QVBoxLayout()
+        
+        self.grid_checkbox = QCheckBox("Показывать сетку")
+        self.grid_checkbox.setChecked(True)
+        self.alternating_rows_checkbox = QCheckBox("Чередующиеся строки")
+        self.alternating_rows_checkbox.setChecked(True)
+        
+        options_layout.addWidget(self.grid_checkbox)
+        options_layout.addWidget(self.alternating_rows_checkbox)
+        options_group.setLayout(options_layout)
+        layout.addWidget(options_group)
+        
+        # Кнопка применить
+        apply_btn = QPushButton("✓ Применить")
+        apply_btn.setMaximumWidth(120)
+        apply_btn.clicked.connect(self.apply_settings)
+        layout.addWidget(apply_btn)
+        
+        layout.addStretch()
+        outer_layout.addWidget(inner_widget)
+        
+        # Размер панели
+        self.setFixedSize(320, 400)
+    
+    def on_color_selected(self, color_code: str):
+        """Выбор цвета"""
+        for btn in self.color_buttons:
+            btn.setChecked(btn.color_code == color_code)
+        self.selected_color = QColor(color_code)
+    
+    def choose_custom_color(self):
+        """Выбрать пользовательский цвет"""
+        color = QColorDialog.getColor(self.selected_color, self, "Выбрать цвет")
+        if color.isValid():
+            self.selected_color = color
+            for btn in self.color_buttons:
+                btn.setChecked(False)
+    
+    def apply_settings(self):
+        """Применить настройки"""
+        if self.system_theme_radio.isChecked():
+            theme = "system"
+        elif self.dark_theme_radio.isChecked():
+            theme = "dark"
+        else:
+            theme = "light"
+        
+        settings = {
+            "theme": theme,
+            "color": self.selected_color,
+            "show_grid": self.grid_checkbox.isChecked(),
+            "alternating_rows": self.alternating_rows_checkbox.isChecked(),
+        }
+        self.settings_changed.emit(settings)
+    
+    def close_panel(self):
+        """Закрыть панель"""
+        self.closed.emit()
+        self.hide()
