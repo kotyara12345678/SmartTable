@@ -178,18 +178,22 @@ def build_appimage():
     
     print("[INFO] Структура AppDir создана")
     
-    # Собираем с PyInstaller БЕЗ анализа кода
+    # Собираем с PyInstaller используя spec файл
     main_py = project_root / "main.py"
+    spec_file = project_root / "SmartTable.spec"
+    
+    if not spec_file.exists():
+        print("[ERROR] SmartTable.spec файл не найден!")
+        os.chdir(original_dir)
+        return False
+    
+    # Переходим в папку pysheets для сборки
+    os.chdir(project_root)
     cmd = [
         "python3", "-m", "PyInstaller",
-        "--onefile",
-        "--windowed",
-        "--noconfirm",
         "--clean",
-        "--name=SmartTable",
-        "--collect-all=pysheets",
-        "--collect-all=PyQt5",
-        str(main_py),
+        "--noconfirm",
+        str(spec_file),
     ]
     
     if not run_command(cmd, "Сборка с помощью PyInstaller"):
