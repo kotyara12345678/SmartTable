@@ -13,8 +13,6 @@ from PyQt5.QtCore import Qt, QSettings
 from PyQt5.QtGui import QIcon
 
 current_dir = Path(__file__).parent
-sys.path.insert(0, str(current_dir))
-current_dir = Path(__file__).parent
 parent_dir = current_dir.parent
 sys.path.insert(0, str(parent_dir))
 sys.path.insert(0, str(current_dir))

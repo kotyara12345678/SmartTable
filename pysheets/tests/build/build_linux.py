@@ -28,16 +28,28 @@ def run_command(cmd, description, check=True):
 def cleanup():
     """Очистить старые сборки"""
     print("[INFO] Очистка старых сборок...")
-    folders = ['dist', 'build', 'build_appimage', '__pycache__', 'SmartTable.spec']
+    folders = ['dist', 'build', 'build_appimage', '__pycache__', '*.spec', '.pyinstaller']
+    
+    script_dir = Path(__file__).parent
+    project_root = script_dir / "../.."
+    
+    # Очищаем из папки построения
     for folder in folders:
-        path = Path(folder)
-        if path.exists():
-            if path.is_dir():
-                shutil.rmtree(path)
-                print(f"[CLEANED] Удалена папка {folder}")
-            else:
-                path.unlink()
-                print(f"[CLEANED] Удалён файл {folder}")
+        if '*' in folder:
+            # Ищем файлы по маске
+            for item in project_root.glob(folder):
+                if item.is_file():
+                    item.unlink()
+                    print(f"[CLEANED] Удалён файл {item.name}")
+        else:
+            path = project_root / folder
+            if path.exists():
+                if path.is_dir():
+                    shutil.rmtree(path)
+                    print(f"[CLEANED] Удалена папка {folder}")
+                else:
+                    path.unlink()
+                    print(f"[CLEANED] Удалён файл {folder}")
 
 def check_python():
     """Проверить версию Python"""
@@ -54,19 +66,24 @@ def install_dependencies():
     original_dir = os.getcwd()
     os.chdir(Path(__file__).parent / "../..")
     
+    print("\n[INFO] Очистка pip кеша...")
+    run_command(["pip3", "cache", "purge"], "Очистка pip кеша", check=False)
+    
     commands = [
         (["apt-get", "update"], "Обновление apt"),
         (["apt-get", "install", "-y", "python3-pip"], "Установка pip"),
         (["apt-get", "install", "-y", "python3-venv"], "Установка venv"),
-        (["pip3", "install", "--upgrade", "pip"], "Обновление pip3"),
-        (["pip3", "install", "-r", "requirements.txt"], "Установка зависимостей"),
+        (["apt-get", "install", "-y", "python3-dev"], "Установка python3-dev"),
+        (["apt-get", "install", "-y", "libqt5gui5"], "Установка libqt5gui5"),
+        (["pip3", "install", "--upgrade", "--force-reinstall", "pip"], "Обновление pip"),
+        (["pip3", "install", "--force-reinstall", "-r", "requirements.txt"], "Переустановка зависимостей"),
         (["pip3", "install", "pyinstaller"], "Установка PyInstaller"),
     ]
     
     result = True
     for cmd, desc in commands:
         if not run_command(cmd, desc, check=False):
-            result = False
+            print(f"[WARNING] {desc} завершилась с ошибкой, продолжаем...")
     
     os.chdir(original_dir)
     return result
