@@ -54,22 +54,20 @@ def install_dependencies():
     original_dir = os.getcwd()
     os.chdir(Path(__file__).parent / "../..")
     
-    # Сначала скачиваем и устанавливаем pip для Python 3.13
-    print("\n[INFO] Скачивание get-pip.py для установки pip в Python 3.13...")
+    # Сначала устанавливаем необходимые пакеты для Python 3.13
+    print("\n[INFO] Установка поддержки pip для Python 3.13...")
     
-    # Скачиваем get-pip.py
-    get_pip_path = "/tmp/get-pip.py"
-    download_cmd = ["wget", "https://bootstrap.pypa.io/get-pip.py", "-O", get_pip_path]
-    if not run_command(download_cmd, "Скачивание get-pip.py", check=False):
-        # Если wget не работает, попробуем curl
-        print("[INFO] Пробуем curl...")
-        download_cmd = ["curl", "https://bootstrap.pypa.io/get-pip.py", "-o", get_pip_path]
-        run_command(download_cmd, "Скачивание get-pip.py через curl", check=False)
+    apt_commands = [
+        (["apt-get", "update"], "Обновление apt-get"),
+        (["apt-get", "install", "-y", "python3.13-distutils"], "Установка python3.13-distutils"),
+        (["apt-get", "install", "-y", "python3.13-venv"], "Установка python3.13-venv"),
+    ]
     
-    # Устанавливаем pip
-    if Path(get_pip_path).exists():
-        install_pip_cmd = ["python3.13", get_pip_path]
-        run_command(install_pip_cmd, "Установка pip в Python 3.13")
+    for cmd, desc in apt_commands:
+        run_command(cmd, desc, check=False)
+    
+    # Попробуем установить pip через ensurepip
+    run_command(["python3.13", "-m", "ensurepip"], "Установка pip через ensurepip", check=False)
     
     commands = [
         (["python3.13", "-m", "pip", "install", "--upgrade", "pip"], "Обновление pip"),
