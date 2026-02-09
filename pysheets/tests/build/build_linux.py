@@ -321,9 +321,45 @@ Terminal=false
     
     print("[INFO] Структура AppDir создана")
     
-    # Собираем с PyInstaller используя spec файл
+    # Копируем исходные файлы для PyInstaller
+    print("[DEBUG] Копирование исходного кода для PyInstaller...")
     main_py = project_root / "main.py"
-    spec_file_local = build_dir / "SmartTable.spec"
+    src_dir = project_root / "src"
+    
+    if main_py.exists():
+        shutil.copy(str(main_py), str(build_dir / "main.py"))
+        print("[OK] main.py скопирован в рабочую папку")
+    else:
+        print("[WARNING] main.py не найден: {0}".format(main_py))
+    
+    if src_dir.exists():
+        build_src = build_dir / "src"
+        if build_src.exists():
+            shutil.rmtree(str(build_src))
+        shutil.copytree(str(src_dir), str(build_src))
+        print("[OK] Папка src скопирована в рабочую папку")
+    else:
+        print("[WARNING] src папка не найдена: {0}".format(src_dir))
+    
+    # Копируем assets
+    assets_dir = project_root / "assets"
+    if assets_dir.exists():
+        build_assets = build_dir / "assets"
+        if build_assets.exists():
+            shutil.rmtree(str(build_assets))
+        shutil.copytree(str(assets_dir), str(build_assets))
+        print("[OK] Папка assets скопирована в рабочую папку")
+    
+    # Копируем templates
+    templates_dir = project_root / "templates"
+    if templates_dir.exists():
+        build_templates = build_dir / "templates"
+        if build_templates.exists():
+            shutil.rmtree(str(build_templates))
+        shutil.copytree(str(templates_dir), str(build_templates))
+        print("[OK] Папка templates скопирована в рабочую папку")
+    
+    print("[INFO] Исходный код подготовлен к сборке")
     
     print("[DEBUG] Проверка наличия spec файла: {0}".format(spec_file_local))
     print("[DEBUG] Spec файл существует: {0}".format(spec_file_local.exists()))
