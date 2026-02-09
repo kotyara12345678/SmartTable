@@ -6,11 +6,22 @@
 
 import sys
 import os
+import logging
 from pathlib import Path
 
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox
 from PyQt5.QtCore import Qt, QSettings
 from PyQt5.QtGui import QIcon
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(Path.home() / ".smarttable" / "smarttable.log")
+    ]
+)
 
 current_dir = Path(__file__).parent
 sys.path.insert(0, str(current_dir))
@@ -21,6 +32,7 @@ sys.path.insert(0, str(current_dir))
 
 try:
     from pysheets.src.ui.main_window import MainWindow
+    from pysheets.src.db.database_manager import DatabaseManager
 except ImportError as e:
     print(f"Ошибка импорта: {e}")
     print("Создаем базовую структуру...")
@@ -31,6 +43,19 @@ except ImportError as e:
             self.setWindowTitle("SmartTable - Простой редактор")
             self.setGeometry(100, 100, 1200, 800)
     MainWindow = SimpleSpreadsheet
+
+
+def init_database():
+    """Инициализация базы данных"""
+    try:
+        db_manager = DatabaseManager()
+        logging.info(f"Database initialized at: {db_manager.db_path}")
+        db_info = db_manager.get_database_info()
+        logging.info(f"Database info: {db_info}")
+        return db_manager
+    except Exception as e:
+        logging.error(f"Database initialization error: {e}")
+        return None
 
 
 def main():
@@ -44,8 +69,14 @@ def main():
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 
+    # Инициализируем БД
+    db_manager = init_database()
+
     try:
         window = MainWindow()
+        # Передаём менеджер БД в главное окно если нужно
+        if hasattr(window, 'set_database_manager'):
+            window.set_database_manager(db_manager)
     except Exception as e:
         QMessageBox.critical(
             None,
