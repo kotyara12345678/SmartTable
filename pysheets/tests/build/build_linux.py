@@ -170,6 +170,51 @@ def find_pysheets_root():
     
     raise Exception("Не найдена папка pysheets с main.py и src")
 
+def create_fallback_spec():
+    """Создать встроенный spec файл если оригинальный не найден"""
+    spec_content = """# -*- mode: python ; coding: utf-8 -*-
+block_cipher = None
+
+a = Analysis(
+    ['main.py'],
+    pathex=[],
+    binaries=[],
+    datas=[('assets', 'assets'), ('templates', 'templates')],
+    hiddenimports=['PyQt5'],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludedimports=[],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    [],
+    name='SmartTable',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,
+    disable_windowed_traceback=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+"""
+    return spec_content
+
 def build_appimage():
     """Собрать AppImage"""
     print("\n[SmartTable] Начало сборки AppImage для Linux...")
@@ -205,16 +250,25 @@ def build_appimage():
     else:
         print("[WARNING] SmartTable.spec не найден, ищем в других местах...")
         # Ищем spec файл в других местах
-        for pattern in [project_root / "*.spec", project_root.parent / "*.spec"]:
-            found_files = list(project_root.glob("*.spec"))
-            if found_files:
-                print("[DEBUG] Найдены spec файлы: {0}".format(found_files))
-                spec_file = found_files[0]
-                shutil.copy(str(spec_file), str(build_dir / "SmartTable.spec"))
-                print("[OK] spec файл скопирован из {0}".format(spec_file))
-                break
+        found_files = list(project_root.glob("*.spec"))
+        if found_files:
+            print("[DEBUG] Найдены spec файлы: {0}".format(found_files))
+            for spec_candidate in found_files:
+                if "SmartTable" in spec_candidate.name:
+                    shutil.copy(str(spec_candidate), str(build_dir / "SmartTable.spec"))
+                    print("[OK] spec файл скопирован из {0}".format(spec_candidate.name))
+                    break
+            else:
+                # Если не нашли SmartTable spec, используем первый
+                shutil.copy(str(found_files[0]), str(build_dir / "SmartTable.spec"))
+                print("[OK] spec файл скопирован из {0}".format(found_files[0].name))
         else:
-            print("[ERROR] Не найден ни один spec файл")
+            print("[WARNING] Не найден ни один spec файл, создаём встроенный...")
+            spec_content = create_fallback_spec()
+            spec_path = build_dir / "SmartTable.spec"
+            with open(str(spec_path), 'w') as f:
+                f.write(spec_content)
+            print("[OK] Встроенный spec файл создан")
     
     # Создаём структуру AppDir
     appdir = (build_dir / "SmartTable.AppDir").resolve()
@@ -277,20 +331,23 @@ Terminal=false
     
     # Собираем с PyInstaller используя spec файл
     main_py = project_root / "main.py"
-    spec_file_local = Path("SmartTable.spec")
+    spec_file_local = build_dir / "SmartTable.spec"
+    
+    print("[DEBUG] Проверка наличия spec файла: {0}".format(spec_file_local))
+    print("[DEBUG] Spec файл существует: {0}".format(spec_file_local.exists()))
     
     if not spec_file_local.exists():
-        print("[ERROR] SmartTable.spec файл не найден в рабочей папке")
+        print("[ERROR] SmartTable.spec файл не найден в рабочей папке {0}".format(build_dir))
         os.chdir(original_dir)
         return False
     
-    print("[INFO] Используем spec файл: SmartTable.spec")
+    print("[INFO] Используем spec файл: {0}".format(spec_file_local))
     
     cmd = [
         "python3", "-m", "PyInstaller",
         "--clean",
         "--noconfirm",
-        "SmartTable.spec",
+        str(spec_file_local.absolute()),
     ]
     
     if not run_command(cmd, "Сборка с помощью PyInstaller"):
@@ -298,9 +355,12 @@ Terminal=false
         return False
     
     # Копируем исполняемый файл в AppDir
-    if Path("dist/SmartTable").exists():
-        shutil.copy("dist/SmartTable", appdir / "usr" / "bin/")
+    dist_exe = build_dir / "dist" / "SmartTable"
+    if dist_exe.exists():
+        shutil.copy(str(dist_exe), str(appdir / "usr" / "bin/"))
         print("[OK] Исполняемый файл скопирован в AppDir")
+    else:
+        print("[WARNING] Исполняемый файл не найден: {0}".format(dist_exe))
     
     # Создаём AppRun скрипт
     apprun = appdir / "AppRun"
