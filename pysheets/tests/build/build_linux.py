@@ -182,13 +182,11 @@ a = Analysis(
     datas=[('assets', 'assets'), ('templates', 'templates')],
     hiddenimports=['PyQt5'],
     hookspath=[],
-    hooksconfig={},
     runtime_hooks=[],
-    excludedimports=[],
+    excludes=[],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
-    noarchive=False,
 )
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
@@ -198,19 +196,13 @@ exe = EXE(
     a.binaries,
     a.zipfiles,
     a.datas,
-    [],
     name='SmartTable',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    upx_exclude=[],
+    upx=False,
     runtime_tmpdir=None,
     console=False,
-    disable_windowed_traceback=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
 )
 """
     return spec_content
@@ -358,9 +350,15 @@ Terminal=false
     dist_exe = build_dir / "dist" / "SmartTable"
     if dist_exe.exists():
         shutil.copy(str(dist_exe), str(appdir / "usr" / "bin/"))
-        print("[OK] Исполняемый файл скопирован в AppDir")
+        os.chmod(str(appdir / "usr" / "bin" / "SmartTable"), 0o755)
+        print("[OK] Исполняемый файл скопирован в AppDir и установлены права выполнения")
     else:
         print("[WARNING] Исполняемый файл не найден: {0}".format(dist_exe))
+        print("[DEBUG] Содержимое dist папки:")
+        dist_dir = build_dir / "dist"
+        if dist_dir.exists():
+            for item in dist_dir.iterdir():
+                print("[DEBUG]   - {0}".format(item.name))
     
     # Создаём AppRun скрипт
     apprun = appdir / "AppRun"
