@@ -243,16 +243,13 @@ def main():
     """Основная функция"""
     current_os = platform.system()
     print("=" * 60)
-    print(f"SmartTable - Сборка для Linux (AppImage) | OS: {current_os}")
+    print("SmartTable - Сборка для Linux")
     print("=" * 60)
     
-    # Предупреждение если не Linux
     if current_os != "Linux":
-        print(f"\n[WARNING] Этот скрипт предназначен для Linux!")
-        print(f"[WARNING] Текущая ОС: {current_os}")
-        print("[WARNING] AppImage сборка будет пропущена")
-        print("[INFO] Для сборки Windows EXE используйте: python build_exe.py")
-        print("[INFO] Для сборки macOS используйте: python build_macos.py")
+        print("[WARNING] Этот скрипт предназначен для Linux!")
+        print("[WARNING] Текущая ОС: {}".format(current_os))
+        print("[INFO] Используется простой способ сборки (копирование + Python)")
         return
     
     # Проверяем Python
@@ -267,7 +264,7 @@ def main():
         print("\n[ERROR] Не удалось установить зависимости!")
         sys.exit(1)
     
-    # Собираем AppImage
+    # Собираем AppImage с помощью PyInstaller
     if not build_appimage():
         print("\n[ERROR] Не удалось собрать AppImage!")
         sys.exit(1)
@@ -276,13 +273,6 @@ def main():
     print("\n" + "=" * 60)
     print("[SUCCESS] Сборка завершена!")
     print("=" * 60)
-    linux_path = Path(__file__).parent / "../../linux/SmartTable.AppImage"
-    print(f"\nРезультаты в папке '{linux_path.parent}':")
-    print("  ✅ SmartTable.AppImage - портативное приложение")
-    print("\nДля запуска:")
-    print("  chmod +x SmartTable.AppImage")
-    print("  ./SmartTable.AppImage")
-    print("=" * 60 + "\n")
 
 if __name__ == "__main__":
     main()
