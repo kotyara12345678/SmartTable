@@ -108,10 +108,14 @@ def install_dependencies():
 
 def get_appimage_tool_path():
     """Получить путь к appimagetool"""
-    script_dir = Path(__file__).parent
-    project_root = script_dir / "../.."
-    pysheets_root = project_root.parent
-    build_appimage_dir = pysheets_root / "pysheets" / "build_appimage"
+    try:
+        project_root = find_pysheets_root()
+    except:
+        # Fallback если не найдена папка
+        script_dir = Path(__file__).parent
+        project_root = script_dir / "../.."
+    
+    build_appimage_dir = project_root / "build_appimage"
     build_appimage_dir.mkdir(exist_ok=True, parents=True)
     return build_appimage_dir / "appimagetool"
 
@@ -145,15 +149,39 @@ def check_appimage_tool():
     os.chmod(appimage_tool, 0o755)
     return True
 
+def find_pysheets_root():
+    """Найти корневую папку pysheets"""
+    script_dir = Path(__file__).parent.resolve()
+    # От pysheets/tests/build уходим в pysheets
+    pysheets_dir = script_dir.parent.parent.parent
+    
+    # Проверяем что это действительно pysheets папка
+    if (pysheets_dir / "main.py").exists() and (pysheets_dir / "src").exists():
+        return pysheets_dir
+    
+    # Если нет, ищем в родительских директориях
+    current = script_dir
+    for _ in range(10):
+        if (current / "main.py").exists() and (current / "src").exists():
+            return current
+        if (current / "pysheets" / "main.py").exists():
+            return current / "pysheets"
+        current = current.parent
+    
+    raise Exception("Не найдена папка pysheets с main.py и src")
+
 def build_appimage():
     """Собрать AppImage"""
     print("\n[SmartTable] Начало сборки AppImage для Linux...")
     print("[INFO] Это может занять 8-15 минут...")
     
-    # Определяем базовую папку проекта
-    script_dir = Path(__file__).parent
-    project_root = script_dir / "../.."  # pysheets папка
-    project_root = project_root.resolve()  # Получаем абсолютный путь
+    try:
+        project_root = find_pysheets_root()
+    except Exception as e:
+        print("[ERROR] {0}".format(str(e)))
+        return False
+    
+    print("[DEBUG] Найдена папка pysheets: {0}".format(project_root))
     
     # Создаём папку linux
     linux_dir = project_root / "linux"
@@ -185,12 +213,17 @@ def build_appimage():
     desktop_file = project_root / "SmartTable.desktop"
     
     print("[DEBUG] project_root: {0}".format(project_root))
-    print("[DEBUG] desktop_file: {0}".format(desktop_file))
+    print("[DEBUG] desktop_file path: {0}".format(desktop_file))
     print("[DEBUG] desktop_file exists: {0}".format(desktop_file.exists()))
+    print("[DEBUG] assets_icon path: {0}".format(assets_icon))
+    print("[DEBUG] assets_icon exists: {0}".format(assets_icon.exists()))
     
     if assets_icon.exists():
         shutil.copy(str(assets_icon), str(appdir / "usr" / "share" / "icons/"))
         print("[OK] Иконка скопирована")
+    else:
+        print("[WARNING] Иконка не найдена: {0}".format(assets_icon))
+    
     if desktop_file.exists():
         shutil.copy(str(desktop_file), str(appdir / "usr" / "share" / "applications/"))
         print("[OK] Desktop файл скопирован")
