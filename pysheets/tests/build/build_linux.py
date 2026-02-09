@@ -54,32 +54,19 @@ def install_dependencies():
     original_dir = os.getcwd()
     os.chdir(Path(__file__).parent / "../..")
     
-    # Сначала устанавливаем необходимые пакеты для Python 3.13
-    print("\n[INFO] Установка поддержки pip для Python 3.13...")
-    
-    apt_commands = [
-        (["apt-get", "update"], "Обновление apt-get"),
-        (["apt-get", "install", "-y", "python3.13-distutils"], "Установка python3.13-distutils"),
-        (["apt-get", "install", "-y", "python3.13-venv"], "Установка python3.13-venv"),
-    ]
-    
-    for cmd, desc in apt_commands:
-        run_command(cmd, desc, check=False)
-    
-    # Попробуем установить pip через ensurepip
-    run_command(["python3.13", "-m", "ensurepip"], "Установка pip через ensurepip", check=False)
-    
     commands = [
-        (["python3.13", "-m", "pip", "install", "--upgrade", "pip"], "Обновление pip"),
-        (["python3.13", "-m", "pip", "install", "-r", "requirements.txt"], "Установка зависимостей"),
-        (["python3.13", "-m", "pip", "install", "pyinstaller"], "Установка PyInstaller"),
+        (["apt-get", "update"], "Обновление apt"),
+        (["apt-get", "install", "-y", "python3-pip"], "Установка pip"),
+        (["apt-get", "install", "-y", "python3-venv"], "Установка venv"),
+        (["pip3", "install", "--upgrade", "pip"], "Обновление pip3"),
+        (["pip3", "install", "-r", "requirements.txt"], "Установка зависимостей"),
+        (["pip3", "install", "pyinstaller"], "Установка PyInstaller"),
     ]
     
     result = True
     for cmd, desc in commands:
-        if not run_command(cmd, desc):
+        if not run_command(cmd, desc, check=False):
             result = False
-            break
     
     os.chdir(original_dir)
     return result
@@ -159,7 +146,7 @@ def build_appimage():
     # Собираем с PyInstaller
     main_py = project_root / "main.py"
     cmd = [
-        "python3.13", "-m", "PyInstaller",
+        "python3", "-m", "PyInstaller",
         "--onefile",
         "--name=SmartTable",
         f"--add-data={project_root / 'assets'}:assets",
