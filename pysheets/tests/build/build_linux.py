@@ -13,16 +13,16 @@ from pathlib import Path
 
 def run_command(cmd, description, check=True):
     """Выполнить команду и вывести результат"""
-    print(f"\n[INFO] {description}...")
-    print(f"[CMD] {' '.join(cmd)}")
+    print("\n[INFO] {0}...".format(description))
+    print("[CMD] {0}".format(' '.join(cmd)))
     try:
         result = subprocess.run(cmd, check=check)
         if check:
-            print(f"[OK] {description} успешно")
+            print("[OK] {0} успешно".format(description))
         return True
     except subprocess.CalledProcessError as e:
         if check:
-            print(f"[ERROR] {description} не удалась!")
+            print("[ERROR] {0} не удалась!".format(description))
         return False
 
 def cleanup():
@@ -40,21 +40,21 @@ def cleanup():
             for item in project_root.glob(folder):
                 if item.is_file():
                     item.unlink()
-                    print(f"[CLEANED] Удалён файл {item.name}")
+                    print("[CLEANED] Удалён файл {0}".format(item.name))
         else:
             path = project_root / folder
             if path.exists():
                 if path.is_dir():
                     shutil.rmtree(path)
-                    print(f"[CLEANED] Удалена папка {folder}")
+                    print("[CLEANED] Удалена папка {0}".format(folder))
                 else:
                     path.unlink()
-                    print(f"[CLEANED] Удалён файл {folder}")
+                    print("[CLEANED] Удалён файл {0}".format(folder))
 
 def check_python():
     """Проверить версию Python"""
     version = sys.version_info
-    print(f"[INFO] Python версия: {version.major}.{version.minor}.{version.micro}")
+    print("[INFO] Python версия: {0}.{1}.{2}".format(version.major, version.minor, version.micro))
     if version.major < 3:
         print("[ERROR] Требуется Python 3+!")
         return False
@@ -70,11 +70,11 @@ def install_dependencies():
     version = sys.version_info
     if version.major == 3 and version.minor < 8:
         requirements_file = "requirements-min.txt"
-        print(f"\n[WARNING] Python {version.major}.{version.minor} обнаружена")
+        print("\n[WARNING] Python {0}.{1} обнаружена".format(version.major, version.minor))
         print("[INFO] Используем совместимые версии из requirements-min.txt")
     else:
         requirements_file = "requirements.txt"
-        print(f"\n[INFO] Python {version.major}.{version.minor} - используем requirements.txt")
+        print("\n[INFO] Python {0}.{1} - используем requirements.txt".format(version.major, version.minor))
     
     print("\n[INFO] Ожидание освобождения dpkg...")
     for i in range(30):
@@ -83,7 +83,7 @@ def install_dependencies():
         if result.returncode != 0:
             print("[INFO] dpkg освобожден, продолжаем...")
             break
-        print(f"[INFO] dpkg ещё заблокирован... ({i+1}/30)")
+        print("[INFO] dpkg ещё заблокирован... ({0}/30)".format(i+1))
         subprocess.run(["sleep", "2"])
     
     print("\n[INFO] Очистка pip кеша...")
@@ -96,7 +96,7 @@ def install_dependencies():
         (["apt-get", "install", "-y", "--no-install-recommends", "python3-dev"], "Установка python3-dev"),
         (["apt-get", "install", "-y", "--no-install-recommends", "libqt5gui5"], "Установка libqt5gui5"),
         (["pip3", "install", "--upgrade", "--force-reinstall", "pip"], "Обновление pip"),
-        (["pip3", "install", "--force-reinstall", "-r", requirements_file], f"Установка зависимостей из {requirements_file}"),
+        ("pip3", "install", "--force-reinstall", "-r", requirements_file], "Установка зависимостей из {0}".format(requirements_file)),
         (["pip3", "install", "pyinstaller"], "Установка PyInstaller"),
     ]
     
@@ -106,20 +106,25 @@ def install_dependencies():
     os.chdir(original_dir)
     return True
 
+def get_appimage_tool_path():
+    """Получить путь к appimagetool"""
+    script_dir = Path(__file__).parent
+    project_root = script_dir / "../.."
+    pysheets_root = project_root.parent
+    build_appimage_dir = pysheets_root / "pysheets" / "build_appimage"
+    build_appimage_dir.mkdir(exist_ok=True, parents=True)
+    return build_appimage_dir / "appimagetool"
+
 def check_appimage_tool():
     """Проверить/скачать appimagetool"""
     # Проверяем OS - AppImage только для Linux!
     if platform.system() != "Linux":
-        print(f"[WARNING] AppImage сборка доступна только на Linux!")
-        print(f"[INFO] Текущая OS: {platform.system()}")
+        print("[WARNING] AppImage сборка доступна только на Linux!")
+        print("[INFO] Текущая OS: {0}".format(platform.system()))
         print("[INFO] Сборка AppImage будет пропущена")
         return True  # Не ошибка, просто пропускаем на других ОС
     
-    script_dir = Path(__file__).parent
-    build_appimage_dir = script_dir / "../../build_appimage"
-    build_appimage_dir.mkdir(exist_ok=True, parents=True)
-    
-    appimage_tool = build_appimage_dir / "appimagetool"
+    appimage_tool = get_appimage_tool_path()
     
     if appimage_tool.exists():
         print("[INFO] appimagetool уже скачан")
@@ -189,11 +194,11 @@ def build_appimage():
     spec_file_local = Path("SmartTable.spec")
     
     if not spec_file_local.exists():
-        print(f"[ERROR] SmartTable.spec файл не найден в рабочей папке")
+        print("[ERROR] SmartTable.spec файл не найден в рабочей папке")
         os.chdir(original_dir)
         return False
     
-    print(f"[INFO] Используем spec файл: SmartTable.spec")
+    print("[INFO] Используем spec файл: SmartTable.spec")
     
     cmd = [
         "python3", "-m", "PyInstaller",
@@ -224,15 +229,20 @@ def build_appimage():
         os.chdir(original_dir)
         return False
     
-    appimage_tool = Path("appimagetool")
-    cmd = [str(appimage_tool), str(appdir), "SmartTable.AppImage"]
+    appimage_tool = get_appimage_tool_path()
+    if not appimage_tool.exists():
+        print("[ERROR] appimagetool не найден по пути: {0}".format(appimage_tool))
+        os.chdir(original_dir)
+        return False
+    
+    cmd = [str(appimage_tool.absolute()), str(appdir.absolute()), str((build_dir / "SmartTable.AppImage").absolute())]
     if not run_command(cmd, "Создание AppImage"):
         os.chdir(original_dir)
         return False
     
     # Копируем в dist
-    if Path("SmartTable.AppImage").exists():
-        shutil.copy("SmartTable.AppImage", str(linux_dir / "SmartTable.AppImage"))
+    if (build_dir / "SmartTable.AppImage").exists():
+        shutil.copy(str(build_dir / "SmartTable.AppImage"), str(linux_dir / "SmartTable.AppImage"))
         os.chmod(str(linux_dir / "SmartTable.AppImage"), 0o755)
         print("[OK] AppImage скопирован в linux/")
     
