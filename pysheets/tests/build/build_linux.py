@@ -50,16 +50,24 @@ def check_python():
 
 def install_dependencies():
     """Установить зависимости"""
+    # Переходим в папку pysheets чтобы найти requirements.txt
+    original_dir = os.getcwd()
+    os.chdir(Path(__file__).parent / "../..")
+    
     commands = [
         (["python3", "-m", "pip", "install", "--upgrade", "pip"], "Обновление pip"),
         (["python3", "-m", "pip", "install", "-r", "requirements.txt"], "Установка зависимостей"),
         (["python3", "-m", "pip", "install", "pyinstaller"], "Установка PyInstaller"),
     ]
     
+    result = True
     for cmd, desc in commands:
         if not run_command(cmd, desc):
-            return False
-    return True
+            result = False
+            break
+    
+    os.chdir(original_dir)
+    return result
 
 def check_appimage_tool():
     """Проверить/скачать appimagetool"""
@@ -70,15 +78,17 @@ def check_appimage_tool():
         print("[INFO] Сборка AppImage будет пропущена")
         return True  # Не ошибка, просто пропускаем на других ОС
     
-    appimage_tool = Path("build_appimage/appimagetool")
+    script_dir = Path(__file__).parent
+    build_appimage_dir = script_dir / "../../build_appimage"
+    build_appimage_dir.mkdir(exist_ok=True, parents=True)
+    
+    appimage_tool = build_appimage_dir / "appimagetool"
     
     if appimage_tool.exists():
         print("[INFO] appimagetool уже скачан")
         return True
     
     print("\n[INFO] Скачивание appimagetool...")
-    build_appimage_dir = Path("../../build_appimage")
-    build_appimage_dir.mkdir(exist_ok=True)
     
     url = "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
     cmd = ["wget", "-q", url, "-O", str(appimage_tool)]
@@ -98,13 +108,20 @@ def build_appimage():
     print("\n[SmartTable] Начало сборки AppImage для Linux...")
     print("[INFO] Это может занять 8-15 минут...")
     
+    # Определяем базовую папку проекта
+    script_dir = Path(__file__).parent
+    project_root = script_dir / "../.."  # pysheets папка
+    pysheets_root = project_root.parent  # SmartTable папка
+    
     # Создаём папку linux
-    linux_dir = Path("../../linux")
-    linux_dir.mkdir(exist_ok=True)
+    linux_dir = pysheets_root / "pysheets" / "linux"
+    linux_dir.mkdir(exist_ok=True, parents=True)
     
     # Создаём папку build_appimage
-    build_dir = Path("../../build_appimage")
-    build_dir.mkdir(exist_ok=True)
+    build_dir = pysheets_root / "pysheets" / "build_appimage"
+    build_dir.mkdir(exist_ok=True, parents=True)
+    
+    original_dir = os.getcwd()
     os.chdir(build_dir)
     
     # Создаём структуру AppDir
@@ -114,20 +131,24 @@ def build_appimage():
     (appdir / "usr" / "share" / "icons").mkdir(parents=True, exist_ok=True)
     
     # Копируем файлы
-    if Path("../assets/icons/app_icon.ico").exists():
-        shutil.copy("../assets/icons/app_icon.ico", appdir / "usr" / "share" / "icons/")
-    if Path("../SmartTable.desktop").exists():
-        shutil.copy("../SmartTable.desktop", appdir / "usr" / "share" / "applications/")
+    assets_icon = project_root / "assets" / "icons" / "app_icon.ico"
+    desktop_file = project_root / "SmartTable.desktop"
+    
+    if assets_icon.exists():
+        shutil.copy(str(assets_icon), str(appdir / "usr" / "share" / "icons/"))
+    if desktop_file.exists():
+        shutil.copy(str(desktop_file), str(appdir / "usr" / "share" / "applications/"))
     
     print("[INFO] Структура AppDir создана")
     
     # Собираем с PyInstaller
+    main_py = project_root / "main.py"
     cmd = [
         "python3", "-m", "PyInstaller",
         "--onefile",
         "--name=SmartTable",
-        "--add-data=../assets:assets",
-        "--add-data=../templates:templates",
+        f"--add-data={project_root / 'assets'}:assets",
+        f"--add-data={project_root / 'templates'}:templates",
         "--hidden-import=pysheets.src.ui.main_window",
         "--hidden-import=pysheets.src.ui.spreadsheet_widget",
         "--hidden-import=pysheets.src.core.cell",
@@ -141,10 +162,11 @@ def build_appimage():
         "--hidden-import=pysheets.src.io.markdown_export",
         "--hidden-import=pysheets.src.io.sql_export",
         "--hidden-import=pysheets.src.io.text_export",
-        "../main.py",
+        str(main_py),
     ]
     
     if not run_command(cmd, "Сборка с помощью PyInstaller"):
+        os.chdir(original_dir)
         return False
     
     # Копируем исполняемый файл в AppDir
@@ -162,22 +184,22 @@ def build_appimage():
     print("\n[INFO] Создание AppImage...")
     if not check_appimage_tool():
         print("[ERROR] Не удалось получить appimagetool")
+        os.chdir(original_dir)
         return False
     
     appimage_tool = Path("appimagetool")
     cmd = [str(appimage_tool), str(appdir), "SmartTable.AppImage"]
     if not run_command(cmd, "Создание AppImage"):
+        os.chdir(original_dir)
         return False
     
     # Копируем в dist
-    dist_dir = Path("../linux")
-    dist_dir.mkdir(exist_ok=True)
     if Path("SmartTable.AppImage").exists():
-        shutil.copy("SmartTable.AppImage", dist_dir / "SmartTable.AppImage")
-        os.chmod(dist_dir / "SmartTable.AppImage", 0o755)
+        shutil.copy("SmartTable.AppImage", str(linux_dir / "SmartTable.AppImage"))
+        os.chmod(str(linux_dir / "SmartTable.AppImage"), 0o755)
         print("[OK] AppImage скопирован в linux/")
     
-    os.chdir("../../..")
+    os.chdir(original_dir)
     return True
 
 def main():
@@ -217,11 +239,12 @@ def main():
     print("\n" + "=" * 60)
     print("[SUCCESS] Сборка завершена!")
     print("=" * 60)
-    print("\nРезультаты в папке 'linux/':")
-    print("  ✅ linux/SmartTable.AppImage - портативное приложение")
+    linux_path = Path(__file__).parent / "../../linux/SmartTable.AppImage"
+    print(f"\nРезультаты в папке '{linux_path.parent}':")
+    print("  ✅ SmartTable.AppImage - портативное приложение")
     print("\nДля запуска:")
-    print("  chmod +x linux/SmartTable.AppImage")
-    print("  ./linux/SmartTable.AppImage")
+    print("  chmod +x SmartTable.AppImage")
+    print("  ./SmartTable.AppImage")
     print("=" * 60 + "\n")
 
 if __name__ == "__main__":
