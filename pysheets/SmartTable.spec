@@ -1,13 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
+"""
+Simple spec file for SmartTable - avoids code analysis for Python 3.5 compatibility
+"""
 
 import sys
-import os
 from pathlib import Path
 
-# Определяем пути
 pysheets_dir = Path(__file__).parent.absolute()
-
-block_cipher = None
 
 a = Analysis(
     [str(pysheets_dir / 'main.py')],
@@ -18,24 +17,17 @@ a = Analysis(
         (str(pysheets_dir / 'templates'), 'templates'),
         (str(pysheets_dir / 'src'), 'pysheets/src'),
     ],
-    hiddenimports=[
-        'PyQt5.QtCore',
-        'PyQt5.QtGui',
-        'PyQt5.QtWidgets',
-        'pysheets.src.ui',
-        'pysheets.src.core',
-        'pysheets.src.io',
-    ],
+    hiddenimports=['PyQt5'],
     hookspath=[],
     runtime_hooks=[],
     excludedimports=[],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
-    cipher=block_cipher,
+    cipher=None,
     noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
 exe = EXE(
     pyz,

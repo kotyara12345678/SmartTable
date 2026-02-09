@@ -48,7 +48,7 @@ def main():
         QMessageBox.critical(
             None,
             "Launch Error",
-            f"Failed to create main window:\n{str(e)}"
+            "Failed to create main window:\n{0}".format(str(e))
         )
         return 1
 
