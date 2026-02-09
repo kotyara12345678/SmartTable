@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=SmartTable
+Comment=Табличный редактор SmartTable
+Exec=sh -c 'cd "$(dirname %k)" && ./run_linux.sh'
+Icon=assets/icons/app_icon.ico
+Terminal=false
+Categories=Office;Utility;

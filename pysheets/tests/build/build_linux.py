@@ -196,11 +196,25 @@ def build_appimage():
     
     # Копируем spec файл в рабочую папку сборки
     spec_file = project_root / "SmartTable.spec"
+    print("[DEBUG] Ищем spec файл: {0}".format(spec_file))
+    print("[DEBUG] Stat spec файла - exists: {0}".format(spec_file.exists()))
+    
     if spec_file.exists():
         shutil.copy(str(spec_file), str(build_dir / "SmartTable.spec"))
         print("[OK] spec файл скопирован в рабочую папку")
     else:
-        print("[WARNING] SmartTable.spec не найден в {0}".format(project_root))
+        print("[WARNING] SmartTable.spec не найден, ищем в других местах...")
+        # Ищем spec файл в других местах
+        for pattern in [project_root / "*.spec", project_root.parent / "*.spec"]:
+            found_files = list(project_root.glob("*.spec"))
+            if found_files:
+                print("[DEBUG] Найдены spec файлы: {0}".format(found_files))
+                spec_file = found_files[0]
+                shutil.copy(str(spec_file), str(build_dir / "SmartTable.spec"))
+                print("[OK] spec файл скопирован из {0}".format(spec_file))
+                break
+        else:
+            print("[ERROR] Не найден ни один spec файл")
     
     # Создаём структуру AppDir
     appdir = (build_dir / "SmartTable.AppDir").resolve()
@@ -218,17 +232,46 @@ def build_appimage():
     print("[DEBUG] assets_icon path: {0}".format(assets_icon))
     print("[DEBUG] assets_icon exists: {0}".format(assets_icon.exists()))
     
+    # Копирование иконок (опционально)
     if assets_icon.exists():
         shutil.copy(str(assets_icon), str(appdir / "usr" / "share" / "icons/"))
         print("[OK] Иконка скопирована")
     else:
-        print("[WARNING] Иконка не найдена: {0}".format(assets_icon))
+        print("[WARNING] Иконка не найдена (опционально): {0}".format(assets_icon))
+        # Создаём пустую иконку как placeholder
+        try:
+            placeholder_icon = appdir / "usr" / "share" / "icons" / "smarttable.png"
+            with open(str(placeholder_icon), 'wb') as f:
+                f.write(b'')  # Empty placeholder
+            print("[INFO] Создан placeholder для иконки")
+        except:
+            pass
     
+    # Копирование desktop файла (опционально)
     if desktop_file.exists():
         shutil.copy(str(desktop_file), str(appdir / "usr" / "share" / "applications/"))
         print("[OK] Desktop файл скопирован")
     else:
-        print("[WARNING] Desktop файл не найден: {0}".format(desktop_file))
+        print("[WARNING] Desktop файл не найден (опционально): {0}".format(desktop_file))
+        # Создаём минимальный desktop файл
+        desktop_content = """[Desktop Entry]
+Version=1.0
+Type=Application
+Name=SmartTable
+Comment=Advanced Spreadsheet Application
+Exec=%s/usr/bin/SmartTable
+Icon=smarttable
+Categories=Office;Spreadsheet;
+Terminal=false
+"""
+        try:
+            desktop_path = appdir / "usr" / "share" / "applications" / "smarttable.desktop"
+            with open(str(desktop_path), 'w') as f:
+                f.write(desktop_content)
+            os.chmod(str(desktop_path), 0o644)
+            print("[OK] Создан минимальный desktop файл")
+        except Exception as e:
+            print("[WARNING] Не удалось создать desktop файл: {0}".format(str(e)))
     
     print("[INFO] Структура AppDir создана")
     
