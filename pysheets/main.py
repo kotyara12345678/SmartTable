@@ -32,6 +32,7 @@ sys.path.insert(0, str(current_dir))
 
 try:
     from pysheets.src.ui.main_window import MainWindow
+    from pysheets.src.ui.splash_screen import SplashScreen
     from pysheets.src.db.database_manager import DatabaseManager
 except ImportError as e:
     print(f"Ошибка импорта: {e}")
@@ -43,6 +44,7 @@ except ImportError as e:
             self.setWindowTitle("SmartTable - Простой редактор")
             self.setGeometry(100, 100, 1200, 800)
     MainWindow = SimpleSpreadsheet
+    SplashScreen = None
 
 
 def init_database():
@@ -69,20 +71,50 @@ def main():
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 
-    # Инициализируем БД
-    db_manager = init_database()
+    # ============ SPLASH SCREEN ============
+    splash = None
+    if SplashScreen:
+        try:
+            splash = SplashScreen()
+            splash.show()
+            splash.show_message("Загрузка приложения...")
+            app.processEvents()
+        except Exception as e:
+            logging.warning(f"Splash screen error: {e}")
 
     try:
+        # Инициализируем БД (показываем прогресс на splash)
+        if splash:
+            splash.show_message("Инициализация базы данных...")
+            app.processEvents()
+        
+        db_manager = init_database()
+
+        # Создаём главное окно
+        if splash:
+            splash.show_message("Инициализация интерфейса...")
+            app.processEvents()
+        
         window = MainWindow()
+        
         # Передаём менеджер БД в главное окно если нужно
         if hasattr(window, 'set_database_manager'):
             window.set_database_manager(db_manager)
+        
+        # Закрываем splash и показываем главное окно
+        if splash:
+            splash.finish(window)
+        
     except Exception as e:
+        if splash:
+            splash.close()
+        
         QMessageBox.critical(
             None,
             "Ошибка запуска",
             f"Не удалось создать главное окно:\n{str(e)}"
         )
+        logging.error(f"Main window creation error: {e}", exc_info=True)
         return 1
 
     window.show()
