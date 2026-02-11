@@ -68,10 +68,6 @@ class MainWindow(QMainWindow):
         self.formula_bar = None
         self.menu_bar = None
         self.ai_chat_widget = None
-        
-        # Автосохранение
-        self.autosave_timer = None
-        self.autosave_enabled = True
 
         # Инициализация UI (внутри вызывается setup_shortcuts)
         self.init_ui()
@@ -151,9 +147,12 @@ class MainWindow(QMainWindow):
 
         # Создание панелей инструментов
         self.create_toolbars()
-        main_layout.addWidget(self.main_toolbar)
-        main_layout.addWidget(self.format_toolbar)
-        main_layout.addWidget(self.functions_toolbar)
+        # Закрепляем панели инструментов в верхней области окна,
+        # чтобы интерфейс выглядел ближе к Excel / Google Sheets
+        # и не загромождал центральное рабочее пространство.
+        self.addToolBar(Qt.TopToolBarArea, self.main_toolbar)
+        self.addToolBar(Qt.TopToolBarArea, self.format_toolbar)
+        self.addToolBar(Qt.TopToolBarArea, self.functions_toolbar)
 
         self.setup_shortcuts()
 
@@ -204,11 +203,6 @@ class MainWindow(QMainWindow):
         # Применяем тему ПОСЛЕ полной инициализации UI
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(100, lambda: self.apply_theme(self.current_theme, self.app_theme_color))
-        
-        # Инициализация таймера автосохранения (каждую минуту)
-        self.autosave_timer = QTimer()
-        self.autosave_timer.timeout.connect(self.autosave)
-        self.autosave_timer.start(60000)  # 60000 миллисекунд = 1 минута
 
         # Подключение сигналов
         self.connect_signals()
@@ -310,15 +304,6 @@ class MainWindow(QMainWindow):
         gallery_action = QAction("Галерея тем...", self)
         gallery_action.triggered.connect(self.open_theme_gallery)
         settings_menu.addAction(gallery_action)
-        
-        settings_menu.addSeparator()
-        
-        # Вариант 1: Простая переключаемая опция
-        autosave_action = QAction("✓ Автосохранение (1 мин)", self)
-        autosave_action.setCheckable(True)
-        autosave_action.setChecked(self.autosave_enabled)
-        autosave_action.triggered.connect(lambda checked: self.set_autosave(checked))
-        settings_menu.addAction(autosave_action)
 
         file_menu.addSeparator()
 
@@ -1098,13 +1083,8 @@ class MainWindow(QMainWindow):
             self.current_file_path = file_path
             self.update_window_title()
 
-    def save_to_file(self, file_path: str, is_autosave: bool = False):
-        """Сохранение в файл
-        
-        Args:
-            file_path: Путь до файла для сохранения
-            is_autosave: Если True, сохраняет молча без сообщений
-        """
+    def save_to_file(self, file_path: str):
+        """Сохранение в файл"""
         try:
             if file_path.endswith('.xlsx'):
                 exporter = ExcelExporter()
@@ -1121,37 +1101,10 @@ class MainWindow(QMainWindow):
                     json.dump(data, f, ensure_ascii=False, indent=2)
 
             self.update_window_title(modified=False)
-            
-            # При автосохранении показываем минимальное сообщение
-            if is_autosave:
-                self.status_bar.showMessage(f"✓ Автосохранение: {Path(file_path).name}", 3000)  # 3 сек
-            else:
-                self.status_bar.showMessage(f"Файл сохранен: {Path(file_path).name}")
+            self.status_bar.showMessage(f"Файл сохранен: {Path(file_path).name}")
 
         except Exception as e:
-            if not is_autosave:
-                show_error_message(self, f"Ошибка при сохранении файла: {str(e)}")
-            else:
-                print(f"Autosave error: {e}")
-
-    def autosave(self):
-        """Автосохранение файла каждую минуту"""
-        if self.autosave_enabled and self.current_file_path:
-            try:
-                self.save_to_file(self.current_file_path, is_autosave=True)
-            except Exception as e:
-                # Молчим при ошибке autosave чтобы не раздражать пользователя
-                print(f"Autosave failed: {e}")
-    
-    def set_autosave(self, enabled: bool):
-        """Включить/выключить автосохранение"""
-        self.autosave_enabled = enabled
-        if enabled and self.autosave_timer:
-            self.autosave_timer.start()
-            self.status_bar.showMessage("Автосохранение включено")
-        elif self.autosave_timer:
-            self.autosave_timer.stop()
-            self.status_bar.showMessage("Автосохранение отключено")
+            show_error_message(self, f"Ошибка при сохранении файла: {str(e)}")
 
     def export_to_excel(self):
         """Экспорт в Excel"""

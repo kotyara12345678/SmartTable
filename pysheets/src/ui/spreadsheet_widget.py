@@ -108,15 +108,30 @@ class SpreadsheetWidget(QTableWidget):
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
         self.setSelectionMode(QAbstractItemView.SelectionMode.ContiguousSelection)
 
-        # Настройка заголовков
+        # Настройка заголовков с правильным выравниванием
         header = self.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setDefaultSectionSize(100)
         header.setMinimumSectionSize(50)
-
+        header.setHighlightSections(False)
+        header.setStretchLastSection(False)
+        
+        # Центрируем текст в заголовках столбцов
+        for i in range(self.columns):
+            item = self.horizontalHeaderItem(i)
+            if item:
+                item.setTextAlignment(Qt.AlignCenter)
+        
         vertical_header = self.verticalHeader()
         vertical_header.setDefaultSectionSize(34)
         vertical_header.setMinimumSectionSize(20)
+        vertical_header.setHighlightSections(False)
+        
+        # Центрируем текст в заголовках строк
+        for i in range(self.rows):
+            item = self.verticalHeaderItem(i)
+            if item:
+                item.setTextAlignment(Qt.AlignCenter)
 
         # Настройка сетки
         self.setShowGrid(True)

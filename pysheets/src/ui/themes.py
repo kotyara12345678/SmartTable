@@ -195,7 +195,9 @@ class ThemeManager:
                 QHeaderView::section {{ 
                     background: linear-gradient(to bottom, #ffffff, #f8f9fa);
                     color: #202124; 
-                    padding: 10px 14px; 
+                    /* Более компактные отступы, чтобы подписи столбцов
+                       визуально совпадали с ячейками таблицы */
+                    padding: 8px 12px; 
                     border-right: 1px solid #dadce0; 
                     border-bottom: 2px solid #dadce0;
                     font-weight: 700;
@@ -514,7 +516,9 @@ class ThemeManager:
                 QHeaderView::section {{ 
                     background-color: #262626; 
                     color: #e8eaed; 
-                    padding: 10px 14px; 
+                    /* Отступы синхронизированы с ячейками,
+                       чтобы буквы столбцов не "уезжали" вправо */
+                    padding: 8px 12px; 
                     border-right: 1px solid #4a4a4a; 
                     border-bottom: 2px solid #454545;
                     font-weight: 700;
