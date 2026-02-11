@@ -793,7 +793,15 @@ class FormulaEngine:
         return ''
 
     def _get_range_values(self, range_str: str, cell_resolver: Callable[[str], Optional[str]]) -> list:
-        """Получение значений из диапазона (пропускает пустые ячейки)"""
+        """Получение числовых значений из диапазона.
+
+        ВАЖНО:
+        - Пустые ячейки пропускаются
+        - Нечисловые значения (текст и т.п.) больше НЕ превращаются в 0,
+          а полностью игнорируются.
+        Это нужно, чтобы быстрые функции вроде SUM / AVERAGE / SQRT
+        не возвращали 0 только из‑за текста в диапазоне.
+        """
         values = []
 
         # Разделение на начальную и конечную ячейки
@@ -814,8 +822,20 @@ class FormulaEngine:
                         value = cell_resolver(cell_ref)
                         # Пропускаем пустые ячейки - не добавляем None и пустые строки
                         if value is not None and str(value).strip():
-                            parsed_value = self._parse_value(value)
-                            values.append(parsed_value)
+                            # Пытаемся интерпретировать значение как ЧИСЛО.
+                            # Если не получилось (например, текст), просто игнорируем.
+                            try:
+                                raw = str(value).strip()
+                                raw = raw.replace('$', '').replace('€', '').replace('₽', '')
+                                raw = raw.replace('%', '')
+                                raw = raw.replace(',', '.')
+                                num = float(raw)
+                                values.append(num)
+                            except Exception:
+                                # Нечисловые значения для агрегатных функций
+                                # (SUM, AVERAGE, MAX, MIN, SQRT и т.п.) игнорируем,
+                                # чтобы они не превращались в 0 и не искажали результат.
+                                continue
 
         return values
 

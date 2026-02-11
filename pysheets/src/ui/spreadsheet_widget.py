@@ -4,6 +4,7 @@
 
 import pandas as pd
 import numpy as np
+import re
 from typing import Optional, List, Tuple, Dict, Any
 from dataclasses import dataclass
 from enum import Enum
@@ -165,6 +166,17 @@ class SpreadsheetWidget(QTableWidget):
 
     def set_cell_value(self, row: int, col: int, value: str):
         """Установка значения ячейки в модели и отображении"""
+        # Небольшой авто-хелпер:
+        # если пользователь ввёл формулу БЕЗ знака "=", например:
+        #   SUM(A1:A10) или SQRT(16)
+        # автоматически добавим "=" спереди, чтобы это стало формулой.
+        if isinstance(value, str):
+            normalized = value.strip()
+            if normalized and not normalized.startswith('='):
+                # Простейшая проверка вида ИМЯФУНКЦИИ(...)
+                if re.match(r'^[A-Za-z_]+\(.*\)$', normalized):
+                    value = f"={normalized}"
+
         # Проверяем, не скрыта ли ячейка
         if (row, col) in self.hidden_cells:
             cell = self.get_cell(row, col)
