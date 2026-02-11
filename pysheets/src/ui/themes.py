@@ -774,9 +774,13 @@ class ThemeManager:
             all_widgets = app.allWidgets()
             print(f"[THEMES] Перерисовываю {len(all_widgets)} виджетов")
             for widget in all_widgets:
-                widget.style().unpolish(widget)
-                widget.style().polish(widget)
-                widget.repaint()
+                try:
+                    widget.style().unpolish(widget)
+                    widget.style().polish(widget)
+                    widget.repaint()
+                except RuntimeError:
+                    # Виджет может быть удален, пропускаем его
+                    pass
             app.processEvents()
             print(f"[THEMES] Стиль применен")
 
