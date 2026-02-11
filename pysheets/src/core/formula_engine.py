@@ -106,25 +106,57 @@ class FormulaEngine:
         # Разделение на операнды и операторы
         pattern = r'([\+\-\*/\^])'
         parts = re.split(pattern, formula)
+        
+        # Очищенные части (удаляем пустые)
+        parts = [p.strip() for p in parts if p.strip()]
 
         # Первый операнд
-        result = self._parse_operand(parts[0].strip(), cell_resolver)
+        result = self._parse_operand(parts[0], cell_resolver)
 
         # Обработка остальных частей
         i = 1
         while i < len(parts):
-            operator = parts[i].strip()
-            operand = self._parse_operand(parts[i + 1].strip(), cell_resolver)
-
-            if operator in self.operators:
+            operator = parts[i]
+            
+            # Проверяем, не является ли это отрицательным числом вместо оператора
+            if operator == '-' and i + 1 < len(parts):
+                next_part = parts[i + 1]
+                if self._is_function_call(next_part) or self._is_cell_reference(next_part) or self._is_number(next_part):
+                    operand = self._parse_operand(parts[i + 1], cell_resolver)
+                    result = self.operators.get('-', lambda x, y: x - y)(result, operand)
+                else:
+                    # Может быть отрицательное число
+                    try:
+                        operand = self._parse_operand('-' + parts[i + 1], cell_resolver)
+                        result = self.operators.get('+', lambda x, y: x + y)(result, operand)
+                    except:
+                        result = self.operators.get('-', lambda x, y: x - y)(result, self._parse_operand(parts[i + 1], cell_resolver))
+                i += 2
+            elif operator in self.operators and i + 1 < len(parts):
+                operand = self._parse_operand(parts[i + 1], cell_resolver)
                 result = self.operators[operator](result, operand)
-
-            i += 2
+                i += 2
+            else:
+                i += 1
 
         return result
+    
+    def _is_number(self, value: str) -> bool:
+        """Проверка что это число"""
+        try:
+            float(value)
+            return True
+        except ValueError:
+            return False
 
     def _parse_operand(self, operand: str, cell_resolver: Callable[[str], Optional[str]]) -> float:
         """Парсинг операнда"""
+        operand = operand.strip().upper()
+        
+        # Если это вызов функции
+        if self._is_function_call(operand):
+            return float(self.evaluate(operand, cell_resolver))
+        
         # Если это ссылка на ячейку
         if self._is_cell_reference(operand):
             value = cell_resolver(operand)
