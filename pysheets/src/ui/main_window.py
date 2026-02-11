@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QFileDialog, QSplitter, QToolBar, QDialog, QAction,
                              QApplication, QMenu, QInputDialog, QPushButton, QShortcut)
 from PyQt5.QtCore import Qt, QTimer, QSize, QSettings
-from PyQt5.QtGui import QKeySequence, QIcon, QColor, QPixmap, QPainter, QBrush
+from PyQt5.QtGui import QKeySequence, QIcon, QColor, QPixmap, QPainter, QBrush, QKeyEvent
 
 from pysheets.src.core import Workbook
 from pysheets.src.io import ExcelImporter, ExcelExporter
@@ -69,11 +69,8 @@ class MainWindow(QMainWindow):
         self.menu_bar = None
         self.ai_chat_widget = None
 
-        # Инициализация UI
+        # Инициализация UI (внутри вызывается setup_shortcuts)
         self.init_ui()
-
-        # Настройка горячих клавиш
-        self.setup_shortcuts()
 
         # Загрузка последней сессии
         self.load_last_session()
@@ -153,6 +150,8 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.main_toolbar)
         main_layout.addWidget(self.format_toolbar)
         main_layout.addWidget(self.functions_toolbar)
+
+        self.setup_shortcuts()
 
         # Панель формул
         self.formula_bar = FormulaBar()
@@ -525,8 +524,6 @@ class MainWindow(QMainWindow):
         self.main_toolbar.zoom_changed.connect(self.zoom_combo_changed)
         self.main_toolbar.ai_chat_triggered.connect(self.open_ai_chat)
 
-        QShortcut(QKeySequence("Ctrl+P"), self, self.print_table)
-
         self.format_toolbar = FormatToolBar()
         self.format_toolbar.format_changed.connect(self.apply_format)
 
@@ -698,6 +695,7 @@ class MainWindow(QMainWindow):
         spreadsheet = SpreadsheetWidget()
         spreadsheet.cell_selected.connect(self.on_cell_selected)
         spreadsheet.data_changed.connect(self.on_data_changed)
+        self._install_shortcuts_on_spreadsheet(spreadsheet)
 
         index = self.tab_widget.addTab(spreadsheet, name)
         self.tab_widget.setCurrentIndex(index)
@@ -766,6 +764,9 @@ class MainWindow(QMainWindow):
             new_name = f"{self.tab_widget.tabText(index)} (копия)"
             self.workbook.add_sheet_from_dataframe(df, new_name)
             new_sheet = SpreadsheetWidget()
+            new_sheet.cell_selected.connect(self.on_cell_selected)
+            new_sheet.data_changed.connect(self.on_data_changed)
+            self._install_shortcuts_on_spreadsheet(new_sheet)
             new_sheet.load_data(df.values.tolist())
             new_index = self.tab_widget.addTab(new_sheet, new_name)
             self.tab_widget.setCurrentIndex(new_index)
@@ -797,13 +798,75 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(title)
 
     def setup_shortcuts(self):
-        """Настройка горячих клавиш"""
-        try:
-            from PyQt5.QtWidgets import QShortcut
-            from PyQt5.QtGui import QKeySequence
-            QShortcut(QKeySequence("Ctrl+0"), self, activated=lambda: self.main_toolbar.zoom_combo.setCurrentText("100%"))
-        except Exception:
-            pass
+        """Горячие клавиши через глобальный event filter — ловит нажатия в любом месте,
+        включая таблицу (QShortcut там не срабатывает из‑за перехвата событий)."""
+        self._shortcut_bindings = [
+            ("Ctrl+N", self.new_file),
+            ("Ctrl+O", self.open_file),
+            ("Ctrl+S", self.save_file),
+            ("Ctrl+Shift+S", self.save_as),
+            ("Ctrl+P", self.print_table),
+            ("Ctrl+Z", self.undo),
+            ("Ctrl+Y", self.redo),
+            ("Ctrl+X", self.cut),
+            ("Ctrl+C", self.copy),
+            ("Ctrl+V", self.paste),
+            ("Ctrl+=", self.zoom_in),
+            ("Ctrl++", self.zoom_in),
+            ("Ctrl+-", self.zoom_out),
+            ("Ctrl+0", lambda: self.main_toolbar.zoom_combo.setCurrentText("100%")),
+            ("Ctrl+I", self.open_ai_chat),
+        ]
+        app = QApplication.instance()
+        app.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        """Перехват клавиш на уровне приложения — чтобы работали при фокусе на таблице."""
+        if event.type() == event.Type.KeyPress:
+            try:
+                # Проверяем конкретные комбинации через event.key() и event.modifiers()
+                modifiers = event.modifiers()
+                key = event.key()
+                is_ctrl = modifiers & Qt.ControlModifier
+                is_shift = modifiers & Qt.ShiftModifier
+                
+                # Специальная обработка для Ctrl+O и Ctrl+P (часто перехватываются виджетами)
+                if is_ctrl and not is_shift:
+                    if key == Qt.Key_O:
+                        self.open_file()
+                        return True
+                    elif key == Qt.Key_P:
+                        self.print_table()
+                        return True
+                
+                # Общая обработка через QKeySequence
+                key_seq = QKeySequence(int(event.modifiers()) | int(event.key()))
+                pressed = key_seq.toString(QKeySequence.NativeText)
+                pressed_norm = pressed.replace(' ', '').lower()
+                
+                for keys, slot in self._shortcut_bindings:
+                    keys_norm = keys.replace(' ', '').lower()
+                    
+                    # Сравниваем точно и нормализованно
+                    if (pressed == keys or 
+                        pressed_norm == keys_norm or
+                        (keys in ('Ctrl++', 'Ctrl+=') and pressed in ('Ctrl++', 'Ctrl+=', 'Ctrl+Shift++')) or
+                        (keys in ('Ctrl++', 'Ctrl+=') and pressed_norm in ('ctrl++', 'ctrl+=', 'ctrl+shift++'))):
+                        try:
+                            slot()
+                            return True  # событие обработано
+                        except Exception as e:
+                            print(f"[ERROR] При выполнении {keys}: {e}")
+                            return False
+            except Exception as e:
+                print(f"[ERROR] eventFilter: {e}")
+                return False
+                
+        return super().eventFilter(obj, event)
+
+    def _install_shortcuts_on_spreadsheet(self, spreadsheet):
+        """Заглушка — shortcuts теперь через eventFilter, но вызываем для совместимости."""
+        pass
 
     def load_last_session(self):
         """Загружает последний файл"""
@@ -819,6 +882,9 @@ class MainWindow(QMainWindow):
                         self.tab_widget.clear()
                         for sheet_name in workbook.sheet_names:
                             spreadsheet = SpreadsheetWidget()
+                            spreadsheet.cell_selected.connect(self.on_cell_selected)
+                            spreadsheet.data_changed.connect(self.on_data_changed)
+                            self._install_shortcuts_on_spreadsheet(spreadsheet)
                             spreadsheet.load_data(workbook.get_sheet_data(sheet_name))
                             self.tab_widget.addTab(spreadsheet, sheet_name)
                         self.update_window_title()
@@ -972,6 +1038,9 @@ class MainWindow(QMainWindow):
                 self.tab_widget.clear()
                 for sheet_name in workbook.sheet_names:
                     spreadsheet = SpreadsheetWidget()
+                    spreadsheet.cell_selected.connect(self.on_cell_selected)
+                    spreadsheet.data_changed.connect(self.on_data_changed)
+                    self._install_shortcuts_on_spreadsheet(spreadsheet)
                     spreadsheet.load_data(workbook.get_sheet_data(sheet_name))
                     self.tab_widget.addTab(spreadsheet, sheet_name)
 
