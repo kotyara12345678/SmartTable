@@ -13,7 +13,8 @@ from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QFileDialog, QSplitter, QDialog, QAction,
                              QApplication, QMenu, QInputDialog, QPushButton, QToolBar, QFrame)
 from PyQt5.QtWidgets import QSizePolicy
-from PyQt5.QtCore import Qt, QSettings
+from PyQt5.QtCore import Qt, QSettings, QRect
+from PyQt5.QtGui import QKeySequence, QColor, QPixmap, QPainter, QGuiApplication
 from PyQt5.QtGui import QKeySequence, QColor, QPixmap, QPainter
 
 from pysheets.src.core import Workbook
@@ -132,7 +133,19 @@ class MainWindow(QMainWindow):
         """Инициализация пользовательского интерфейса"""
         # Основные настройки окна
         self.setWindowTitle("SmartTable - Новый документ")
-        self.setGeometry(100, 100, 1400, 800)
+        
+        # Центрируем окно на экране
+        screen = QGuiApplication.primaryScreen()
+        screen_geometry = screen.availableGeometry()
+        screen_center = screen_geometry.center()
+        window_width = 1400
+        window_height = 800
+        self.setGeometry(
+            screen_center.x() - window_width // 2,
+            screen_center.y() - window_height // 2,
+            window_width,
+            window_height
+        )
 
         # Центральный виджет
         central_widget = QWidget()
