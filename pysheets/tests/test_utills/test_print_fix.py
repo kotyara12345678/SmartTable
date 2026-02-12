@@ -2,7 +2,6 @@
 """Тест функции печати SmartTable"""
 
 import sys
-import importlib.util
 from pathlib import Path
 
 # Add project to path
@@ -14,7 +13,7 @@ def test_print_imports():
     """Проверяем что импорты работают"""
     try:
         # Импортируем через sys.path
-        from pysheets.src.io.print_handler import TablePrinter
+        from pysheets.src.io.handler.printer import TablePrinter
         print("[OK] TablePrinter импортирован")
         
         from pysheets.src.ui.main_window import MainWindow
@@ -37,7 +36,7 @@ def test_print_imports():
 def test_print_handler():
     """Проверяем что TablePrinter работает"""
     try:
-        from pysheets.src.io.print_handler import TablePrinter
+        from pysheets.src.io.handler.printer import TablePrinter
         from PyQt5.QtWidgets import QApplication, QTableWidget, QTableWidgetItem
         from PyQt5.QtPrintSupport import QPrinter
         

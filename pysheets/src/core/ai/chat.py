@@ -3,7 +3,7 @@ import re
 import ast
 import operator
 from typing import Optional
-from pysheets.src.core.ai.lama import chat_with_local_model
+from pysheets.src.core.ai.promt import chat_with_local_model
 
 try:
     from pysheets.src.core.ai.openrouter import chat_with_openrouter

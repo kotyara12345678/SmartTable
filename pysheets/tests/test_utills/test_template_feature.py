@@ -13,14 +13,14 @@ sys.path.insert(0, os.path.join(project_path, 'pysheets'))
 # Test imports
 print("Testing imports...")
 try:
-    from pysheets.src.ui.templates.templates.template_ui import TemplateBuilderDialog
+    from pysheets.src.ui.template.templates.template_ui import TemplateBuilderDialog
     print("✓ TemplateBuilderDialog imported successfully")
 except Exception as e:
     print(f"✗ Failed to import TemplateBuilderDialog: {e}")
     sys.exit(1)
 
 try:
-    from pysheets.src.utils import show_error_message, show_info_message
+    from pysheets.src.util import show_error_message, show_info_message
     print("✓ show_error_message and show_info_message imported successfully")
 except Exception as e:
     print(f"✗ Failed to import message functions: {e}")

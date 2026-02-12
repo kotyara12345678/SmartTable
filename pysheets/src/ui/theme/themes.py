@@ -168,7 +168,12 @@ class ThemeManager:
                     background-color: #ffffff; 
                     alternate-background-color: #f8f9fa; 
                     gridline-color: #e8eaed; 
-                    border: none;
+                    /* Левую границу даём самой таблице, чтобы заголовок
+                       и первая колонка начинались строго по одной линии */
+                    border-top: none;
+                    border-right: none;
+                    border-bottom: none;
+                    border-left: 1px solid #dadce0;
                     selection-background-color: {accent_light};
                     selection-color: #202124;
                     font-size: 12px;
@@ -195,9 +200,7 @@ class ThemeManager:
                 QHeaderView::section {{ 
                     background: linear-gradient(to bottom, #ffffff, #f8f9fa);
                     color: #202124; 
-                    /* Более компактные отступы, чтобы подписи столбцов
-                       визуально совпадали с ячейками таблицы */
-                    padding: 8px 12px; 
+                    padding: 7px 11px; 
                     border-right: 1px solid #dadce0; 
                     border-bottom: 2px solid #dadce0;
                     font-weight: 700;
@@ -209,8 +212,31 @@ class ThemeManager:
                 QHeaderView::section:hover {{
                     background: linear-gradient(to bottom, #f1f3f4, #f8f9fa);
                 }}
-                QHeaderView {{ background-color: #f8f9fa; border: none; border-left: 1px solid #dadce0; border-bottom: 2px solid #dadce0; }}
+                QHeaderView {{ 
+                    background-color: #f8f9fa; 
+                    /* Убираем левую границу, чтобы не было смещения
+                       букв столбцов относительно первой колонки */
+                    border: none; 
+                    border-bottom: 2px solid #dadce0; 
+                }}
                 QAbstractButton {{ color: #202124; font-weight: 700; }}
+                
+                /* CORNER BUTTON - кнопка выделения всей таблицы */
+                QTableWidget QAbstractButton {{
+                    background-color: #f8f9fa;
+                    border: 1px solid #dadce0;
+                    border-radius: 0px;
+                    min-width: 36px;
+                    min-height: 36px;
+                }}
+                QTableWidget QAbstractButton:hover {{
+                    background-color: #f1f3f4;
+                    border-color: #c6c6c6;
+                }}
+                QTableWidget QAbstractButton:pressed {{
+                    background-color: #e8eaed;
+                    border-color: #bfbfbf;
+                }}
 
                 /* TABS */
                 QTabWidget::pane {{ 
@@ -487,7 +513,10 @@ class ThemeManager:
                     background-color: #1e1e1e; 
                     alternate-background-color: #262626; 
                     gridline-color: #3f3f3f; 
-                    border: none;
+                    border-top: none;
+                    border-right: none;
+                    border-bottom: none;
+                    border-left: 1px solid #4a4a4a;
                     selection-background-color: {accent_dark};
                     selection-color: #e8eaed;
                     font-size: 12px;
@@ -518,7 +547,7 @@ class ThemeManager:
                     color: #e8eaed; 
                     /* Отступы синхронизированы с ячейками,
                        чтобы буквы столбцов не "уезжали" вправо */
-                    padding: 8px 12px; 
+                    padding: 7px 11px; 
                     border-right: 1px solid #4a4a4a; 
                     border-bottom: 2px solid #454545;
                     font-weight: 700;
@@ -530,8 +559,29 @@ class ThemeManager:
                 QHeaderView::section:hover {{
                     background: linear-gradient(to bottom, #3f3f3f, #323232);
                 }}
-                QHeaderView {{ background-color: #262626; border: none; border-left: 1px solid #4a4a4a; border-bottom: 2px solid #454545; }}
+                QHeaderView {{ 
+                    background-color: #262626; 
+                    border: none; 
+                    border-bottom: 2px solid #454545; 
+                }}
                 QAbstractButton {{ color: #e8eaed; font-weight: 700; }}
+                
+                /* CORNER BUTTON - кнопка выделения всей таблицы */
+                QTableWidget QAbstractButton {{
+                    background-color: #262626;
+                    border: 1px solid #4a4a4a;
+                    border-radius: 0px;
+                    min-width: 36px;
+                    min-height: 36px;
+                }}
+                QTableWidget QAbstractButton:hover {{
+                    background-color: #353535;
+                    border-color: #5a5a5a;
+                }}
+                QTableWidget QAbstractButton:pressed {{
+                    background-color: #454545;
+                    border-color: #6a6a6a;
+                }}
 
                 /* TABS */
                 QTabWidget::pane {{ 

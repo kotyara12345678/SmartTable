@@ -3,9 +3,9 @@
 """
 
 from .cell import Cell
-from .spreadsheet import Spreadsheet
+from pysheets.src.core.sheet.spread import Spreadsheet
 from .workbook import Workbook
-from .formula_engine import FormulaEngine
+from pysheets.src.core.formula.engine import FormulaEngine
 
 __all__ = [
     'Cell',

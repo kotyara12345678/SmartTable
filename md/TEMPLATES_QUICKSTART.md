@@ -164,7 +164,7 @@ pysheets/
 # Загрузить менеджер
 from src.ui.templates.templates import TemplateManager
 
-manager = TemplateManager("templates", "user_templates")
+manager = TemplateManager("template", "user_templates")
 
 # Получить список шаблонов
 templates = manager.get_template_names()

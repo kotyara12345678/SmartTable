@@ -4,7 +4,6 @@
 
 import functools
 import logging
-import json
 from typing import Callable, Any
 
 logger = logging.getLogger(__name__)
@@ -43,8 +42,7 @@ def require_permission(permission: str):
         def wrapper(self, *args, **kwargs) -> Any:
             if not hasattr(self, 'auth_manager'):
                 raise PermissionError("Authentication manager not found")
-            
-            from .models import Permission
+            from gdata.contentforshopping.data import Permission
             try:
                 perm = Permission(permission)
                 self.auth_manager.require_permission(perm)

@@ -4,8 +4,8 @@
 
 import logging
 from typing import Optional
-from .database_manager import DatabaseManager
-from .models import UserRole, Permission
+from pysheets.src.db.database_manager import DatabaseManager
+from pysheets.src.db.models import UserRole, Permission
 
 logger = logging.getLogger(__name__)
 

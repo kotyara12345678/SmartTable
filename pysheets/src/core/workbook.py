@@ -5,9 +5,8 @@
 import json
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
-from pathlib import Path
 
-from .spreadsheet import Spreadsheet
+from pysheets.src.core.sheet.spread import Spreadsheet
 
 
 @dataclass

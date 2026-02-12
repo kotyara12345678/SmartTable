@@ -8,7 +8,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from pysheets.src.core.formula_engine import FormulaEngine
+from pysheets.src.core.formula.engine import FormulaEngine
 
 
 def test_sqrt_functions():

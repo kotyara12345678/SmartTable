@@ -3,7 +3,7 @@
 """
 
 from PyQt5.QtWidgets import (QToolBar, QWidget, QHBoxLayout, QPushButton,
-                            QLabel, QComboBox, QSpinBox, QButtonGroup, QAction)
+                            QLabel, QComboBox, QSpinBox, QButtonGroup, QAction, QFrame)
 from PyQt5.QtCore import pyqtSignal, Qt, QSize
 from PyQt5.QtGui import QIcon, QFont
 
@@ -292,6 +292,18 @@ class FunctionsToolBar(QToolBar):
 
     function_selected = pyqtSignal(str)
     format_selected = pyqtSignal(str)
+    # Новый сигнал, чтобы лента могла управлять форматированием как старая FormatToolBar
+    format_changed = pyqtSignal(str, object)  # format_type, value
+    # Сигналы для вкладок ленты
+    new_file_requested = pyqtSignal()
+    open_file_requested = pyqtSignal()
+    save_file_requested = pyqtSignal()
+    print_requested = pyqtSignal()
+    chart_requested = pyqtSignal()
+    sort_requested = pyqtSignal()
+    templates_requested = pyqtSignal()
+    zoom_in_requested = pyqtSignal()
+    zoom_out_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__("Функции", parent)
@@ -302,23 +314,33 @@ class FunctionsToolBar(QToolBar):
 
     def init_ui(self):
         """Инициализация UI"""
-        from PyQt5.QtWidgets import QStackedWidget, QScrollArea, QFrame, QVBoxLayout, QSizePolicy
+        from PyQt5.QtWidgets import QStackedWidget, QScrollArea, QFrame, QVBoxLayout, QSizePolicy, QWidget, QHBoxLayout, QPushButton
         
-        # Контейнер для вкладок
+        # Корневой контейнер ленты: вкладки сверху, содержимое снизу
+        ribbon_root = QWidget()
+        ribbon_layout = QVBoxLayout(ribbon_root)
+        # Убираем левый/правый отступы, чтобы вкладки и содержимое начинались с одного края
+        ribbon_layout.setContentsMargins(0, 2, 0, 2)
+        ribbon_layout.setSpacing(0)
+
+        # Контейнер для кнопок-вкладок ленты
         tabs_widget = QWidget()
         tabs_layout = QHBoxLayout(tabs_widget)
-        tabs_layout.setContentsMargins(4, 2, 4, 2)
+        # Отступы только сверху/снизу, без левого/правого
+        tabs_layout.setContentsMargins(4, 4, 4, 4)
         tabs_layout.setSpacing(2)
 
-        # Кнопки-вкладки
+        # Кнопки-вкладки верхнего уровня (как в Excel)
         self.tab_buttons = []
         tabs = [
-            ("➕ Математика", "math"),
-            ("📝 Текст", "text"),
-            ("📅 Дата", "date"),
-            ("🔀 Логика", "logic"),
-            ("🔄 Конверт.", "convert"),
-            ("📊 Формат", "format"),
+            ("Главная", "home"),
+            ("Вставка", "insert"),
+            ("Формулы", "formulas"),
+            ("Данные", "data"),
+            ("Рецензирование", "review"),
+            ("Вид", "view"),
+            ("Разметка страницы", "page_layout"),
+            ("Справка", "help"),
         ]
 
         for tab_name, tab_id in tabs:
@@ -330,26 +352,376 @@ class FunctionsToolBar(QToolBar):
             tabs_layout.addWidget(btn)
             self.tab_buttons.append(btn)
 
-        tabs_layout.addStretch()
-        self.addWidget(tabs_widget)
+        # Убираем addStretch(), чтобы вкладки начинались слева
+        ribbon_layout.addWidget(tabs_widget)
 
-        # Стек панелей с функциями
+        # Горизонтальная разделительная линия между вкладками и содержимым
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        separator.setLineWidth(1)
+        separator.setFixedHeight(1)
+        # Стиль для разделителя, чтобы он был заметен
+        separator.setStyleSheet("QFrame { background-color: #dadce0; }")
+        # Отступы вокруг разделителя
+        separator_layout = QHBoxLayout()
+        separator_layout.setContentsMargins(4, 4, 4, 4)
+        separator_layout.addWidget(separator)
+        separator_container = QWidget()
+        separator_container.setLayout(separator_layout)
+        ribbon_layout.addWidget(separator_container)
+
+        # Стек панелей с функциями (вторая строка ленты)
         self.panels_stack = QStackedWidget()
-        self.panels_stack.setMaximumHeight(36)
+        # Лента может быть повыше, чтобы влезли комбобоксы и группы
+        self.panels_stack.setMaximumHeight(70)
         
-        # Создаём панели для каждой категории
-        self._create_math_panel()
-        self._create_text_panel()
-        self._create_date_panel()
-        self._create_logic_panel()
-        self._create_convert_panel()
-        self._create_format_panel()
+        # Создаём панели для каждой вкладки
+        self._create_home_panel()
+        self._create_insert_panel()
+        self._create_formulas_panel()
+        self._create_data_panel()
+        self._create_review_panel()
+        self._create_view_panel()
+        self._create_page_layout_panel()
+        self._create_help_panel()
 
-        self.addWidget(self.panels_stack)
+        ribbon_layout.addWidget(self.panels_stack)
+
+        # Добавляем корневой виджет ленты в QToolBar
+        self.addWidget(ribbon_root)
 
         # Выбираем первую вкладку по умолчанию
         self.tab_buttons[0].setChecked(True)
         self.panels_stack.setCurrentIndex(0)
+
+    # --- Панели ленты верхнего уровня ---
+
+    def _create_home_panel(self):
+        """Главная: текст, выравнивание, простой формат чисел"""
+        from PyQt5.QtWidgets import QLabel, QComboBox, QPushButton, QButtonGroup
+        panel = QWidget()
+        layout = QHBoxLayout(panel)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(6)
+
+        # Файл: Новый / Открыть / Сохранить
+        new_btn = QPushButton("Новый")
+        new_btn.setToolTip("Новый файл (Ctrl+N)")
+        new_btn.clicked.connect(self.new_file_requested.emit)
+
+        open_btn = QPushButton("Открыть")
+        open_btn.setToolTip("Открыть файл (Ctrl+O)")
+        open_btn.clicked.connect(self.open_file_requested.emit)
+
+        save_btn = QPushButton("Сохранить")
+        save_btn.setToolTip("Сохранить (Ctrl+S)")
+        save_btn.clicked.connect(self.save_file_requested.emit)
+
+        layout.addWidget(new_btn)
+        layout.addWidget(open_btn)
+        layout.addWidget(save_btn)
+
+        layout.addSpacing(10)
+
+        # Шрифт
+        font_label = QLabel("Шрифт:")
+        font_combo = QComboBox()
+        font_combo.addItems(["Arial", "Calibri", "Times New Roman", "Verdana", "Segoe UI"])
+        font_combo.setCurrentText("Arial")
+        font_combo.setFixedWidth(130)
+        font_combo.currentTextChanged.connect(
+            lambda: self.format_changed.emit('font', font_combo.currentText())
+        )
+
+        # Размер шрифта
+        size_label = QLabel("Размер:")
+        size_combo = QComboBox()
+        size_combo.addItems(["8", "9", "10", "11", "12", "14", "16", "18", "20", "24"])
+        size_combo.setCurrentText("11")
+        size_combo.setFixedWidth(60)
+        size_combo.currentTextChanged.connect(
+            lambda: self.format_changed.emit('font_size', int(size_combo.currentText()))
+        )
+
+        layout.addWidget(font_label)
+        layout.addWidget(font_combo)
+        layout.addWidget(size_label)
+        layout.addWidget(size_combo)
+
+        # Кнопки форматирования текста
+        bold_btn = QPushButton("B")
+        bold_btn.setCheckable(True)
+        bold_btn.setToolTip("Жирный (Ctrl+B)")
+        bold_btn.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        bold_btn.setFixedWidth(28)
+        bold_btn.clicked.connect(lambda: self.format_changed.emit('bold', bold_btn.isChecked()))
+
+        italic_btn = QPushButton("I")
+        italic_btn.setCheckable(True)
+        italic_btn.setToolTip("Курсив (Ctrl+I)")
+        f_i = QFont("Arial", 9)
+        f_i.setItalic(True)
+        italic_btn.setFont(f_i)
+        italic_btn.setFixedWidth(28)
+        italic_btn.clicked.connect(lambda: self.format_changed.emit('italic', italic_btn.isChecked()))
+
+        underline_btn = QPushButton("U")
+        underline_btn.setCheckable(True)
+        underline_btn.setToolTip("Подчеркнутый (Ctrl+U)")
+        f_u = QFont("Arial", 9)
+        f_u.setUnderline(True)
+        underline_btn.setFont(f_u)
+        underline_btn.setFixedWidth(28)
+        underline_btn.clicked.connect(lambda: self.format_changed.emit('underline', underline_btn.isChecked()))
+
+        strike_btn = QPushButton("S")
+        strike_btn.setCheckable(True)
+        strike_btn.setToolTip("Перечеркнутый")
+        f_s = QFont("Arial", 9)
+        f_s.setStrikeOut(True)
+        strike_btn.setFont(f_s)
+        strike_btn.setFixedWidth(28)
+        strike_btn.clicked.connect(lambda: self.format_changed.emit('strike', strike_btn.isChecked()))
+
+        layout.addSpacing(6)
+        layout.addWidget(bold_btn)
+        layout.addWidget(italic_btn)
+        layout.addWidget(underline_btn)
+        layout.addWidget(strike_btn)
+
+        # Цвет текста / фона
+        text_color_btn = QPushButton("A")
+        text_color_btn.setToolTip("Цвет текста")
+        text_color_btn.setStyleSheet("color: #DC143C; font-weight: bold;")
+        text_color_btn.setFixedWidth(30)
+        text_color_btn.clicked.connect(lambda: self.format_changed.emit('text_color', None))
+
+        bg_color_btn = QPushButton("🖌")
+        bg_color_btn.setToolTip("Цвет фона ячейки")
+        bg_color_btn.setFixedWidth(30)
+        bg_color_btn.clicked.connect(lambda: self.format_changed.emit('bg_color', None))
+
+        layout.addSpacing(6)
+        layout.addWidget(text_color_btn)
+        layout.addWidget(bg_color_btn)
+
+        # Выравнивание
+        align_group = QButtonGroup(panel)
+        align_group.setExclusive(True)
+
+        align_left_btn = QPushButton("◀")
+        align_left_btn.setCheckable(True)
+        align_left_btn.setToolTip("Выравнивание по левому краю")
+        align_left_btn.setFixedWidth(30)
+        align_left_btn.clicked.connect(lambda: self.format_changed.emit('alignment', 'left'))
+        align_group.addButton(align_left_btn)
+
+        align_center_btn = QPushButton("🔘")
+        align_center_btn.setCheckable(True)
+        align_center_btn.setToolTip("Выравнивание по центру")
+        align_center_btn.setFixedWidth(30)
+        align_center_btn.clicked.connect(lambda: self.format_changed.emit('alignment', 'center'))
+        align_group.addButton(align_center_btn)
+
+        align_right_btn = QPushButton("▶")
+        align_right_btn.setCheckable(True)
+        align_right_btn.setToolTip("Выравнивание по правому краю")
+        align_right_btn.setFixedWidth(30)
+        align_right_btn.clicked.connect(lambda: self.format_changed.emit('alignment', 'right'))
+        align_group.addButton(align_right_btn)
+
+        align_left_btn.setChecked(True)
+
+        layout.addSpacing(6)
+        layout.addWidget(align_left_btn)
+        layout.addWidget(align_center_btn)
+        layout.addWidget(align_right_btn)
+
+        # Простые форматы чисел
+        general_btn = QPushButton("Общий")
+        general_btn.setToolTip("Автоформат")
+        general_btn.clicked.connect(lambda: self.format_selected.emit("general"))
+
+        number_btn = QPushButton("Число")
+        number_btn.setToolTip("Числовой формат")
+        number_btn.clicked.connect(lambda: self.format_selected.emit("number"))
+
+        currency_btn = QPushButton("₽")
+        currency_btn.setToolTip("Денежный формат (рубли)")
+        currency_btn.clicked.connect(lambda: self.format_selected.emit("currency"))
+
+        layout.addSpacing(10)
+        layout.addWidget(general_btn)
+        layout.addWidget(number_btn)
+        layout.addWidget(currency_btn)
+
+        # Печать (как в группе "Главная" у Excel)
+        layout.addSpacing(10)
+        print_btn = QPushButton("Печать")
+        print_btn.setToolTip("Печать таблицы (Ctrl+P)")
+        print_btn.clicked.connect(self.print_requested.emit)
+        layout.addWidget(print_btn)
+
+        layout.addStretch()
+        self.panels_stack.addWidget(panel)
+        self.panels["home"] = 0
+
+    def _create_insert_panel(self):
+        """Вставка: диаграммы и другие объекты"""
+        from PyQt5.QtWidgets import QPushButton, QWidget, QHBoxLayout
+        panel = QWidget()
+        layout = QHBoxLayout(panel)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(6)
+
+        chart_btn = QPushButton("Диаграмма")
+        chart_btn.setToolTip("Создать диаграмму из выделенных данных")
+        chart_btn.clicked.connect(self.chart_requested.emit)
+
+        layout.addWidget(chart_btn)
+        layout.addStretch()
+
+        self.panels_stack.addWidget(panel)
+        self.panels["insert"] = 1
+
+    def _create_formulas_panel(self):
+        """Формулы: группируем математические/текстовые/другие функции"""
+        from PyQt5.QtWidgets import QWidget, QHBoxLayout, QLabel
+
+        panel = QWidget()
+        layout = QHBoxLayout(panel)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(8)
+
+        # Блок "Математика"
+        math_block = self._create_function_row([
+            ("SUM", "Сумма", "SUM(A1:A10)"),
+            ("AVERAGE", "Среднее", "AVERAGE(A1:A10)"),
+            ("COUNT", "Кол-во", "COUNT(A1:A10)"),
+            ("MAX", "Макс", "MAX(A1:A10)"),
+            ("MIN", "Мин", "MIN(A1:A10)"),
+        ])
+        layout.addWidget(math_block)
+
+        # Блок "Текст"
+        text_block = self._create_function_row([
+            ("LEN", "Длина", "LEN(текст)"),
+            ("LEFT", "Слева", "LEFT(текст, N)"),
+            ("RIGHT", "Справа", "RIGHT(текст, N)"),
+            ("MID", "Середина", "MID(текст, старт, длина)"),
+            ("CONCATENATE", "Склеить", "Объединить текст"),
+        ])
+        layout.addWidget(text_block)
+
+        # Блок "Дата/логика"
+        date_logic_block = self._create_function_row([
+            ("TODAY", "Сегодня", "Текущая дата"),
+            ("NOW", "Сейчас", "Дата и время"),
+            ("IF", "Если", "IF(условие, да, нет)"),
+        ])
+        layout.addWidget(date_logic_block)
+
+        layout.addStretch()
+        self.panels_stack.addWidget(panel)
+        self.panels["formulas"] = 2
+
+    def _create_data_panel(self):
+        """Данные: сортировка и шаблоны (сигналы обрабатываются в MainWindow через меню/горячие клавиши)"""
+        from PyQt5.QtWidgets import QPushButton, QWidget, QHBoxLayout
+        panel = QWidget()
+        layout = QHBoxLayout(panel)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(6)
+
+        sort_btn = QPushButton("Сортировка")
+        sort_btn.setToolTip("Диалог сортировки текущего листа")
+        sort_btn.clicked.connect(self.sort_requested.emit)
+
+        templates_btn = QPushButton("Шаблоны")
+        templates_btn.setToolTip("Галерея и управление шаблонами")
+        templates_btn.clicked.connect(self.templates_requested.emit)
+
+        layout.addWidget(sort_btn)
+        layout.addWidget(templates_btn)
+        layout.addStretch()
+
+        self.panels_stack.addWidget(panel)
+        self.panels["data"] = 3
+
+    def _create_review_panel(self):
+        """Рецензирование: комментарии и проверка"""
+        from PyQt5.QtWidgets import QPushButton, QWidget, QHBoxLayout, QLabel
+        panel = QWidget()
+        layout = QHBoxLayout(panel)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(6)
+
+        # Пока пустая панель, можно добавить функционал позже
+        comment_label = QLabel("Рецензирование")
+        layout.addWidget(comment_label)
+        layout.addStretch()
+
+        self.panels_stack.addWidget(panel)
+        self.panels["review"] = 4
+
+    def _create_view_panel(self):
+        """Вид: масштаб (остальной функционал уже есть в MainToolBar)"""
+        from PyQt5.QtWidgets import QPushButton, QWidget, QHBoxLayout, QLabel
+        panel = QWidget()
+        layout = QHBoxLayout(panel)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(6)
+
+        label = QLabel("Масштаб:")
+        layout.addWidget(label)
+
+        zoom_out_btn = QPushButton("−")
+        zoom_out_btn.setToolTip("Уменьшить масштаб (Ctrl+-)")
+        zoom_out_btn.setFixedWidth(28)
+        zoom_out_btn.clicked.connect(self.zoom_out_requested.emit)
+
+        zoom_in_btn = QPushButton("+")
+        zoom_in_btn.setToolTip("Увеличить масштаб (Ctrl++)")
+        zoom_in_btn.setFixedWidth(28)
+        zoom_in_btn.clicked.connect(self.zoom_in_requested.emit)
+
+        layout.addWidget(zoom_out_btn)
+        layout.addWidget(zoom_in_btn)
+        layout.addStretch()
+
+        self.panels_stack.addWidget(panel)
+        self.panels["view"] = 5
+
+    def _create_page_layout_panel(self):
+        """Разметка страницы: настройки печати"""
+        from PyQt5.QtWidgets import QPushButton, QWidget, QHBoxLayout, QLabel
+        panel = QWidget()
+        layout = QHBoxLayout(panel)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(6)
+
+        print_settings_label = QLabel("Разметка страницы")
+        layout.addWidget(print_settings_label)
+        layout.addStretch()
+
+        self.panels_stack.addWidget(panel)
+        self.panels["page_layout"] = 6
+
+    def _create_help_panel(self):
+        """Справка: помощь и информация"""
+        from PyQt5.QtWidgets import QPushButton, QWidget, QHBoxLayout, QLabel
+        panel = QWidget()
+        layout = QHBoxLayout(panel)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(6)
+
+        help_label = QLabel("Справка")
+        layout.addWidget(help_label)
+        layout.addStretch()
+
+        self.panels_stack.addWidget(panel)
+        self.panels["help"] = 7
 
     def _create_function_row(self, functions: list) -> QWidget:
         """Создаёт горизонтальный ряд кнопок функций"""

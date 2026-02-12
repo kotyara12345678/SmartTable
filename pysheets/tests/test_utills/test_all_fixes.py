@@ -2,9 +2,9 @@
 """Финальный тест всех исправлений"""
 
 import sys
-sys.path.insert(0, 'c:/Users/pasaz/PythonProjects/SmartTable')
+sys.path.insert(0, '/')
 
-from pysheets.src.core.formula_engine import FormulaEngine
+from pysheets.src.core.formula.engine import FormulaEngine
 from pysheets.src.core.cell import Cell
 
 print("=" * 60)
@@ -44,7 +44,7 @@ except Exception as e:
 print("\n[ТЕСТ 2] Проверка что сортировка отключена...")
 try:
     from PyQt5.QtWidgets import QApplication
-    from pysheets.src.ui.spreadsheet_widget import SpreadsheetWidget
+    from pysheets.src.ui.widghet.spreadsheet import SpreadsheetWidget
     
     app = QApplication.instance()
     if not app:
@@ -62,7 +62,7 @@ except Exception as e:
 # Тест 3: Проверка метода corner button
 print("\n[ТЕСТ 3] Проверка наличия метода _style_corner_button...")
 try:
-    from pysheets.src.ui.spreadsheet_widget import SpreadsheetWidget
+    from pysheets.src.ui.widghet.spreadsheet import SpreadsheetWidget
     if hasattr(SpreadsheetWidget, '_style_corner_button'):
         print(f"  ✓ Метод _style_corner_button существует")
     else:

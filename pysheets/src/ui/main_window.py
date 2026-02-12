@@ -6,30 +6,31 @@ import json
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from datetime import datetime
 from typing import Optional
 
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QTabWidget, QStatusBar, QMenuBar, QMessageBox,
-                             QFileDialog, QSplitter, QToolBar, QDialog, QAction,
-                             QApplication, QMenu, QInputDialog, QPushButton, QShortcut)
-from PyQt5.QtCore import Qt, QTimer, QSize, QSettings
-from PyQt5.QtGui import QKeySequence, QIcon, QColor, QPixmap, QPainter, QBrush, QKeyEvent
+                             QFileDialog, QSplitter, QDialog, QAction,
+                             QApplication, QMenu, QInputDialog, QPushButton, QToolBar, QFrame)
+from PyQt5.QtWidgets import QSizePolicy
+from PyQt5.QtCore import Qt, QSettings
+from PyQt5.QtGui import QKeySequence, QColor, QPixmap, QPainter
 
 from pysheets.src.core import Workbook
 from pysheets.src.io import ExcelImporter, ExcelExporter
-from pysheets.src.io.odt_export import ODTExporter
-from pysheets.src.io.print_handler import TablePrinter
-from pysheets.src.io.json_export import JSONExporter
-from pysheets.src.io.html_export import HTMLExporter
-from pysheets.src.io.xml_export import XMLExporter
-from pysheets.src.io.markdown_export import MarkdownExporter
-from pysheets.src.io.sql_export import SQLExporter
-from pysheets.src.io.text_export import TextExporter
-from pysheets.src.ui.formula_bar import FormulaBar
-from pysheets.src.ui.spreadsheet_widget import SpreadsheetWidget
-from pysheets.src.ui.toolbar import MainToolBar, FormatToolBar, FunctionsToolBar
-from pysheets.src.utils import show_error_message, show_info_message
+from pysheets.src.io.export.odt_export import ODTExporter
+from pysheets.src.io.handler.printer import TablePrinter
+from pysheets.src.io.export.json_export import JSONExporter
+from pysheets.src.io.export.html_export import HTMLExporter
+from pysheets.src.io.export.xml_export import XMLExporter
+from pysheets.src.io.export.markdown_export import MarkdownExporter
+from pysheets.src.io.export.sql_export import SQLExporter
+from pysheets.src.io.export.text_export import TextExporter
+from pysheets.src.ui.formula.formula_bar import FormulaBar
+from pysheets.src.ui.toolbar.toolbar import MainToolBar, FunctionsToolBar
+from pysheets.src.ui.widghet.spreadsheet import SpreadsheetWidget
+
+from pysheets.src.util import show_error_message, show_info_message
 
 
 class MainWindow(QMainWindow):
@@ -147,12 +148,14 @@ class MainWindow(QMainWindow):
 
         # Создание панелей инструментов
         self.create_toolbars()
-        # Закрепляем панели инструментов в верхней области окна,
-        # чтобы интерфейс выглядел ближе к Excel / Google Sheets
-        # и не загромождал центральное рабочее пространство.
-        self.addToolBar(Qt.TopToolBarArea, self.main_toolbar)
-        self.addToolBar(Qt.TopToolBarArea, self.format_toolbar)
+        # Показываем только "ленточную" панель функций под меню,
+        # как во вкладках Excel. MainToolBar оставляем только
+        # как технический объект (для совместимости), но не добавляем
+        # его как отдельную полоску.
         self.addToolBar(Qt.TopToolBarArea, self.functions_toolbar)
+        
+        # Создаём верхнюю панель с кнопкой AI (иконка справа)
+        self.create_ai_toolbar()
 
         self.setup_shortcuts()
 
@@ -392,7 +395,7 @@ class MainWindow(QMainWindow):
     def open_templates_dialog(self):
         """Открыть галерею шаблонов"""
         try:
-            from pysheets.src.ui.templates.templates.template_ui import TemplateGalleryDialog
+            from pysheets.src.ui.template.templates.template_ui import TemplateGalleryDialog
         except Exception as e:
             show_error_message(self, f"Не удалось импортировать модуль шаблонов: {e}")
             return
@@ -405,7 +408,7 @@ class MainWindow(QMainWindow):
     def open_templates_manager(self):
         """Открыть менеджер шаблонов (удаление/переименование)"""
         try:
-            from pysheets.src.ui.templates.templates.template_ui import TemplateManagerDialog
+            from pysheets.src.ui.template.templates.template_ui import TemplateManagerDialog
         except Exception as e:
             show_error_message(self, f"Не удалось импортировать менеджер шаблонов: {e}")
             return
@@ -417,11 +420,11 @@ class MainWindow(QMainWindow):
     def apply_template(self, template_name: str):
         """Применяет выбранный шаблон, создавая новую таблицу"""
         try:
-            from pysheets.src.ui.templates.templates.template_manager import TemplateManager
-            from pysheets.src.ui.templates.templates.template_applier import TemplateApplier
+            from pysheets.src.ui.template.templates.template_manager import TemplateManager
+            from pysheets.src.ui.template.templates.template_applier import TemplateApplier
             
             # Загружаем менеджер и получаем шаблон
-            template_manager = TemplateManager("templates", "user_templates")
+            template_manager = TemplateManager("template", "user_templates")
             template = template_manager.get_template(template_name)
             
             if not template:
@@ -491,7 +494,7 @@ class MainWindow(QMainWindow):
             
             # Открываем диалог создания шаблона
             try:
-                from pysheets.src.ui.templates.templates.template_ui import TemplateBuilderDialog
+                from pysheets.src.ui.template.templates.template_ui import TemplateBuilderDialog
             except Exception as e:
                 show_error_message(self, f"Не удалось импортировать TemplateBuilderDialog: {e}")
                 return
@@ -527,12 +530,38 @@ class MainWindow(QMainWindow):
         self.main_toolbar.zoom_changed.connect(self.zoom_combo_changed)
         self.main_toolbar.ai_chat_triggered.connect(self.open_ai_chat)
 
-        self.format_toolbar = FormatToolBar()
-        self.format_toolbar.format_changed.connect(self.apply_format)
+        # Отдельную панель форматирования больше не держим наверху —
+        # её функции доступны через вкладки ленты (FunctionsToolBar).
+        self.format_toolbar = None
 
         self.functions_toolbar = FunctionsToolBar()
         self.functions_toolbar.function_selected.connect(self.on_function_selected)
         self.functions_toolbar.format_selected.connect(self.on_format_selected)
+        # Проксируем форматирование из ленты в apply_format, как раньше с FormatToolBar
+        if hasattr(self.functions_toolbar, "format_changed"):
+            self.functions_toolbar.format_changed.connect(self.apply_format)
+        # Вкладка "Главная"
+        if hasattr(self.functions_toolbar, "new_file_requested"):
+            self.functions_toolbar.new_file_requested.connect(self.new_file)
+        if hasattr(self.functions_toolbar, "open_file_requested"):
+            self.functions_toolbar.open_file_requested.connect(self.open_file)
+        if hasattr(self.functions_toolbar, "save_file_requested"):
+            self.functions_toolbar.save_file_requested.connect(self.save_file)
+        if hasattr(self.functions_toolbar, "print_requested"):
+            self.functions_toolbar.print_requested.connect(self.print_table)
+        # Вкладка "Вставка"
+        if hasattr(self.functions_toolbar, "chart_requested"):
+            self.functions_toolbar.chart_requested.connect(self.create_chart)
+        # Вкладка "Данные"
+        if hasattr(self.functions_toolbar, "sort_requested"):
+            self.functions_toolbar.sort_requested.connect(self.open_sort_for_current)
+        if hasattr(self.functions_toolbar, "templates_requested"):
+            self.functions_toolbar.templates_requested.connect(self.open_templates_dialog)
+        # Вкладка "Вид" (масштаб)
+        if hasattr(self.functions_toolbar, "zoom_in_requested"):
+            self.functions_toolbar.zoom_in_requested.connect(self.zoom_in)
+        if hasattr(self.functions_toolbar, "zoom_out_requested"):
+            self.functions_toolbar.zoom_out_requested.connect(self.zoom_out)
 
     def create_statusbar(self):
         """Создание строки состояния"""
@@ -540,6 +569,35 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("Готов")
 
+    def create_ai_toolbar(self):
+        """Создаём верхнюю панель справа с кнопкой AI (иконка)"""
+        # Создаём контейнер для менюбара и кнопки AI
+        top_widget = QWidget()
+        top_layout = QHBoxLayout(top_widget)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(0)
+        
+        # Растягиваем менюбар на всё доступное пространство слева
+        self.menu_bar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        top_layout.addWidget(self.menu_bar)
+        
+        # Создаём тулбар с кнопкой AI
+        ai_toolbar = QToolBar("AI")
+        ai_toolbar.setMovable(False)
+        ai_toolbar.setFloatable(False)
+        ai_toolbar.setStyleSheet("QToolBar { spacing: 0px; padding: 0px; }")
+        
+        # Кнопка AI (только иконка)
+        ai_action = QAction("🤖", self)
+        ai_action.setToolTip("Помощь ИИ")
+        ai_action.triggered.connect(self.open_ai_chat)
+        ai_toolbar.addAction(ai_action)
+        
+        top_layout.addWidget(ai_toolbar)
+        
+        # Вставляем наш виджет в качестве "менюбара" окна
+        self.setMenuWidget(top_widget)
+        
     def connect_signals(self):
         """Подключение сигналов"""
         self.formula_bar.formula_entered.connect(self.on_formula_entered)
@@ -580,7 +638,7 @@ class MainWindow(QMainWindow):
 
     def create_chart(self):
         """Создать диаграмму на основе выделенных данных"""
-        from pysheets.src.ui.dialogs.chart_wizard import ChartWizardDialog
+        from pysheets.src.ui.dialog.chart_wizard import ChartWizardDialog
 
         spreadsheet = self.get_current_spreadsheet()
         if not spreadsheet:
@@ -1500,7 +1558,7 @@ class MainWindow(QMainWindow):
 
     def apply_theme(self, theme_name, color):
         """Применяет тему приложению"""
-        from pysheets.src.ui.themes import ThemeManager
+        from pysheets.src.ui.theme.themes import ThemeManager
         from PyQt5.QtWidgets import QApplication
         
         print(f"[MAIN apply_theme] Начало: theme={theme_name}, color={color.name() if color else None}")
@@ -1541,6 +1599,9 @@ class MainWindow(QMainWindow):
                         sheet = self.tab_widget.widget(i)
                         if sheet:
                             sheet.update()
+                            # Обновляем стили corner button для каждой таблицы
+                            if hasattr(sheet, 'update_corner_button_theme'):
+                                sheet.update_corner_button_theme()
                     
                     # Обновляем все виджеты
                     all_widgets = app.allWidgets()
@@ -1579,7 +1640,7 @@ class MainWindow(QMainWindow):
 
     def show_theme_settings(self):
         """Показывает встроенное окно настроек темы в углу главного окна"""
-        from pysheets.src.ui.themes import EmbeddedSettingsPanel
+        from pysheets.src.ui.theme.themes import EmbeddedSettingsPanel
         
         # Если уже есть открытая панель - закрываем её
         if hasattr(self, 'settings_panel') and self.settings_panel:
@@ -1837,7 +1898,7 @@ class MainWindow(QMainWindow):
 
     def _show_save_dialog(self) -> str:
         """Показывает диалог сохранения"""
-        from pysheets.src.ui.themes import ThemeManager
+        from pysheets.src.ui.theme.themes import ThemeManager
 
         actual_theme = self.current_theme
         if actual_theme == "system":

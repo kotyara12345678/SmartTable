@@ -3,7 +3,7 @@ import py_compile
 import sys
 files = [
     r"src/ui/main_window.py",
-    r"src/ui/templates/templates/template_ui.py",
+    r"src/ui/template/template/template_ui.py",
 ]
 errors = False
 for f in files:

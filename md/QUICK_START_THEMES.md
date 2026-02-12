@@ -92,7 +92,7 @@ SmartTable/
 ### Способ 2: Через командную строку
 
 ```bash
-python examples_create_theme.py
+python create_theme.py
 ```
 
 Следуйте инструкциям:
@@ -137,7 +137,7 @@ window.apply_theme('system', color)
 ### Полные примеры
 
 ```bash
-python examples_theme_gallery_api.py
+python theme_gallery_api.py
 ```
 
 ---

@@ -64,7 +64,7 @@ def build_app():
     print("[INFO] Это может занять 5-10 минут...")
     
     # Создаём папку macos
-    macos_dir = Path("../../macos")
+    macos_dir = Path("../../dist/macos")
     macos_dir.mkdir(exist_ok=True)
     
     cmd = [
@@ -73,13 +73,13 @@ def build_app():
         "--windowed",
         "--name=SmartTable",
         "--add-data=assets:assets",
-        "--add-data=templates:templates",
+        "--add-data=template:template",
         "--distpath=macos",
         "--hidden-import=pysheets.src.ui.main_window",
         "--hidden-import=pysheets.src.ui.spreadsheet_widget",
         "--hidden-import=pysheets.src.core.cell",
         "--hidden-import=pysheets.src.core.formula_engine",
-        "--hidden-import=pysheets.src.utils.validators",
+        "--hidden-import=pysheets.src.util.validators",
         "--hidden-import=pysheets.src.io.odt_export",
         "--hidden-import=pysheets.src.io.print_handler",
         "--hidden-import=pysheets.src.io.json_export",

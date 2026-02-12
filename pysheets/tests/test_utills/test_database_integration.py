@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pysheets.src.db.database_manager import DatabaseManager
-from pysheets.src.db.database_utils import AuthenticationManager, DatabaseInitializer
+from pysheets.src.util.database import AuthenticationManager
 from pysheets.src.db.models import UserRole, Permission
 
 # Настройка логирования

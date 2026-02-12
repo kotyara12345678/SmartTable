@@ -5,10 +5,9 @@
 import pandas as pd
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
-import numpy as np
 
-from .cell import Cell
-from .formula_engine import FormulaEngine
+from pysheets.src.core.cell import Cell
+from pysheets.src.core.formula.engine import FormulaEngine
 
 @dataclass
 class Spreadsheet:

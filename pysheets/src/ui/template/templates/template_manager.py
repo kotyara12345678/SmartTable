@@ -238,7 +238,7 @@ class EnhancedJSONEncoder(json.JSONEncoder):
 class TemplateManager:
     """Менеджер шаблонов с поддержкой встроенных и пользовательских шаблонов"""
 
-    def __init__(self, templates_dir: str = "templates", user_templates_dir: str = "user_templates"):
+    def __init__(self, templates_dir: str = "template", user_templates_dir: str = "user_templates"):
         self.templates_dir = Path(templates_dir)
         self.user_templates_dir = Path(user_templates_dir)
         self.templates_dir.mkdir(exist_ok=True)
@@ -268,7 +268,7 @@ class TemplateManager:
                 print(f"✗ Ошибка загрузки шаблона {file}: {e}")
 
         # Загружаем пользовательские шаблоны
-        for file in self.user_templates_dir.glob("templates/*.json"):
+        for file in self.user_templates_dir.glob("template/*.json"):
             try:
                 with open(file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
@@ -348,7 +348,7 @@ class TemplateManager:
 
             # Выбираем директорию
             if is_user_template:
-                target_dir = self.user_templates_dir / "templates"
+                target_dir = self.user_templates_dir / "template"
                 target_dir.mkdir(parents=True, exist_ok=True)
             else:
                 target_dir = self.templates_dir

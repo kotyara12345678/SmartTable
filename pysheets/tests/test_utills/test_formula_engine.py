@@ -2,10 +2,9 @@
 """Quick test for MIN, MAX, POWER, and other functions"""
 
 import sys
-sys.path.insert(0, r'c:\Users\pasaz\PythonProjects\SmartTable')
+sys.path.insert(0, r'/')
 
-from pysheets.src.core.formula_engine import FormulaEngine
-from pysheets.src.core.cell import Cell
+from pysheets.src.core.formula.engine import FormulaEngine
 
 # Create a simple mock spreadsheet
 cells = {}

@@ -179,7 +179,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets', 'assets'), ('templates', 'templates')],
+    datas=[('assets', 'assets'), ('template', 'template')],
     hiddenimports=['PyQt5'],
     hookspath=[],
     runtime_hooks=[],
@@ -350,14 +350,14 @@ Terminal=false
         shutil.copytree(str(assets_dir), str(build_assets))
         print("[OK] Папка assets скопирована в рабочую папку")
     
-    # Копируем templates
-    templates_dir = project_root / "templates"
+    # Копируем template
+    templates_dir = project_root / "template"
     if templates_dir.exists():
-        build_templates = build_dir / "templates"
+        build_templates = build_dir / "template"
         if build_templates.exists():
             shutil.rmtree(str(build_templates))
         shutil.copytree(str(templates_dir), str(build_templates))
-        print("[OK] Папка templates скопирована в рабочую папку")
+        print("[OK] Папка template скопирована в рабочую папку")
     
     print("[INFO] Исходный код подготовлен к сборке")
     

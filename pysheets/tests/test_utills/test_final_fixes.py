@@ -2,12 +2,13 @@
 """Final test of all fixes - updated"""
 
 import sys
-sys.path.insert(0, 'c:/Users/pasaz/PythonProjects/SmartTable')
+sys.path.insert(0, '/')
 
 from PyQt5.QtWidgets import QApplication
 from pysheets.src.ui.main_window import MainWindow
-from pysheets.src.ui.themes import ThemeManager
-from PyQt5.QtGui import QColor, QPalette
+from pysheets.src.ui.theme.themes import ThemeManager
+from PyQt5.QtGui import QColor
+
 
 def test_all_fixes():
     """Test all fixes"""

@@ -21,7 +21,7 @@
 - ✅ TemplateManager теперь принимает два параметра:
   ```python
   TemplateManager(
-      templates_dir="templates",           # встроенные
+      templates_dir="template",           # встроенные
       user_templates_dir="user_templates"  # пользовательские
   )
   ```
@@ -303,12 +303,12 @@ user_templates/
 ### Для разработчика (расширение)
 
 ```python
-from pysheets.src.ui.templates.templates import (
+from pysheets.src.ui.template.templates import (
     TemplateManager, TemplateGalleryDialog, TemplateApplier
 )
 
 # Загрузить шаблоны
-tm = TemplateManager("templates", "user_templates")
+tm = TemplateManager("template", "user_templates")
 
 # Получить шаблон
 template = tm.get_template("Контакты")

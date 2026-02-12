@@ -24,7 +24,7 @@ window.set_database_manager(db_manager)
 
 ```python
 from pysheets.src.db import DatabaseManager
-from pysheets.src.db.database_utils import AuthenticationManager
+from pysheets.src.util.database import AuthenticationManager
 from pysheets.src.db.models import Permission
 
 # Инициализация
@@ -34,7 +34,7 @@ auth = AuthenticationManager(db)
 # Вход пользователя
 if auth.login("admin", "admin123"):
     print(f"Авторизован: {auth.current_user.username}")
-    
+
     # Проверка разрешения
     if auth.check_permission(Permission.CREATE_FILE):
         # Создание файла
@@ -51,29 +51,30 @@ if auth.login("admin", "admin123"):
 # src/ui/main_window.py
 
 from pysheets.src.db.database_manager import DatabaseManager
-from pysheets.src.db.database_utils import AuthenticationManager
+from pysheets.src.util.database import AuthenticationManager
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.db_manager = None
         self.auth_manager = None
-    
+
     def set_database_manager(self, db_manager: DatabaseManager):
         """Установить менеджер БД"""
         self.db_manager = db_manager
         self.auth_manager = AuthenticationManager(db_manager)
-    
+
     def on_file_save(self):
         """Сохранение с проверкой разрешений"""
         if not self.auth_manager or not self.auth_manager.is_authenticated():
             show_error_message("Требуется аутентификация")
             return
-        
+
         try:
             self.auth_manager.require_permission(Permission.EDIT_FILE)
             # Сохраняем файл...
-            
+
         except PermissionError:
             show_error_message("Отказано в доступе")
 ```

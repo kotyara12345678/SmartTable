@@ -278,7 +278,7 @@ info = db.get_database_info()
 ## 🔐 Менеджер аутентификации
 
 ```python
-from pysheets.src.db.database_utils import AuthenticationManager
+from pysheets.src.util.database import AuthenticationManager
 
 auth = AuthenticationManager(db)
 

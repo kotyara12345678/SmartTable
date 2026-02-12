@@ -42,7 +42,7 @@ pysheets/user_templates/
 ```python
 # Поддержка обеих директорий
 manager = TemplateManager(
-    templates_dir="templates",
+    templates_dir="template",
     user_templates_dir="user_templates"
 )
 

@@ -22,7 +22,7 @@ from src.ui.templates.templates import (
 ```python
 # Создать менеджер
 manager = TemplateManager(
-    templates_dir="templates",           # встроенные
+    templates_dir="template",           # встроенные
     user_templates_dir="user_templates"  # пользовательские
 )
 ```
@@ -259,7 +259,7 @@ def apply_template(self, template_name: str):
     """Применяет шаблон к новой таблице"""
     try:
         # 1. Загрузить менеджер
-        manager = TemplateManager("templates", "user_templates")
+        manager = TemplateManager("template", "user_templates")
         template = manager.get_template(template_name)
         
         if not template:
@@ -459,7 +459,7 @@ print(f"Структура: {time.time() - start:.3f}s")  # < 1 ms
 ### ⚠️ Не делайте так
 
 ```python
-# ❌ Прямое редактирование templates/
+# ❌ Прямое редактирование template/
 # Это встроенные файлы, используйте user_templates/
 
 # ❌ Ручное редактирование JSON
