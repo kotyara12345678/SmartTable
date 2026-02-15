@@ -68,11 +68,34 @@ class UISetupMixin:
         self._create_custom_corner_button()
 
         # Делегат
+        spreadsheet_widget = self  # ссылка на SpreadsheetWidget для делегата
+        
         class FullCellDelegate(QStyledItemDelegate):
+            def __init__(self, parent=None):
+                super().__init__(parent)
+                self._current_autocomplete = None
+            
             def createEditor(self, parent, option, index):
                 editor = QLineEdit(parent)
                 editor.setFrame(False)
+                # Прикрепляем автокомплит формул
+                try:
+                    from pysheets.src.ui.formula.formula_autocomplete import FormulaAutocomplete
+                    # Используем главное окно как родителя popup
+                    main_win = spreadsheet_widget.window()
+                    if main_win:
+                        # Получаем акцентный цвет из главного окна
+                        accent = getattr(main_win, 'app_theme_color', None)
+                        self._current_autocomplete = FormulaAutocomplete(editor, main_win, accent_color=accent)
+                except Exception as e:
+                    print(f"[Delegate] autocomplete init error: {e}")
                 return editor
+            
+            def destroyEditor(self, editor, index):
+                if self._current_autocomplete:
+                    self._current_autocomplete.destroy()
+                    self._current_autocomplete = None
+                super().destroyEditor(editor, index)
 
             def updateEditorGeometry(self, editor, option, index):
                 editor.setGeometry(option.rect)

@@ -1634,6 +1634,17 @@ class MainWindow(QMainWindow):
                 else:
                     self.ai_chat_widget.update_theme(theme_name, color)
 
+            # Обновляем тему автокомплита формул
+            if hasattr(self, 'formula_bar') and self.formula_bar:
+                is_dark = theme_name == 'dark' or (theme_name == 'gallery' and getattr(self, 'current_theme_mode', 'light') == 'dark')
+                if theme_name == 'system':
+                    from PyQt5.QtGui import QPalette
+                    app_inst = QApplication.instance()
+                    if app_inst:
+                        text_br = app_inst.palette().color(QPalette.Text)
+                        is_dark = (text_br.red() + text_br.green() + text_br.blue()) / 3 > 128
+                self.formula_bar.update_autocomplete_theme(is_dark, color or self.app_theme_color)
+
             self.settings.setValue("theme", theme_name)
             if color is not None:
                 self.settings.setValue("theme_color", color.name())
