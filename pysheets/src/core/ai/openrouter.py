@@ -61,7 +61,7 @@ def chat_with_openrouter(message: str, model: Optional[str] = None, api_key: Opt
     payload = {
         "model": model,
         "messages": messages,
-        "max_tokens": 400,
+        "max_tokens": 1500,
     }
 
     headers = {

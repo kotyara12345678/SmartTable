@@ -637,11 +637,6 @@ class AIChatWidget(QWidget):
 
         # Очищаем поле ввода и временно отключаем ввод/кнопку
         self.input_field.clear()
-        
-        # Проверяем локальные команды (очистка/удаление столбцов)
-        if self._try_local_command(message):
-            return
-        
         self.input_field.setEnabled(False)
         self.send_button.setEnabled(False)
 
@@ -650,44 +645,6 @@ class AIChatWidget(QWidget):
 
         # Показываем индикатор набора
         self._show_typing_indicator()
-
-    def _try_local_command(self, message: str) -> bool:
-        """
-        Проверяет, является ли сообщение локальной командой (очистка/удаление столбцов).
-        Возвращает True если команда обработана локально.
-        """
-        import re
-        msg_lower = message.lower().strip()
-        
-        # Паттерны для очистки столбца: "очисти столбец A", "удали данные из столбца B", "clear column C"
-        clear_col_patterns = [
-            r'(?:очисти|удали|убери|сотри|почисти)\s+(?:данные\s+(?:из|в|с)\s+)?(?:столбец|столбца|столбце|колонк[уие])\s+([A-Za-zА-Яа-я])',
-            r'(?:clear|delete|remove|erase)\s+(?:data\s+(?:from|in)\s+)?column\s+([A-Za-z])',
-            r'(?:очисти|удали)\s+([A-Za-z])\s+(?:столбец|колонку)',
-        ]
-        
-        for pattern in clear_col_patterns:
-            match = re.search(pattern, msg_lower, re.IGNORECASE)
-            if match:
-                col_letter = match.group(1).upper()
-                if 'A' <= col_letter <= 'Z':
-                    self._execute_table_command({'action': 'clear_column', 'column': col_letter})
-                    self.add_ai_message(f"✅ Столбец {col_letter} очищен!")
-                    return True
-        
-        # Паттерны для очистки всей таблицы
-        clear_all_patterns = [
-            r'(?:очисти|удали|убери|сотри)\s+(?:всю\s+)?таблиц[уы]',
-            r'(?:clear|delete|erase)\s+(?:the\s+)?(?:entire\s+)?table',
-        ]
-        
-        for pattern in clear_all_patterns:
-            if re.search(pattern, msg_lower, re.IGNORECASE):
-                self._execute_table_command({'action': 'clear_all'})
-                self.add_ai_message("✅ Таблица полностью очищена!")
-                return True
-        
-        return False
 
     def _send_to_ai(self, message: str):
         """Выполняет запрос к локальной модели в отдельном потоке"""
@@ -1009,6 +966,37 @@ class AIChatWidget(QWidget):
                                     if cell and cell.value:
                                         spreadsheet.set_cell_value(row_idx, col, "")
                         logger.info(f"Cleared rows: {rows}")
+            
+            elif action == 'clear_cell':
+                # Очистка конкретной ячейки
+                col_letter = command.get('column', '').upper()
+                row_num = command.get('row', 0)
+                if col_letter and row_num and self.main_window and self.main_window.tab_widget:
+                    spreadsheet = self.main_window.tab_widget.currentWidget()
+                    if spreadsheet and hasattr(spreadsheet, 'set_cell_value'):
+                        col_idx = ord(col_letter) - ord('A')
+                        row_idx = int(row_num) - 1  # 1-based to 0-based
+                        if 0 <= col_idx < spreadsheet.columnCount() and 0 <= row_idx < spreadsheet.rowCount():
+                            spreadsheet.set_cell_value(row_idx, col_idx, "")
+                            logger.info(f"Cleared cell {col_letter}{row_num}")
+            
+            elif action == 'clear_range':
+                # Очистка диапазона ячеек
+                start_col = command.get('start_col', '').upper()
+                start_row = command.get('start_row', 0)
+                end_col = command.get('end_col', '').upper()
+                end_row = command.get('end_row', 0)
+                if start_col and end_col and start_row and end_row and self.main_window and self.main_window.tab_widget:
+                    spreadsheet = self.main_window.tab_widget.currentWidget()
+                    if spreadsheet and hasattr(spreadsheet, 'set_cell_value'):
+                        col1 = ord(start_col) - ord('A')
+                        col2 = ord(end_col) - ord('A')
+                        row1 = int(start_row) - 1
+                        row2 = int(end_row) - 1
+                        for r in range(min(row1, row2), min(max(row1, row2) + 1, spreadsheet.rowCount())):
+                            for c in range(min(col1, col2), min(max(col1, col2) + 1, spreadsheet.columnCount())):
+                                spreadsheet.set_cell_value(r, c, "")
+                        logger.info(f"Cleared range {start_col}{start_row}:{end_col}{end_row}")
             
             else:
                 logger.warning(f"Unknown action: {action}")

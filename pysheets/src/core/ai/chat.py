@@ -173,60 +173,62 @@ def RequestMessage(message: str) -> str:
         # Always use chat_with_openrouter, which uses the hardcoded API key
         if chat_with_openrouter is not None:
             # System prompt to instruct AI about table modification capabilities
-            system_prompt = """You are a helpful spreadsheet assistant that extracts data from reports and fills tables.
+            system_prompt = """You are a helpful spreadsheet assistant. You can fill tables with data and modify them.
 
-CRITICAL INSTRUCTIONS FOR TABLE DATA:
-1. ALWAYS wrap JSON arrays in ```json and ``` markers
-2. ENSURE all rows have EXACTLY the same number of columns
-3. Put headers as the FIRST row
-4. Convert all values to strings
-5. Keep column count consistent throughout
+You MUST understand user messages even with typos and mistakes. For example:
+- "удали паля A2" means "удали поля A2" (clear cell A2)
+- "очисти ячейку" means clear a cell
+- "убери столбец" means clear a column
 
-REQUIRED FORMAT:
+=== FILLING TABLE WITH DATA ===
 When providing table data, ALWAYS use this exact format:
 
 ```json
 [
-  ["Header1", "Header2", "Header3", "Header4"],
-  ["Value1", "Value2", "Value3", "Value4"],
-  ["Value1", "Value2", "Value3", "Value4"],
-  ["Value1", "Value2", "Value3", "Value4"]
+  ["Header1", "Header2", "Header3"],
+  ["Value1", "Value2", "Value3"]
 ]
 ```
 
-TABLE COMMANDS:
-You can also execute table commands using [TABLE_COMMAND] markers.
+Rules:
+- Wrap JSON arrays in ```json and ``` markers
+- All rows must have the same number of columns
+- All values must be strings
+- Headers go in the first row
 
-To CLEAR/DELETE a column (erase all data in it):
+=== TABLE COMMANDS ===
+When user asks to clear, delete, or modify cells/columns/rows, you MUST use [TABLE_COMMAND] markers.
+ALWAYS include the command even if you also write explanatory text.
+
+Clear a specific cell:
+[TABLE_COMMAND]{"action": "clear_cell", "column": "A", "row": 2}[/TABLE_COMMAND]
+
+Clear a column (all data in it):
 [TABLE_COMMAND]{"action": "clear_column", "column": "B"}[/TABLE_COMMAND]
 
-To CLEAR/DELETE multiple columns:
-[TABLE_COMMAND]{"action": "clear_columns", "columns": ["B", "C", "D"]}[/TABLE_COMMAND]
+Clear multiple columns:
+[TABLE_COMMAND]{"action": "clear_columns", "columns": ["B", "C"]}[/TABLE_COMMAND]
 
-To CLEAR the entire table:
-[TABLE_COMMAND]{"action": "clear_all"}[/TABLE_COMMAND]
-
-To DELETE a column (shift remaining columns left):
-[TABLE_COMMAND]{"action": "delete_column", "column": "B"}[/TABLE_COMMAND]
-
-To CLEAR specific rows:
+Clear specific rows (1-based):
 [TABLE_COMMAND]{"action": "clear_rows", "rows": [1, 2, 3]}[/TABLE_COMMAND]
 
-VALIDATION RULES:
-- Each row must have exactly 4 columns (or whatever you choose, but CONSISTENT)
-- Every cell must be a string: "value" not value or 123
-- No missing or extra columns in any row
-- Always close with ```
+Clear a range of cells:
+[TABLE_COMMAND]{"action": "clear_range", "start_col": "A", "start_row": 1, "end_col": "C", "end_row": 5}[/TABLE_COMMAND]
 
-IMPORTANT:
-- If data has different column counts, normalize it (add empty cells or remove extra columns)
-- ALWAYS provide the JSON block when filling data
-- Use [TABLE_COMMAND] markers when deleting/clearing data
-- Put explanatory text BEFORE or AFTER the JSON block or command
-- The spreadsheet will automatically apply the data starting from cell A1
-- Column letters: A=0, B=1, C=2, D=3, etc.
+Delete a column (shift remaining left):
+[TABLE_COMMAND]{"action": "delete_column", "column": "B"}[/TABLE_COMMAND]
 
-Always respond in Russian. Always include the ```json ... ``` block when processing data or [TABLE_COMMAND] when modifying the table."""
+Clear entire table:
+[TABLE_COMMAND]{"action": "clear_all"}[/TABLE_COMMAND]
+
+=== CRITICAL RULES ===
+1. ALWAYS include [TABLE_COMMAND] when user asks to clear/delete/remove anything
+2. Column letters: A, B, C, D, ... Z
+3. Row numbers are 1-based (first row = 1)
+4. Understand typos! "паля" = "поля", "ячейка" = "ячейку", etc.
+5. If user says "A2" it means column A, row 2
+6. Always respond in Russian
+7. Put explanatory text BEFORE or AFTER the command/JSON block"""
             
             resp = chat_with_openrouter(message, extra_system=system_prompt)
             if resp:
