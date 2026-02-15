@@ -962,6 +962,7 @@ class MainWindow(QMainWindow):
         spreadsheet = SpreadsheetWidget()
         spreadsheet.cell_selected.connect(self.on_cell_selected)
         spreadsheet.data_changed.connect(self.on_data_changed)
+        spreadsheet.ai_chat_request.connect(self._on_ai_chat_request)
         self._install_shortcuts_on_spreadsheet(spreadsheet)
 
         index = self.tab_widget.addTab(spreadsheet, name)
@@ -976,6 +977,17 @@ class MainWindow(QMainWindow):
         else:
             self.ai_chat_widget.show()
             self.ai_chat_widget.input_field.setFocus()
+
+    def _on_ai_chat_request(self, prompt: str):
+        """Обработчик запроса к AI чату от таблицы (контекстное меню AI)"""
+        if not self.ai_chat_widget:
+            return
+        # Открываем чат если скрыт
+        if not self.ai_chat_widget.isVisible():
+            self.ai_chat_widget.show()
+        # Вставляем промпт и отправляем
+        self.ai_chat_widget.input_field.setPlainText(prompt)
+        self.ai_chat_widget.send_message()
 
     def get_current_spreadsheet(self) -> Optional[SpreadsheetWidget]:
         """Получение текущего виджета таблицы"""
@@ -992,11 +1004,55 @@ class MainWindow(QMainWindow):
         else:
             show_error_message(self, "Нет активного листа")
 
+    def create_script_tab(self, sheet_name: str, sheet_index: int):
+        """Создаёт новую вкладку с редактором SmartScript, привязанным к листу"""
+        try:
+            from pysheets.src.ui.script.script_editor import SmartScriptWidget
+        except ImportError as e:
+            show_error_message(self, f"Не удалось загрузить SmartScript: {e}")
+            return
+
+        # Получаем виджет таблицы-источника
+        source_widget = self.tab_widget.widget(sheet_index)
+        if not isinstance(source_widget, SpreadsheetWidget):
+            show_error_message(self, "Скрипт можно создать только для листа таблицы")
+            return
+
+        # Функция чтения ячеек из таблицы-источника (row, col) -> value
+        def cell_getter(row: int, col: int):
+            cell = source_widget.get_cell(row, col)
+            if cell:
+                return cell.calculated_value or cell.value or ""
+            return ""
+
+        script_widget = SmartScriptWidget(
+            source_sheet_name=sheet_name,
+            cell_getter=cell_getter,
+            accent_color=self.app_theme_color,
+            parent=self
+        )
+
+        tab_name = f"📜 {sheet_name}"
+        new_index = self.tab_widget.addTab(script_widget, tab_name)
+        self.tab_widget.setCurrentIndex(new_index)
+        self.status_bar.showMessage(f"SmartScript создан для листа '{sheet_name}'")
+
     # ============ Вкладки и сессии ============
     def close_tab(self, index: int):
         """Закрывает вкладку по индексу и удаляет соответствующий лист в модели"""
         if index < 0:
             return
+        # Если это вкладка скрипта — просто удаляем вкладку без workbook
+        widget = self.tab_widget.widget(index)
+        try:
+            from pysheets.src.ui.script.script_editor import SmartScriptWidget
+            if isinstance(widget, SmartScriptWidget):
+                self.tab_widget.removeTab(index)
+                widget.deleteLater()
+                self.update_window_title()
+                return
+        except ImportError:
+            pass
         removed = self.workbook.remove_sheet(index)
         if removed:
             self.tab_widget.removeTab(index)
@@ -1008,6 +1064,15 @@ class MainWindow(QMainWindow):
         """Обработка смены активной вкладки"""
         if index < 0:
             return
+        # Скрипт-вкладки не привязаны к workbook
+        widget = self.tab_widget.widget(index)
+        try:
+            from pysheets.src.ui.script.script_editor import SmartScriptWidget
+            if isinstance(widget, SmartScriptWidget):
+                self.update_window_title()
+                return
+        except ImportError:
+            pass
         self.workbook.set_active_sheet(index)
         self.update_window_title()
 
@@ -1052,10 +1117,16 @@ class MainWindow(QMainWindow):
         def new_here():
             self.add_new_sheet("Новый лист")
 
+        def create_script():
+            """Создать скрипт для текущего листа"""
+            sheet_name = self.tab_widget.tabText(index)
+            self.create_script_tab(sheet_name, index)
+
         menu.addAction(make_action("Переименовать", rename))
         menu.addAction(make_action("Дублировать", duplicate))
         menu.addAction(make_action("Закрыть", close_here))
         menu.addSeparator()
+        menu.addAction(make_action("📜 Создать скрипт", create_script))
         menu.addAction(make_action("Новый лист", new_here))
 
         menu.exec_(tab_bar.mapToGlobal(pos))

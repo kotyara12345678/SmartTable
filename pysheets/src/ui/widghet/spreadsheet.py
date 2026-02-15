@@ -53,6 +53,7 @@ class SpreadsheetWidget(
     cell_hidden = pyqtSignal(int, int, bool)  # row, col, hidden
     format_changed = pyqtSignal()
     ai_formula_result = pyqtSignal(int, int, str)  # row, col, result — для AI-формул
+    ai_chat_request = pyqtSignal(str)  # prompt — запрос к AI чату
 
     def __init__(self, parent=None):
         super().__init__(1000, 26, parent)  # 1000 строк, 26 колонок
