@@ -4,9 +4,10 @@
 
 from typing import Optional
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
-                              QPushButton, QLabel, QScrollArea, QFrame)
-from PyQt5.QtCore import Qt, QDateTime, QSize, QTimer, pyqtSignal
-from PyQt5.QtGui import QFont, QColor, QPainter, QPainterPath, QPixmap
+                              QPushButton, QLabel, QScrollArea, QFrame,
+                              QListWidget, QListWidgetItem)
+from PyQt5.QtCore import Qt, QDateTime, QSize, QTimer, pyqtSignal, QPoint
+from PyQt5.QtGui import QFont, QColor, QPainter, QPainterPath, QPixmap, QTextCursor
 import threading
 
 
@@ -37,6 +38,13 @@ class AIChatWidget(QWidget):
         self._init_agent()
         
         self.init_ui()
+
+        # === АВТОКОМПЛИТ @ ===
+        self._autocomplete_popup = None
+        self._at_start_pos = -1  # позиция символа @ в тексте
+        self._last_mentioned_sheets = []  # упомянутые листы из последнего запроса
+        self._init_autocomplete_popup()
+
         self.apply_theme()
 
         self.ai_response_ready.connect(self._on_ai_response)
@@ -263,6 +271,25 @@ class AIChatWidget(QWidget):
 
     def _input_key_press(self, event):
         """Обработка горячих клавиш в поле ввода"""
+        # Если автокомплит открыт — обрабатываем навигацию
+        if self._autocomplete_popup is not None and self._autocomplete_popup.isVisible():
+            if event.key() == Qt.Key_Down:
+                row = self._autocomplete_popup.currentRow()
+                if row < self._autocomplete_popup.count() - 1:
+                    self._autocomplete_popup.setCurrentRow(row + 1)
+                return
+            elif event.key() == Qt.Key_Up:
+                row = self._autocomplete_popup.currentRow()
+                if row > 0:
+                    self._autocomplete_popup.setCurrentRow(row - 1)
+                return
+            elif event.key() in (Qt.Key_Return, Qt.Key_Tab):
+                self._accept_autocomplete()
+                return
+            elif event.key() == Qt.Key_Escape:
+                self._hide_autocomplete()
+                return
+        
         if event.key() == Qt.Key_Return:
             if event.modifiers() == Qt.ShiftModifier:
                 QTextEdit.keyPressEvent(self.input_field, event)
@@ -270,6 +297,293 @@ class AIChatWidget(QWidget):
                 self.send_message()
         else:
             QTextEdit.keyPressEvent(self.input_field, event)
+            # После ввода символа — проверяем нужен ли автокомплит
+            QTimer.singleShot(10, self._check_autocomplete)
+
+    # ============ АВТОКОМПЛИТ @ ============
+    
+    def _init_autocomplete_popup(self):
+        """Создаёт popup-виджет автокомплита для @-упоминаний"""
+        self._autocomplete_popup = QListWidget(self)
+        self._autocomplete_popup.setObjectName("autocompletePopup")
+        # Не используем window flags — просто дочерний виджет с raise
+        self._autocomplete_popup.setFocusPolicy(Qt.NoFocus)
+        self._autocomplete_popup.setMaximumHeight(200)
+        self._autocomplete_popup.setMinimumWidth(200)
+        self._autocomplete_popup.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._autocomplete_popup.itemClicked.connect(self._on_autocomplete_clicked)
+        self._autocomplete_popup.hide()
+        print(f"[AUTOCOMPLETE] popup created: {self._autocomplete_popup}")
+        
+        # Стили popup — будут обновлены в apply_theme()
+        self._update_autocomplete_style()
+    
+    def _update_autocomplete_style(self):
+        """Обновляет стили popup автокомплита с учётом текущего акцентного цвета и темы"""
+        if self._autocomplete_popup is None:
+            return
+        
+        accent_hex = self.accent_color.name()
+        accent_hover = self.accent_color.lighter(130).name()
+        
+        # Определяем тему
+        from PyQt5.QtGui import QPalette
+        from PyQt5.QtWidgets import QApplication
+        
+        actual_theme = self.theme
+        if self.theme == "system":
+            actual_theme = "light"
+            app = QApplication.instance()
+            if app:
+                palette = app.palette()
+                text_color = palette.color(QPalette.Text)
+                text_brightness = (text_color.red() + text_color.green() + text_color.blue()) / 3
+                actual_theme = "dark" if text_brightness > 128 else "light"
+        elif self.theme == "gallery":
+            actual_theme = self.theme_mode
+        
+        if actual_theme == "dark":
+            bg = "#2a2a35"
+            border = "#4a4a55"
+            text_color = "#e0e0e0"
+            hover_bg = "#3a3a45"
+        else:
+            bg = "#ffffff"
+            border = "#d2d2d7"
+            text_color = "#1d1d1f"
+            hover_bg = "#f0f0f5"
+        
+        self._autocomplete_popup.setStyleSheet(f"""
+            QListWidget {{
+                background-color: {bg};
+                border: 1px solid {border};
+                border-radius: 8px;
+                padding: 4px;
+                font-size: 13px;
+                color: {text_color};
+            }}
+            QListWidget::item {{
+                padding: 8px 12px;
+                border-radius: 4px;
+            }}
+            QListWidget::item:hover {{
+                background-color: {hover_bg};
+            }}
+            QListWidget::item:selected {{
+                background-color: {accent_hex};
+                color: white;
+            }}
+        """)
+    
+    def _get_sheet_names(self) -> list:
+        """Получает список имён всех листов из tab_widget"""
+        if not self.main_window or not self.main_window.tab_widget:
+            return []
+        tab_widget = self.main_window.tab_widget
+        names = []
+        for i in range(tab_widget.count()):
+            names.append(tab_widget.tabText(i))
+        return names
+    
+    def _check_autocomplete(self):
+        """Проверяет, нужно ли показать автокомплит"""
+        if self._autocomplete_popup is None:
+            print("[AUTOCOMPLETE] no popup")
+            return
+        
+        cursor = self.input_field.textCursor()
+        text = self.input_field.toPlainText()
+        pos = cursor.position()
+        
+        print(f"[AUTOCOMPLETE] text={repr(text)}, pos={pos}")
+        
+        if pos == 0:
+            self._hide_autocomplete()
+            return
+        
+        # Ищем последний @ перед курсором
+        text_before = text[:pos]
+        at_idx = text_before.rfind('@')
+        
+        if at_idx == -1:
+            self._hide_autocomplete()
+            return
+        
+        # Проверяем что между @ и курсором нет пробелов (или есть только часть имени)
+        query = text_before[at_idx + 1:]
+        
+        # Если есть пробел после завершённого имени — скрываем
+        # Но разрешаем пробелы внутри имени листа (напр. "Лист 1")
+        sheet_names = self._get_sheet_names()
+        
+        print(f"[AUTOCOMPLETE] at_idx={at_idx}, query={repr(query)}, sheets={sheet_names}")
+        
+        # Фильтруем по запросу
+        query_lower = query.lower()
+        filtered = [name for name in sheet_names if query_lower in name.lower() or not query]
+        
+        print(f"[AUTOCOMPLETE] filtered={filtered}")
+        
+        if not filtered:
+            self._hide_autocomplete()
+            return
+        
+        self._at_start_pos = at_idx
+        self._show_autocomplete(filtered)
+    
+    def _show_autocomplete(self, items: list):
+        """Показывает popup с вариантами"""
+        if self._autocomplete_popup is None:
+            return
+        
+        print(f"[AUTOCOMPLETE] _show_autocomplete: {len(items)} items")
+        
+        self._autocomplete_popup.clear()
+        
+        for name in items:
+            item = QListWidgetItem(f"\U0001F4CB {name}")
+            item.setData(Qt.UserRole, name)  # сохраняем чистое имя
+            self._autocomplete_popup.addItem(item)
+        
+        if self._autocomplete_popup.count() > 0:
+            self._autocomplete_popup.setCurrentRow(0)
+        
+        # Позиционируем над полем ввода (относительно self)
+        input_pos = self.input_field.mapTo(self, QPoint(0, 0))
+        popup_height = min(len(items) * 36 + 10, 200)
+        
+        self._autocomplete_popup.setFixedHeight(popup_height)
+        self._autocomplete_popup.setFixedWidth(max(200, self.input_field.width()))
+        self._autocomplete_popup.move(
+            input_pos.x(),
+            input_pos.y() - popup_height - 4
+        )
+        self._autocomplete_popup.show()
+        self._autocomplete_popup.raise_()
+        print(f"[AUTOCOMPLETE] popup shown at ({input_pos.x()}, {input_pos.y() - popup_height - 4})")
+        
+        # Возвращаем фокус на поле ввода
+        self.input_field.setFocus()
+    
+    def _hide_autocomplete(self):
+        """Скрывает popup автокомплита"""
+        if self._autocomplete_popup is not None:
+            self._autocomplete_popup.hide()
+        self._at_start_pos = -1
+    
+    def _on_autocomplete_clicked(self, item):
+        """Обработка клика по элементу автокомплита"""
+        self._accept_autocomplete()
+    
+    def _accept_autocomplete(self):
+        """Принимает выбранный вариант автокомплита"""
+        if self._autocomplete_popup is None or not self._autocomplete_popup.currentItem():
+            self._hide_autocomplete()
+            return
+        
+        selected = self._autocomplete_popup.currentItem().data(Qt.UserRole)
+        if not selected:
+            self._hide_autocomplete()
+            return
+        
+        # Заменяем @запрос на @ИмяЛиста
+        text = self.input_field.toPlainText()
+        cursor = self.input_field.textCursor()
+        pos = cursor.position()
+        
+        if self._at_start_pos >= 0:
+            # Заменяем от @ до текущей позиции
+            new_text = text[:self._at_start_pos] + f"@{selected} " + text[pos:]
+            self.input_field.setPlainText(new_text)
+            
+            # Ставим курсор после вставленного имени
+            new_cursor = self.input_field.textCursor()
+            new_pos = self._at_start_pos + len(selected) + 2  # @ + name + space
+            new_cursor.setPosition(min(new_pos, len(new_text)))
+            self.input_field.setTextCursor(new_cursor)
+        
+        self._hide_autocomplete()
+    
+    def _extract_sheet_data_by_name(self, sheet_name: str) -> Optional[str]:
+        """Извлекает данные конкретного листа по имени"""
+        try:
+            if not self.main_window or not self.main_window.tab_widget:
+                return None
+            
+            tab_widget = self.main_window.tab_widget
+            
+            # Ищем лист по имени
+            target_widget = None
+            for i in range(tab_widget.count()):
+                if tab_widget.tabText(i) == sheet_name:
+                    target_widget = tab_widget.widget(i)
+                    break
+            
+            if not target_widget or not hasattr(target_widget, 'cells'):
+                return None
+            
+            cells = target_widget.cells
+            if not cells:
+                return None
+            
+            lines = []
+            max_cols = len(cells[0]) if cells else 0
+            if max_cols == 0:
+                return None
+            
+            header = " | ".join([chr(65 + i) for i in range(min(max_cols, 26))])
+            lines.append(header)
+            lines.append("-" * len(header))
+            
+            has_data = False
+            for row_idx, row in enumerate(cells[:50]):  # до 50 строк
+                row_data = []
+                for col_idx in range(min(max_cols, 26)):
+                    cell = row[col_idx] if col_idx < len(row) else None
+                    if cell and hasattr(cell, 'value'):
+                        value = cell.value
+                    else:
+                        value = None
+                    
+                    if value is not None:
+                        cell_str = str(value)[:20]
+                        has_data = True
+                    else:
+                        cell_str = ""
+                    row_data.append(cell_str)
+                
+                if any(row_data):
+                    lines.append(" | ".join(row_data))
+            
+            if not has_data or len(lines) <= 2:
+                return None
+            
+            return "\n".join(lines)
+            
+        except Exception as e:
+            import logging
+            logging.exception(f"Failed to extract sheet data for '{sheet_name}': {e}")
+            return None
+    
+    def _parse_sheet_mentions(self, message: str) -> tuple:
+        """Парсит @ИмяЛиста из сообщения.
+        
+        Returns:
+            tuple: (clean_message, list_of_sheet_names)
+        """
+        import re
+        sheet_names = self._get_sheet_names()
+        mentioned = []
+        clean = message
+        
+        # Сортируем по длине (сначала длинные) чтобы "Лист 10" матчился раньше "Лист 1"
+        for name in sorted(sheet_names, key=len, reverse=True):
+            pattern = f"@{re.escape(name)}"
+            if re.search(pattern, clean, re.IGNORECASE):
+                mentioned.append(name)
+                clean = re.sub(pattern, f"[{name}]", clean, flags=re.IGNORECASE)
+        
+        return clean.strip(), mentioned
 
     def apply_theme(self):
         """Применяет современную тему и цвета к чату"""
@@ -442,6 +756,56 @@ class AIChatWidget(QWidget):
         self.user_msg_bg = user_msg_bg
         self.ai_msg_color = ai_msg_color
         self.ai_msg_bg = ai_msg_bg
+        
+        # Обновляем стили автокомплита
+        self._update_autocomplete_style()
+        
+        # Обновляем стили автокомплита
+        if self._autocomplete_popup:
+            if actual_theme == "dark":
+                self._autocomplete_popup.setStyleSheet(f"""
+                    QListWidget {{
+                        background-color: #2a2a35;
+                        border: 1px solid #4a4a55;
+                        border-radius: 8px;
+                        padding: 4px;
+                        font-size: 13px;
+                        color: #e0e0e0;
+                    }}
+                    QListWidget::item {{
+                        padding: 8px 12px;
+                        border-radius: 4px;
+                    }}
+                    QListWidget::item:hover {{
+                        background-color: #3a3a45;
+                    }}
+                    QListWidget::item:selected {{
+                        background-color: {accent_hex};
+                        color: white;
+                    }}
+                """)
+            else:
+                self._autocomplete_popup.setStyleSheet(f"""
+                    QListWidget {{
+                        background-color: #ffffff;
+                        border: 1px solid #d2d2d7;
+                        border-radius: 8px;
+                        padding: 4px;
+                        font-size: 13px;
+                        color: #1d1d1f;
+                    }}
+                    QListWidget::item {{
+                        padding: 8px 12px;
+                        border-radius: 4px;
+                    }}
+                    QListWidget::item:hover {{
+                        background-color: #f5f5f7;
+                    }}
+                    QListWidget::item:selected {{
+                        background-color: {accent_hex};
+                        color: white;
+                    }}
+                """)
         
     def _draw_send_icon(self, color: str = "#ffffff"):
         """Рисует иконку отправки"""
@@ -680,20 +1044,43 @@ class AIChatWidget(QWidget):
     def _send_to_ai(self, message: str):
         """Выполняет запрос к модели в отдельном потоке. Если запрос сложный — использует AI Агента."""
         try:
+            # Парсим @-упоминания листов
+            clean_message, mentioned_sheets = self._parse_sheet_mentions(message)
+            
+            # Сохраняем упомянутые листы для _process_ai_commands
+            self._last_mentioned_sheets = mentioned_sheets
+            
             # Проверяем, нужен ли агент
-            if self._agent and self._agent.is_agent_request(message):
-                self._run_agent(message)
+            if self._agent and self._agent.is_agent_request(clean_message):
+                self._run_agent(clean_message)
                 return
             
             from pysheets.src.core.ai.chat import RequestMessage
             
-            table_data = None
-            if self.main_window:
-                table_data = self._extract_table_data()
+            # Собираем контекст из упомянутых листов
+            sheets_context = ""
+            if mentioned_sheets:
+                for sheet_name in mentioned_sheets:
+                    sheet_data = self._extract_sheet_data_by_name(sheet_name)
+                    if sheet_data:
+                        sheets_context += f"\n\n=== Данные листа '{sheet_name}' ===\n{sheet_data}"
+                
+                # Добавляем инструкцию о целевых листах
+                if len(mentioned_sheets) >= 1:
+                    sheet_list = ', '.join(mentioned_sheets)
+                    sheets_context += f"\n\nДоступные листы: {sheet_list}"
+                    sheets_context += "\nЕсли нужно заполнить конкретный лист, используй маркер [SHEET:ИмяЛиста] перед JSON блоком."
+                    sheets_context += "\nЕсли нужно заполнить несколько листов, используй отдельный [SHEET:ИмяЛиста] + ```json ... ``` для каждого."
             
-            final_message = message
-            if table_data:
-                final_message = f"{table_data}\n\nUser request: {message}"
+            # Если нет упоминаний — берём текущий лист как раньше
+            if not sheets_context and self.main_window:
+                table_data = self._extract_table_data()
+                if table_data:
+                    sheets_context = f"\n\n{table_data}"
+            
+            final_message = clean_message
+            if sheets_context:
+                final_message = f"{sheets_context}\n\nUser request: {clean_message}"
             
             resp = RequestMessage(final_message)
             if resp is None:
@@ -1170,6 +1557,7 @@ class AIChatWidget(QWidget):
         Поддерживает:
         1. [TABLE_COMMAND]...[/TABLE_COMMAND] маркеры
         2. ```json [...] ``` блоки с массивами данных для таблицы
+        3. [SHEET:ИмяЛиста] маркеры для направления данных на конкретный лист
         """
         import re
         import json
@@ -1179,20 +1567,49 @@ class AIChatWidget(QWidget):
         removed_positions = []
         commands_found = 0
         
+        # Получаем упомянутые листы из последнего запроса
+        mentioned_sheets = getattr(self, '_last_mentioned_sheets', [])
+        
         try:
-            # 1. Сначала проверяем ```json [...] ``` блоки с данными для таблицы (заполнение должно быть первым)
-            json_block_pattern = r'```json\s*\n?(\[.*?\])\s*\n?```'
-            json_matches = re.finditer(json_block_pattern, response, re.DOTALL)
+            # 1. Парсим [SHEET:Имя] + ```json ... ``` блоки
+            # Паттерн: опциональный [SHEET:name] перед ```json
+            sheet_json_pattern = r'(?:\[SHEET[:\s]*([^\]]+)\]\s*)?```json\s*\n?(\[.*?\])\s*\n?```'
+            json_matches = list(re.finditer(sheet_json_pattern, response, re.DOTALL))
             
-            for match in json_matches:
+            for idx, match in enumerate(json_matches):
                 try:
-                    data = json.loads(match.group(1).strip())
+                    target_sheet = match.group(1)  # может быть None
+                    if target_sheet:
+                        target_sheet = target_sheet.strip()
+                    
+                    data = json.loads(match.group(2).strip())
                     if isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
-                        logger.info(f"Found JSON table data: {len(data)} rows")
+                        logger.info(f"Found JSON table data: {len(data)} rows, target sheet: {target_sheet}")
                         # Нормализуем данные
                         data = self._normalize_table_data(data)
-                        # Заполняем таблицу
-                        self._fill_table_with_data(data)
+                        
+                        # Определяем целевой лист
+                        if target_sheet:
+                            # AI явно указал лист
+                            self._fill_table_on_sheet(target_sheet, data)
+                        elif len(mentioned_sheets) == 1:
+                            # Упомянут один лист — заполняем его
+                            self._fill_table_on_sheet(mentioned_sheets[0], data)
+                        elif len(mentioned_sheets) > 1 and len(json_matches) == len(mentioned_sheets):
+                            # N JSON блоков = N упомянутых листов — распределяем 1:1
+                            self._fill_table_on_sheet(mentioned_sheets[idx], data)
+                        elif len(mentioned_sheets) > 1 and len(json_matches) == 1:
+                            # 1 JSON блок, но несколько листов — заполняем все упомянутые
+                            for sname in mentioned_sheets:
+                                self._fill_table_on_sheet(sname, data)
+                        elif mentioned_sheets:
+                            # Есть упомянутые листы, но кол-во не совпадает — первый упомянутый
+                            target = mentioned_sheets[min(idx, len(mentioned_sheets) - 1)]
+                            self._fill_table_on_sheet(target, data)
+                        else:
+                            # Без указания листа — текущий
+                            self._fill_table_with_data(data)
+                        
                         commands_found += 1
                         removed_positions.append((match.start(), match.end()))
                 except json.JSONDecodeError as e:
@@ -1230,6 +1647,61 @@ class AIChatWidget(QWidget):
             logger.exception(f"Error processing AI commands: {e}")
             return response
 
+    def _get_spreadsheet_by_name(self, sheet_name: str):
+        """Находит виджет таблицы по имени листа"""
+        if not self.main_window or not self.main_window.tab_widget:
+            return None
+        tab_widget = self.main_window.tab_widget
+        for i in range(tab_widget.count()):
+            if tab_widget.tabText(i) == sheet_name:
+                widget = tab_widget.widget(i)
+                if hasattr(widget, 'set_cell_value'):
+                    return widget
+        return None
+    
+    def _fill_table_on_sheet(self, sheet_name: str, data: list):
+        """Заполняет конкретный лист данными из 2D массива с анимацией"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        spreadsheet = self._get_spreadsheet_by_name(sheet_name)
+        if not spreadsheet:
+            logger.warning(f"Sheet '{sheet_name}' not found, falling back to current")
+            self._enqueue_sheet_fill(None, data)
+            return
+        
+        logger.info(f"Filling sheet '{sheet_name}' with {len(data)} rows")
+        self._enqueue_sheet_fill(sheet_name, data)
+    
+    def _enqueue_sheet_fill(self, sheet_name, data: list):
+        """Добавляет заполнение листа в очередь. Заполнения выполняются последовательно."""
+        if not hasattr(self, '_sheet_fill_queue'):
+            self._sheet_fill_queue = []
+        
+        self._sheet_fill_queue.append((sheet_name, data))
+        
+        # Если анимация не идёт — запускаем следующее заполнение
+        if not self._animation_running:
+            self._process_next_sheet_fill()
+    
+    def _process_next_sheet_fill(self):
+        """Запускает следующее заполнение из очереди"""
+        if not hasattr(self, '_sheet_fill_queue') or not self._sheet_fill_queue:
+            return
+        
+        sheet_name, data = self._sheet_fill_queue.pop(0)
+        
+        if sheet_name and self.main_window and self.main_window.tab_widget:
+            # Переключаемся на нужный лист
+            tab_widget = self.main_window.tab_widget
+            for i in range(tab_widget.count()):
+                if tab_widget.tabText(i) == sheet_name:
+                    tab_widget.setCurrentIndex(i)
+                    break
+        
+        # Заполняем с анимацией
+        self._fill_table_with_data(data)
+    
     def _fill_table_with_data(self, data: list):
         """Заполняет текущую таблицу данными из 2D массива с анимацией"""
         import logging
@@ -1308,6 +1780,7 @@ class AIChatWidget(QWidget):
             else:
                 # Нет подсвеченных ячеек — сразу сбрасываем флаг и выполняем отложенные
                 self._animation_running = False
+                self._process_next_sheet_fill()
                 if self._deferred_actions:
                     import logging
                     logging.getLogger(__name__).info(f"Выполняю {len(self._deferred_actions)} отложенных действий (без fade)")
@@ -1381,6 +1854,7 @@ class AIChatWidget(QWidget):
             
             # Сбрасываем флаг анимации и выполняем отложенные действия
             self._animation_running = False
+            self._process_next_sheet_fill()
             if self._deferred_actions:
                 import logging
                 logger = logging.getLogger(__name__)
@@ -1440,6 +1914,7 @@ class AIChatWidget(QWidget):
         
         if not clear_highlight_cells:
             self._animation_running = False
+            self._process_next_sheet_fill()
             return
         
         # Сохраняем данные для анимации
@@ -1463,6 +1938,7 @@ class AIChatWidget(QWidget):
             if hasattr(self, '_clear_anim_timer'):
                 self._clear_anim_timer.stop()
             self._animation_running = False
+            self._process_next_sheet_fill()
             return
         
         self._clear_anim_step += 1
@@ -1484,6 +1960,7 @@ class AIChatWidget(QWidget):
             self._clear_anim_cells = []
             self._clear_anim_timer.stop()
             self._animation_running = False
+            self._process_next_sheet_fill()
             
             # Выполняем отложенные действия
             if self._deferred_actions:

@@ -240,6 +240,29 @@ Make text bold in a column:
 Common colors: red=#FF0000, green=#00AA00, blue=#0000FF, yellow=#FFFF00, orange=#FF8800, white=#FFFFFF, black=#000000
 You can use bg_color alone (only background), text_color alone (only text), or both together.
 
+=== MULTI-SHEET SUPPORT ===
+When the user mentions specific sheets (e.g. [Лист1], [Лист2]), you can target data to a specific sheet.
+Use [SHEET:ИмяЛиста] marker BEFORE the ```json block to specify which sheet to fill:
+
+[SHEET:Лист1]
+```json
+[
+  ["Header1", "Header2"],
+  ["Value1", "Value2"]
+]
+```
+
+[SHEET:Лист2]
+```json
+[
+  ["Header1", "Header2"],
+  ["Value1", "Value2"]
+]
+```
+
+If no [SHEET:] marker is used, data goes to the current active sheet.
+You can fill multiple sheets in one response by using multiple [SHEET:name] + ```json blocks.
+
 === CRITICAL RULES ===
 1. ALWAYS include [TABLE_COMMAND] when user asks to clear/delete/remove anything
 2. Column letters: A, B, C, D, ... Z
@@ -247,7 +270,8 @@ You can use bg_color alone (only background), text_color alone (only text), or b
 4. Understand typos! "паля" = "поля", "ячейка" = "ячейку", etc.
 5. If user says "A2" it means column A, row 2
 6. Always respond in Russian
-7. Put explanatory text BEFORE or AFTER the command/JSON block"""
+7. Put explanatory text BEFORE or AFTER the command/JSON block
+8. When user mentions specific sheets with @, use [SHEET:name] to target the correct sheet"""
             
             resp = chat_with_openrouter(message, extra_system=system_prompt)
             if resp:
