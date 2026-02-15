@@ -32,6 +32,8 @@ class AIChatWidget(QWidget):
         
         # AI Агент
         self._agent = None
+        self._deferred_actions = []  # Отложенные действия (выполняются после анимации)
+        self._animation_running = False  # Флаг: идёт ли анимация заполнения
         self._init_agent()
         
         self.init_ui()
@@ -740,6 +742,13 @@ class AIChatWidget(QWidget):
         import logging
         logger = logging.getLogger(__name__)
         
+        # Если анимация заполнения ещё идёт — откладываем действие (кроме fill_table)
+        action_type = action_dict.get('type', '')
+        if self._animation_running and action_type != 'fill_table':
+            logger.info(f"Агент: откладываем действие '{action_type}' до завершения анимации")
+            self._deferred_actions.append(action_dict)
+            return
+        
         if not self.main_window or not self.main_window.tab_widget:
             logger.warning("Нет главного окна для выполнения действия агента")
             return
@@ -940,17 +949,25 @@ class AIChatWidget(QWidget):
                             match = cell_text == str(threshold)
                     
                     if match:
+                        # Убираем из списка подсвеченных (чтобы fade-out не затирал)
+                        if hasattr(self, '_highlight_cells') and self._highlight_cells:
+                            self._highlight_cells = [
+                                (r, c, s) for r, c, s in self._highlight_cells
+                                if not (r == row and c == col_idx and s is spreadsheet)
+                            ]
                         # Обновляем модель данных ячейки
                         cell = spreadsheet.get_cell(row, col_idx)
                         if bg_color:
                             color = QColor(bg_color)
                             if color.isValid():
+                                item.setBackground(QBrush(color))
                                 item.setData(Qt.BackgroundRole, QBrush(color))
                                 if cell:
                                     cell.background_color = bg_color
                         if text_color:
                             color = QColor(text_color)
                             if color.isValid():
+                                item.setForeground(QBrush(color))
                                 item.setData(Qt.ForegroundRole, QBrush(color))
                                 if cell:
                                     cell.text_color = text_color
@@ -969,6 +986,13 @@ class AIChatWidget(QWidget):
         """Окрашивает одну ячейку (фон, текст, жирность)"""
         from PyQt5.QtGui import QColor, QBrush
         
+        # Убираем ячейку из списка подсвеченных (чтобы fade-out не затирал цвет)
+        if hasattr(self, '_highlight_cells') and self._highlight_cells:
+            self._highlight_cells = [
+                (r, c, s) for r, c, s in self._highlight_cells
+                if not (r == row and c == col and s is spreadsheet)
+            ]
+        
         item = spreadsheet.item(row, col)
         if not item:
             from PyQt5.QtWidgets import QTableWidgetItem
@@ -980,6 +1004,7 @@ class AIChatWidget(QWidget):
         if bg_color:
             color = QColor(bg_color)
             if color.isValid():
+                item.setBackground(QBrush(color))
                 item.setData(Qt.BackgroundRole, QBrush(color))
                 if cell:
                     cell.background_color = bg_color
@@ -987,6 +1012,7 @@ class AIChatWidget(QWidget):
         if text_color:
             color = QColor(text_color)
             if color.isValid():
+                item.setForeground(QBrush(color))
                 item.setData(Qt.ForegroundRole, QBrush(color))
                 if cell:
                     cell.text_color = text_color
@@ -1121,21 +1147,7 @@ class AIChatWidget(QWidget):
         commands_found = 0
         
         try:
-            # 1. Проверяем [TABLE_COMMAND] маркеры
-            command_pattern = r'\[TABLE_COMMAND\](.*?)\[/TABLE_COMMAND\]'
-            matches = re.finditer(command_pattern, response, re.DOTALL)
-            
-            for match in matches:
-                try:
-                    command = json.loads(match.group(1).strip())
-                    logger.info(f"Found [TABLE_COMMAND] marker with action: {command.get('action')}")
-                    self._execute_table_command(command)
-                    commands_found += 1
-                    removed_positions.append((match.start(), match.end()))
-                except json.JSONDecodeError as e:
-                    logger.warning(f"Failed to parse [TABLE_COMMAND]: {e}")
-            
-            # 2. Проверяем ```json [...] ``` блоки с данными для таблицы
+            # 1. Сначала проверяем ```json [...] ``` блоки с данными для таблицы (заполнение должно быть первым)
             json_block_pattern = r'```json\s*\n?(\[.*?\])\s*\n?```'
             json_matches = re.finditer(json_block_pattern, response, re.DOTALL)
             
@@ -1154,6 +1166,20 @@ class AIChatWidget(QWidget):
                     logger.warning(f"Failed to parse JSON block: {e}")
                 except Exception as e:
                     logger.warning(f"Error processing JSON table data: {e}")
+            
+            # 2. Потом проверяем [TABLE_COMMAND] маркеры (окрашивание будет отложено если анимация идёт)
+            command_pattern = r'\[TABLE_COMMAND\](.*?)\[/TABLE_COMMAND\]'
+            matches = re.finditer(command_pattern, response, re.DOTALL)
+            
+            for match in matches:
+                try:
+                    command = json.loads(match.group(1).strip())
+                    logger.info(f"Found [TABLE_COMMAND] marker with action: {command.get('action')}")
+                    self._execute_table_command(command)
+                    commands_found += 1
+                    removed_positions.append((match.start(), match.end()))
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse [TABLE_COMMAND]: {e}")
             
             # Очищаем response от команд и JSON-блоков
             cleaned_response = response
@@ -1206,6 +1232,7 @@ class AIChatWidget(QWidget):
             self._animate_fill_spreadsheet = spreadsheet
             self._animate_fill_index = 0
             self._highlight_cells = []  # Очищаем список подсвеченных ячеек
+            self._animation_running = True  # Флаг: анимация идёт
             
             # Таймер для анимации — 30мс между ячейками
             if not hasattr(self, '_fill_animation_timer'):
@@ -1245,6 +1272,16 @@ class AIChatWidget(QWidget):
                     self._fade_timer = QTimer()
                     self._fade_timer.timeout.connect(self._animate_fade_highlight)
                 self._fade_timer.start(60)
+            else:
+                # Нет подсвеченных ячеек — сразу сбрасываем флаг и выполняем отложенные
+                self._animation_running = False
+                if self._deferred_actions:
+                    import logging
+                    logging.getLogger(__name__).info(f"Выполняю {len(self._deferred_actions)} отложенных действий (без fade)")
+                    deferred = self._deferred_actions[:]
+                    self._deferred_actions = []
+                    for action_dict in deferred:
+                        self._execute_agent_action(action_dict)
             return
         
         row_idx, col_idx, cell_value = queue[idx]
@@ -1287,24 +1324,38 @@ class AIChatWidget(QWidget):
         progress = self._fade_step / self._fade_total  # 0.0 -> 1.0
         
         if progress >= 1.0:
-            # Завершаем — убираем все подсветки
+            # Завершаем — убираем все подсветки и восстанавливаем цвета из модели
             for row_idx, col_idx, spreadsheet in self._highlight_cells:
                 try:
                     item = spreadsheet.item(row_idx, col_idx)
                     if item:
-                        # Сбрасываем фон на нормальный (если нет явного bg_color)
                         cell = spreadsheet.get_cell(row_idx, col_idx) if hasattr(spreadsheet, 'get_cell') else None
+                        # Восстанавливаем фон
                         if cell and cell.background_color:
-                            # Есть явный цвет фона — восстанавливаем
+                            item.setBackground(QBrush(QColor(cell.background_color)))
                             item.setData(Qt.BackgroundRole, QBrush(QColor(cell.background_color)))
                         else:
-                            # Убираем фон полностью
                             item.setData(Qt.BackgroundRole, None)
+                        # Восстанавливаем цвет текста
+                        if cell and cell.text_color:
+                            item.setForeground(QBrush(QColor(cell.text_color)))
+                            item.setData(Qt.ForegroundRole, QBrush(QColor(cell.text_color)))
                 except Exception:
                     pass
             
             self._highlight_cells = []
             self._fade_timer.stop()
+            
+            # Сбрасываем флаг анимации и выполняем отложенные действия
+            self._animation_running = False
+            if self._deferred_actions:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"Выполняю {len(self._deferred_actions)} отложенных действий после анимации")
+                deferred = self._deferred_actions[:]
+                self._deferred_actions = []
+                for action_dict in deferred:
+                    self._execute_agent_action(action_dict)
             return
         
         # Плавно уменьшаем alpha подсветки
@@ -1316,7 +1367,12 @@ class AIChatWidget(QWidget):
             try:
                 item = spreadsheet.item(row_idx, col_idx)
                 if item:
-                    item.setData(Qt.BackgroundRole, QBrush(highlight_color))
+                    # Пропускаем ячейки с явно заданным цветом фона
+                    cell = spreadsheet.get_cell(row_idx, col_idx) if hasattr(spreadsheet, 'get_cell') else None
+                    if cell and cell.background_color:
+                        item.setData(Qt.BackgroundRole, QBrush(QColor(cell.background_color)))
+                    else:
+                        item.setData(Qt.BackgroundRole, QBrush(highlight_color))
             except Exception:
                 pass
 
@@ -1326,6 +1382,16 @@ class AIChatWidget(QWidget):
         logger = logging.getLogger(__name__)
         
         action = command.get('action', '')
+        
+        # Если анимация заполнения идёт и это color/format команда — откладываем
+        color_actions = {'color_cells', 'color_column', 'color_row', 'color_range', 'bold_column', 'format_cells'}
+        if self._animation_running and action in color_actions:
+            logger.info(f"Откладываем TABLE_COMMAND '{action}' до завершения анимации")
+            # Конвертируем command в формат agent action для унификации
+            agent_action = dict(command)
+            agent_action['type'] = agent_action.pop('action', '')
+            self._deferred_actions.append(agent_action)
+            return
         
         try:
             if action == 'insert_rows':
