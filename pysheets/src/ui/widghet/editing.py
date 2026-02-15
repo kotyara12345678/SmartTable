@@ -7,7 +7,7 @@ import pandas as pd
 from typing import List, Dict, Any, Optional
 
 from PyQt5.QtWidgets import QTableWidgetItem, QColorDialog, QApplication, QDialog
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor, QBrush, QFont
 
 
@@ -480,35 +480,39 @@ class EditingMixin:
 
     def apply_zoom(self):
         """Применение масштаба"""
-        # Сохраняем позицию прокрутки перед изменением размеров
-        scroll_x = self.horizontalScrollBar().value()
-        scroll_y = self.verticalScrollBar().value()
+        try:
+            # Сохраняем позицию прокрутки перед изменением размеров
+            scroll_x = self.horizontalScrollBar().value()
+            scroll_y = self.verticalScrollBar().value()
 
-        font = self.font()
-        base_size = 10
-        new_size = base_size * self.zoom_level / 100
-        font.setPointSizeF(new_size)
-        self.setFont(font)
+            font = self.font()
+            base_size = 10
+            new_size = max(6, base_size * self.zoom_level / 100)
+            font.setPointSizeF(new_size)
+            self.setFont(font)
 
-        # Обновление высоты строк
-        self.verticalHeader().setDefaultSectionSize(int(25 * self.zoom_level / 100))
+            # Обновление размеров через default section size (быстрее чем поштучно)
+            row_height = max(16, int(25 * self.zoom_level / 100))
+            col_width = max(40, int(100 * self.zoom_level / 100))
+            
+            self.verticalHeader().setDefaultSectionSize(row_height)
+            self.horizontalHeader().setDefaultSectionSize(col_width)
 
-        # Обновление ширины колонок
-        self.horizontalHeader().setDefaultSectionSize(int(100 * self.zoom_level / 100))
+            # Применяем только к видимым строкам/колонкам для производительности
+            for i in range(self.rowCount()):
+                self.setRowHeight(i, row_height)
+            for i in range(self.columnCount()):
+                self.setColumnWidth(i, col_width)
 
-        # Применение размеров ко всем строкам и колонкам
-        for i in range(self.rowCount()):
-            self.setRowHeight(i, int(25 * self.zoom_level / 100))
-        for i in range(self.columnCount()):
-            self.setColumnWidth(i, int(100 * self.zoom_level / 100))
+            # Восстанавливаем позицию прокрутки
+            self.horizontalScrollBar().setValue(scroll_x)
+            self.verticalScrollBar().setValue(scroll_y)
 
-        # Восстанавливаем позицию прокрутки
-        self.horizontalScrollBar().setValue(scroll_x)
-        self.verticalScrollBar().setValue(scroll_y)
-
-        # Обновляем позицию corner button после зума (с большей задержкой для стабилизации layout)
-        if hasattr(self, '_corner_button') and self._corner_button:
-            QTimer.singleShot(50, self._position_corner_button)
+            # Обновляем позицию corner button после зума
+            if hasattr(self, '_corner_button') and self._corner_button:
+                QTimer.singleShot(50, self._position_corner_button)
+        except Exception as e:
+            print(f"[ERROR] apply_zoom failed: {e}")
 
     def load_data(self, data: List[List[str]]):
         """Загрузка данных в модель и отображение"""
