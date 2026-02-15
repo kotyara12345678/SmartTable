@@ -754,14 +754,9 @@ class AIChatWidget(QWidget):
         try:
             if action_type == 'fill_table':
                 data = action_dict.get('data', [])
-                for row_idx, row in enumerate(data):
-                    if row_idx >= spreadsheet.rowCount():
-                        break
-                    for col_idx, value in enumerate(row):
-                        if col_idx >= spreadsheet.columnCount():
-                            break
-                        spreadsheet.set_cell_value(row_idx, col_idx, str(value) if value else "")
-                logger.info(f"Агент: заполнено {len(data)} строк")
+                # Используем анимированное заполнение
+                self._fill_table_with_data(data)
+                logger.info(f"Агент: заполнение {len(data)} строк (анимация)")
             
             elif action_type == 'set_cell':
                 col_letter = action_dict.get('column', 'A').upper()
@@ -1177,7 +1172,7 @@ class AIChatWidget(QWidget):
             return response
 
     def _fill_table_with_data(self, data: list):
-        """Заполняет текущую таблицу данными из 2D массива"""
+        """Заполняет текущую таблицу данными из 2D массива с анимацией"""
         import logging
         logger = logging.getLogger(__name__)
         
@@ -1191,6 +1186,8 @@ class AIChatWidget(QWidget):
             return
         
         try:
+            # Создаём очередь ячеек для анимации (слева направо, сверху вниз)
+            cell_queue = []
             for row_idx, row in enumerate(data):
                 if row_idx >= spreadsheet.rowCount():
                     break
@@ -1198,11 +1195,130 @@ class AIChatWidget(QWidget):
                     if col_idx >= spreadsheet.columnCount():
                         break
                     cell_value = str(value) if value is not None else ""
-                    spreadsheet.set_cell_value(row_idx, col_idx, cell_value)
+                    if cell_value:  # Пропускаем пустые ячейки
+                        cell_queue.append((row_idx, col_idx, cell_value))
             
-            logger.info(f"Successfully filled table with {len(data)} rows")
+            if not cell_queue:
+                return
+            
+            # Запускаем анимированное заполнение
+            self._animate_fill_queue = cell_queue
+            self._animate_fill_spreadsheet = spreadsheet
+            self._animate_fill_index = 0
+            self._highlight_cells = []  # Очищаем список подсвеченных ячеек
+            
+            # Таймер для анимации — 30мс между ячейками
+            if not hasattr(self, '_fill_animation_timer'):
+                self._fill_animation_timer = QTimer()
+                self._fill_animation_timer.timeout.connect(self._animate_fill_next_cell)
+            
+            self._fill_animation_timer.start(30)
+            
+            logger.info(f"Started animated fill: {len(cell_queue)} cells")
         except Exception as e:
             logger.exception(f"Error filling table with data: {e}")
+
+    def _animate_fill_next_cell(self):
+        """Анимация: заполняет следующую ячейку с эффектом подсветки"""
+        from PyQt5.QtGui import QColor, QBrush
+        
+        if not hasattr(self, '_animate_fill_queue') or not self._animate_fill_queue:
+            if hasattr(self, '_fill_animation_timer'):
+                self._fill_animation_timer.stop()
+            return
+        
+        idx = self._animate_fill_index
+        queue = self._animate_fill_queue
+        spreadsheet = self._animate_fill_spreadsheet
+        
+        if idx >= len(queue) or not spreadsheet:
+            # Анимация заполнения завершена — запускаем fade-out подсветки
+            self._fill_animation_timer.stop()
+            self._animate_fill_queue = []
+            self._animate_fill_index = 0
+            self._animate_fill_spreadsheet = None
+            # Запускаем плавное затухание подсветки
+            if hasattr(self, '_highlight_cells') and self._highlight_cells:
+                self._fade_step = 0
+                self._fade_total = 8  # 8 шагов затухания
+                if not hasattr(self, '_fade_timer'):
+                    self._fade_timer = QTimer()
+                    self._fade_timer.timeout.connect(self._animate_fade_highlight)
+                self._fade_timer.start(60)
+            return
+        
+        row_idx, col_idx, cell_value = queue[idx]
+        
+        try:
+            # Заполняем ячейку
+            spreadsheet.set_cell_value(row_idx, col_idx, cell_value)
+            
+            # Подсвечиваем ячейку ярким цветом (accent color)
+            item = spreadsheet.item(row_idx, col_idx)
+            if item:
+                # Используем accent color или зелёный по умолчанию
+                highlight_color = QColor(self.accent_color) if hasattr(self, 'accent_color') else QColor("#4CAF50")
+                highlight_color.setAlpha(120)  # Полупрозрачный
+                item.setData(Qt.BackgroundRole, QBrush(highlight_color))
+                
+                # Сохраняем для последующего fade-out
+                if not hasattr(self, '_highlight_cells'):
+                    self._highlight_cells = []
+                self._highlight_cells.append((row_idx, col_idx, spreadsheet))
+            
+            # Прокручиваем к текущей ячейке
+            if item:
+                spreadsheet.scrollToItem(item, spreadsheet.EnsureVisible)
+        except Exception:
+            pass
+        
+        self._animate_fill_index = idx + 1
+
+    def _animate_fade_highlight(self):
+        """Плавно убирает подсветку со всех заполненных ячеек"""
+        from PyQt5.QtGui import QColor, QBrush
+        
+        if not hasattr(self, '_highlight_cells') or not self._highlight_cells:
+            if hasattr(self, '_fade_timer'):
+                self._fade_timer.stop()
+            return
+        
+        self._fade_step += 1
+        progress = self._fade_step / self._fade_total  # 0.0 -> 1.0
+        
+        if progress >= 1.0:
+            # Завершаем — убираем все подсветки
+            for row_idx, col_idx, spreadsheet in self._highlight_cells:
+                try:
+                    item = spreadsheet.item(row_idx, col_idx)
+                    if item:
+                        # Сбрасываем фон на нормальный (если нет явного bg_color)
+                        cell = spreadsheet.get_cell(row_idx, col_idx) if hasattr(spreadsheet, 'get_cell') else None
+                        if cell and cell.background_color:
+                            # Есть явный цвет фона — восстанавливаем
+                            item.setData(Qt.BackgroundRole, QBrush(QColor(cell.background_color)))
+                        else:
+                            # Убираем фон полностью
+                            item.setData(Qt.BackgroundRole, None)
+                except Exception:
+                    pass
+            
+            self._highlight_cells = []
+            self._fade_timer.stop()
+            return
+        
+        # Плавно уменьшаем alpha подсветки
+        alpha = int(120 * (1.0 - progress))
+        highlight_color = QColor(self.accent_color) if hasattr(self, 'accent_color') else QColor("#4CAF50")
+        highlight_color.setAlpha(max(0, alpha))
+        
+        for row_idx, col_idx, spreadsheet in self._highlight_cells:
+            try:
+                item = spreadsheet.item(row_idx, col_idx)
+                if item:
+                    item.setData(Qt.BackgroundRole, QBrush(highlight_color))
+            except Exception:
+                pass
 
     def _execute_table_command(self, command: dict):
         """Выполняет команду модификации таблицы"""
