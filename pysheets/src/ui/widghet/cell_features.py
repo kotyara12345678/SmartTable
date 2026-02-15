@@ -446,6 +446,279 @@ class CellFeaturesMixin:
         for row in range(self.rowCount()):
             self.setRowHeight(row, 25)
 
+    # ============ DROPDOWN (ВЫПАДАЮЩИЙ СПИСОК) ============
+
+    def set_dropdown(self, row: int, col: int, options: list):
+        """Устанавливает выпадающий список для ячейки (видимый ComboBox со стрелкой)
+        
+        Args:
+            row: номер строки
+            col: номер столбца
+            options: список вариантов для выбора
+        """
+        from PyQt5.QtWidgets import QComboBox, QMenu, QAction as QAct
+        
+        if not options:
+            return
+        self.dropdown_cells[(row, col)] = list(options)
+        
+        # Сохраняем в Cell модель
+        cell = self.get_cell(row, col)
+        if cell and hasattr(cell, 'dropdown_options'):
+            cell.dropdown_options = list(options)
+        
+        # Удаляем старый виджет если есть
+        old_widget = self.cellWidget(row, col)
+        if old_widget:
+            self.removeCellWidget(row, col)
+        
+        # Создаём ComboBox как постоянный виджет ячейки
+        combo = QComboBox()
+        combo.addItems(options)
+        combo.setStyleSheet("""
+            QComboBox {
+                border-radius: 0px;
+            }
+            QComboBox::drop-down {
+                border-radius: 0px;
+            }
+            QComboBox QAbstractItemView {
+                border-radius: 0px;
+            }
+        """)
+        
+        # Устанавливаем текущее значение если есть
+        item = self.item(row, col)
+        if item and item.text() in options:
+            combo.setCurrentText(item.text())
+        
+        # При смене значения в ComboBox — обновляем ячейку
+        def on_combo_changed(text, r=row, c=col):
+            self.set_cell_value(r, c, text)
+        
+        combo.currentTextChanged.connect(on_combo_changed)
+        
+        # ПКМ на ComboBox — редактирование/удаление
+        combo.setContextMenuPolicy(Qt.CustomContextMenu)
+        spreadsheet_ref = self
+        def on_combo_context(pos, r=row, c=col):
+            menu = QMenu(combo)
+            edit_action = menu.addAction("✉ Редактировать список...")
+            remove_action = menu.addAction("✖ Удалить список")
+            action = menu.exec_(combo.mapToGlobal(pos))
+            if action == edit_action:
+                spreadsheet_ref._edit_dropdown_at(r, c)
+            elif action == remove_action:
+                spreadsheet_ref.remove_dropdown(r, c)
+        combo.customContextMenuRequested.connect(on_combo_context)
+        
+        self.setCellWidget(row, col, combo)
+        
+        # Устанавливаем первое значение если ячейка пустая
+        if not item or not item.text():
+            self.set_cell_value(row, col, options[0])
+        
+        print(f"[Dropdown] Set dropdown at ({row},{col}): {options}")
+
+    def _edit_dropdown_at(self, row: int, col: int):
+        """Открывает диалог редактирования dropdown для конкретной ячейки"""
+        existing = self.get_dropdown_options(row, col)
+        self._show_dropdown_editor([(row, col)], existing)
+
+    def remove_dropdown(self, row: int, col: int):
+        """Удаляет выпадающий список из ячейки"""
+        if (row, col) in self.dropdown_cells:
+            del self.dropdown_cells[(row, col)]
+        # Удаляем виджет ComboBox
+        widget = self.cellWidget(row, col)
+        if widget:
+            self.removeCellWidget(row, col)
+        cell = self.get_cell(row, col)
+        if cell and hasattr(cell, 'dropdown_options'):
+            cell.dropdown_options = None
+        print(f"[Dropdown] Removed dropdown at ({row},{col})")
+
+    def has_dropdown(self, row: int, col: int) -> bool:
+        """Проверяет, есть ли выпадающий список у ячейки"""
+        return (row, col) in self.dropdown_cells
+
+    def get_dropdown_options(self, row: int, col: int) -> list:
+        """Возвращает варианты выпадающего списка"""
+        return self.dropdown_cells.get((row, col), [])
+
+    def show_dropdown_dialog(self):
+        """Показывает диалог для создания выпадающего списка в выделенных ячейках"""
+        from PyQt5.QtWidgets import QMessageBox
+        
+        selected = self.selectedRanges()
+        if not selected:
+            QMessageBox.warning(self, "Выпадающий список", "Выделите ячейки для создания выпадающего списка")
+            return
+        
+        # Собираем все ячейки
+        cells_list = []
+        for sel_range in selected:
+            for row in range(sel_range.topRow(), sel_range.bottomRow() + 1):
+                for col in range(sel_range.leftColumn(), sel_range.rightColumn() + 1):
+                    cells_list.append((row, col))
+        
+        # Проверяем существующие варианты у первой ячейки
+        existing = self.get_dropdown_options(cells_list[0][0], cells_list[0][1]) if cells_list else []
+        self._show_dropdown_editor(cells_list, existing)
+
+    def _show_dropdown_editor(self, cells_list: list, existing_options: list = None):
+        """Показывает красивый диалог с отдельными полями для каждого варианта"""
+        from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
+                                      QLineEdit, QPushButton, QScrollArea, QWidget,
+                                      QMessageBox, QFrame)
+        from PyQt5.QtCore import QSize
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Выпадающий список")
+        dialog.setMinimumSize(400, 350)
+        dialog.setMaximumSize(500, 600)
+        
+        main_layout = QVBoxLayout(dialog)
+        main_layout.setSpacing(10)
+        
+        # Заголовок
+        title_label = QLabel("Варианты выпадающего списка:")
+        title_font = title_label.font()
+        title_font.setBold(True)
+        title_font.setPointSize(11)
+        title_label.setFont(title_font)
+        main_layout.addWidget(title_label)
+        
+        # Прокручиваемая область с полями
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setMinimumHeight(200)
+        
+        scroll_widget = QWidget()
+        options_layout = QVBoxLayout(scroll_widget)
+        options_layout.setSpacing(6)
+        options_layout.setContentsMargins(4, 4, 4, 4)
+        
+        scroll.setWidget(scroll_widget)
+        main_layout.addWidget(scroll)
+        
+        # Список полей ввода (храним как пары (field, row_widget))
+        option_rows = []  # [(QLineEdit, QWidget), ...]
+        
+        def _update_numbers():
+            """Обновляет нумерацию всех полей"""
+            for i, (fld, rw) in enumerate(option_rows):
+                lbl = rw.findChild(QLabel)
+                if lbl:
+                    lbl.setText(f"{i + 1}.")
+        
+        def add_option_field(text=""):
+            """Добавляет новое поле варианта"""
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(6)
+            
+            # Номер
+            num_label = QLabel(f"{len(option_rows) + 1}.")
+            num_label.setFixedWidth(24)
+            row_layout.addWidget(num_label)
+            
+            # Поле ввода
+            field = QLineEdit()
+            field.setText(text)
+            field.setPlaceholderText("Введите вариант...")
+            field.setMinimumHeight(32)
+            row_layout.addWidget(field)
+            
+            # Кнопка удаления
+            del_btn = QPushButton("✖")
+            del_btn.setFixedSize(32, 32)
+            del_btn.setToolTip("Удалить вариант")
+            del_btn.setCursor(Qt.PointingHandCursor)
+            del_btn.setStyleSheet("QPushButton { color: #e74c3c; border: 1px solid #ccc; border-radius: 4px; } QPushButton:hover { background: #fde8e8; }")
+            
+            entry = (field, row_widget)
+            
+            def remove_field(checked=False, _entry=entry):
+                if len(option_rows) <= 1:
+                    return  # Не удаляем последнее поле
+                try:
+                    option_rows.remove(_entry)
+                except ValueError:
+                    return
+                _fld, _rw = _entry
+                options_layout.removeWidget(_rw)
+                _rw.setParent(None)
+                _rw.deleteLater()
+                _update_numbers()
+            
+            del_btn.clicked.connect(remove_field)
+            row_layout.addWidget(del_btn)
+            
+            options_layout.addWidget(row_widget)
+            option_rows.append(entry)
+            return field
+        
+        # Заполняем существующими вариантами или пустыми
+        if existing_options:
+            for opt in existing_options:
+                add_option_field(opt)
+        else:
+            add_option_field("")
+            add_option_field("")
+        
+        # Кнопка "Добавить вариант"
+        add_btn = QPushButton("➕ Добавить вариант")
+        add_btn.setCursor(Qt.PointingHandCursor)
+        add_btn.setMinimumHeight(36)
+        add_btn.setStyleSheet("QPushButton { border: 1px dashed #aaa; border-radius: 6px; color: #666; } QPushButton:hover { background: #f0f0f0; color: #333; }")
+        add_btn.clicked.connect(lambda: add_option_field(""))
+        main_layout.addWidget(add_btn)
+        
+        # Разделитель
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        main_layout.addWidget(sep)
+        
+        # Кнопки действий
+        btn_layout = QHBoxLayout()
+        
+        remove_all_btn = QPushButton("Удалить список")
+        remove_all_btn.setStyleSheet("QPushButton { color: #e74c3c; }")
+        btn_layout.addWidget(remove_all_btn)
+        
+        btn_layout.addStretch()
+        
+        cancel_btn = QPushButton("Отмена")
+        btn_layout.addWidget(cancel_btn)
+        
+        ok_btn = QPushButton("Применить")
+        ok_btn.setStyleSheet("QPushButton { background: #4CAF50; color: white; padding: 6px 20px; border-radius: 4px; } QPushButton:hover { background: #45a049; }")
+        btn_layout.addWidget(ok_btn)
+        
+        main_layout.addLayout(btn_layout)
+        
+        def apply_dropdown():
+            options = [f.text().strip() for f, rw in option_rows if f.text().strip()]
+            if not options:
+                QMessageBox.warning(dialog, "Ошибка", "Введите хотя бы один вариант")
+                return
+            for row, col in cells_list:
+                self.set_dropdown(row, col, options)
+            dialog.accept()
+        
+        def remove_all():
+            for row, col in cells_list:
+                self.remove_dropdown(row, col)
+            dialog.accept()
+        
+        ok_btn.clicked.connect(apply_dropdown)
+        cancel_btn.clicked.connect(dialog.reject)
+        remove_all_btn.clicked.connect(remove_all)
+        
+        dialog.exec_()
+
         self.viewport().update()
 
     # 7. ДОПОЛНИТЕЛЬНЫЕ МЕТОДЫ

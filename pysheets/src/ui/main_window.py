@@ -599,6 +599,20 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     print(f"[WARNING] Ошибка условного форматирования: {e}")
             
+            # === Применяем выпадающие списки (dropdown) из полей шаблона ===
+            fields = template.get('fields', [])
+            for field in fields:
+                dropdown_opts = field.get('dropdown_options')
+                if dropdown_opts and isinstance(dropdown_opts, list) and len(dropdown_opts) > 0:
+                    col_idx = field.get('column_index', 0)
+                    # Применяем dropdown ко всем строкам с данными (кроме заголовка)
+                    num_data_rows = len(sample_data) if sample_data else 1
+                    for row_idx in range(1, max(num_data_rows, 10)):  # Минимум 10 строк с dropdown
+                        try:
+                            spreadsheet.set_dropdown(row_idx, col_idx, dropdown_opts)
+                        except Exception as e:
+                            print(f"[WARNING] Ошибка dropdown ({row_idx},{col_idx}): {e}")
+            
             # Переименовываем вкладку
             tab_idx = self.tab_widget.currentIndex()
             if tab_idx >= 0:
@@ -751,6 +765,9 @@ class MainWindow(QMainWindow):
             self.functions_toolbar.zoom_in_requested.connect(self.zoom_in)
         if hasattr(self.functions_toolbar, "zoom_out_requested"):
             self.functions_toolbar.zoom_out_requested.connect(self.zoom_out)
+        # Выпадающий список
+        if hasattr(self.functions_toolbar, "dropdown_requested"):
+            self.functions_toolbar.dropdown_requested.connect(self.show_dropdown_dialog)
 
     def create_statusbar(self):
         """Создание строки состояния"""
@@ -966,6 +983,14 @@ class MainWindow(QMainWindow):
         if isinstance(current_widget, SpreadsheetWidget):
             return current_widget
         return None
+
+    def show_dropdown_dialog(self):
+        """Показывает диалог создания выпадающего списка для текущей таблицы"""
+        spreadsheet = self.get_current_spreadsheet()
+        if spreadsheet:
+            spreadsheet.show_dropdown_dialog()
+        else:
+            show_error_message(self, "Нет активного листа")
 
     # ============ Вкладки и сессии ============
     def close_tab(self, index: int):

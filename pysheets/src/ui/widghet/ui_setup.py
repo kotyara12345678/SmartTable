@@ -4,7 +4,8 @@
 """
 
 from PyQt5.QtWidgets import (QHeaderView, QAbstractItemView, QStyledItemDelegate,
-                              QLineEdit, QAbstractButton, QPushButton, QApplication)
+                              QLineEdit, QAbstractButton, QPushButton, QApplication,
+                              QComboBox)
 from PyQt5.QtCore import Qt, QTimer, QItemSelection
 from PyQt5.QtGui import QPalette
 
@@ -76,6 +77,26 @@ class UISetupMixin:
                 self._current_autocomplete = None
             
             def createEditor(self, parent, option, index):
+                row = index.row()
+                col = index.column()
+                
+                # Проверяем, есть ли dropdown для этой ячейки
+                dropdown_opts = None
+                if hasattr(spreadsheet_widget, 'dropdown_cells'):
+                    dropdown_opts = spreadsheet_widget.dropdown_cells.get((row, col))
+                
+                if dropdown_opts:
+                    # Создаём ComboBox для ячейки с dropdown
+                    combo = QComboBox(parent)
+                    combo.addItems(dropdown_opts)
+                    # Устанавливаем текущее значение
+                    current_item = spreadsheet_widget.item(row, col)
+                    if current_item and current_item.text() in dropdown_opts:
+                        combo.setCurrentText(current_item.text())
+                    combo.setFrame(False)
+                    return combo
+                
+                # Обычный редактор с автокомплитом формул
                 editor = QLineEdit(parent)
                 editor.setFrame(False)
                 # Прикрепляем автокомплит формул
@@ -90,6 +111,12 @@ class UISetupMixin:
                 except Exception as e:
                     print(f"[Delegate] autocomplete init error: {e}")
                 return editor
+            
+            def setModelData(self, editor, model, index):
+                if isinstance(editor, QComboBox):
+                    model.setData(index, editor.currentText())
+                else:
+                    super().setModelData(editor, model, index)
             
             def destroyEditor(self, editor, index):
                 if self._current_autocomplete:

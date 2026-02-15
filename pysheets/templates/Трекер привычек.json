@@ -8,13 +8,13 @@
   "source_range": null,
   "fields": [
     {"name": "Привычка", "column_index": 0, "pattern": "text", "format_string": "", "is_key_field": true, "validation_rules": []},
-    {"name": "Пн", "column_index": 1, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": []},
-    {"name": "Вт", "column_index": 2, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": []},
-    {"name": "Ср", "column_index": 3, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": []},
-    {"name": "Чт", "column_index": 4, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": []},
-    {"name": "Пт", "column_index": 5, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": []},
-    {"name": "Сб", "column_index": 6, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": []},
-    {"name": "Вс", "column_index": 7, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": []}
+    {"name": "Пн", "column_index": 1, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": [], "dropdown_options": ["✅", "❌", "⭐"]},
+    {"name": "Вт", "column_index": 2, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": [], "dropdown_options": ["✅", "❌", "⭐"]},
+    {"name": "Ср", "column_index": 3, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": [], "dropdown_options": ["✅", "❌", "⭐"]},
+    {"name": "Чт", "column_index": 4, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": [], "dropdown_options": ["✅", "❌", "⭐"]},
+    {"name": "Пт", "column_index": 5, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": [], "dropdown_options": ["✅", "❌", "⭐"]},
+    {"name": "Сб", "column_index": 6, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": [], "dropdown_options": ["✅", "❌", "⭐"]},
+    {"name": "Вс", "column_index": 7, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": [], "dropdown_options": ["✅", "❌", "⭐"]}
   ],
   "sample_data": [
     ["Привычка", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],

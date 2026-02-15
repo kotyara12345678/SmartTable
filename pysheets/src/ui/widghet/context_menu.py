@@ -210,6 +210,12 @@ class ContextMenuMixin:
 
         # НОВОЕ: Сброс размеров
         menu.addSeparator()
+
+        # Выпадающий список
+        dropdown_action = QAction("📋 Выпадающий список...", self)
+        dropdown_action.triggered.connect(self.show_dropdown_dialog)
+        menu.addAction(dropdown_action)
+
         reset_sizes_action = QAction("Сбросить кастомные размеры", self)
         reset_sizes_action.triggered.connect(self.reset_custom_sizes)
         menu.addAction(reset_sizes_action)

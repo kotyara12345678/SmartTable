@@ -26,6 +26,7 @@ class Cell:
     text_color: Optional[str] = None
     background_color: Optional[str] = None
     alignment: str = "left"  # left, center, right
+    dropdown_options: Optional[list] = None  # Список вариантов для выпадающего списка
 
     def set_value(self, value: str):
         """Установка значения ячейки"""
@@ -61,7 +62,8 @@ class Cell:
             'strike': self.strike,
             'text_color': self.text_color,
             'background_color': self.background_color,
-            'alignment': self.alignment
+            'alignment': self.alignment,
+            'dropdown_options': self.dropdown_options
         }
 
     @classmethod
@@ -81,7 +83,8 @@ class Cell:
             strike=data.get('strike', False),
             text_color=data.get('text_color', None),
             background_color=data.get('background_color', None),
-            alignment=data.get('alignment', 'left')#
+            alignment=data.get('alignment', 'left'),
+            dropdown_options=data.get('dropdown_options', None)
         )
 
     def __str__(self) -> str:

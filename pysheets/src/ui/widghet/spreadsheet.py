@@ -80,6 +80,7 @@ class SpreadsheetWidget(
         self.split_cells = {}
         self.custom_sizes = {}
         self.merged_cells = {}
+        self.dropdown_cells = {}  # {(row, col): ["option1", "option2", ...]} выпадающие списки
 
         # Атрибуты для изменения размера мышкой
         self._resizing_cell = None

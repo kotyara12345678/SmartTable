@@ -304,6 +304,7 @@ class FunctionsToolBar(QToolBar):
     templates_requested = pyqtSignal()
     zoom_in_requested = pyqtSignal()
     zoom_out_requested = pyqtSignal()
+    dropdown_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__("Функции", parent)
@@ -562,6 +563,12 @@ class FunctionsToolBar(QToolBar):
         print_btn.setToolTip("Печать таблицы (Ctrl+P)")
         print_btn.clicked.connect(self.print_requested.emit)
         layout.addWidget(print_btn)
+
+        # Выпадающий список
+        dropdown_btn = QPushButton("📋 Список")
+        dropdown_btn.setToolTip("Создать выпадающий список в ячейке")
+        dropdown_btn.clicked.connect(self.dropdown_requested.emit)
+        layout.addWidget(dropdown_btn)
 
         layout.addStretch()
         self.panels_stack.addWidget(panel)
