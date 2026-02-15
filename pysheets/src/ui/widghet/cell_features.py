@@ -359,8 +359,7 @@ class CellFeaturesMixin:
             # Сбрасываем специальное форматирование
             if cell:
                 cell.bold = False
-                cell.background_color = "#FFFFFF"
-
+                cell.background_color = None
         self.apply_cell_formatting(row, col)
         self.cell_frozen.emit(row, col, freeze)
 
@@ -409,8 +408,7 @@ class CellFeaturesMixin:
             if hidden_value:
                 item.setText(str(hidden_value))
                 cell.set_value(str(hidden_value))
-            # Восстанавливаем фон
-            cell.background_color = "#FFFFFF"
+            cell.background_color = None
 
         self.apply_cell_formatting(row, col)
         self.cell_hidden.emit(row, col, hide)

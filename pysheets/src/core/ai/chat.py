@@ -221,6 +221,25 @@ Delete a column (shift remaining left):
 Clear entire table:
 [TABLE_COMMAND]{"action": "clear_all"}[/TABLE_COMMAND]
 
+=== COLORING / FORMATTING CELLS ===
+Color background of specific cells:
+[TABLE_COMMAND]{"action": "color_cells", "cells": [{"column": "A", "row": 1, "bg_color": "#FF0000", "text_color": "#FFFFFF"}]}[/TABLE_COMMAND]
+
+Color entire column (all non-empty cells):
+[TABLE_COMMAND]{"action": "color_column", "column": "B", "bg_color": "#00FF00", "text_color": "#000000"}[/TABLE_COMMAND]
+
+Color entire row:
+[TABLE_COMMAND]{"action": "color_row", "row": 1, "bg_color": "#0000FF", "text_color": "#FFFFFF"}[/TABLE_COMMAND]
+
+Color a range of cells:
+[TABLE_COMMAND]{"action": "color_range", "start_col": "A", "start_row": 1, "end_col": "C", "end_row": 5, "bg_color": "#FFFF00", "text_color": "#000000"}[/TABLE_COMMAND]
+
+Make text bold in a column:
+[TABLE_COMMAND]{"action": "bold_column", "column": "A"}[/TABLE_COMMAND]
+
+Common colors: red=#FF0000, green=#00AA00, blue=#0000FF, yellow=#FFFF00, orange=#FF8800, white=#FFFFFF, black=#000000
+You can use bg_color alone (only background), text_color alone (only text), or both together.
+
 === CRITICAL RULES ===
 1. ALWAYS include [TABLE_COMMAND] when user asks to clear/delete/remove anything
 2. Column letters: A, B, C, D, ... Z

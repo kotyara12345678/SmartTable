@@ -4,7 +4,7 @@
 
 from PyQt5.QtWidgets import QMenu, QColorDialog, QAction, QMessageBox
 from PyQt5.QtCore import Qt, QPoint
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QKeySequence
 
 
 class ContextMenuMixin:

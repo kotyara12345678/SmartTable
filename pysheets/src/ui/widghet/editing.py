@@ -6,7 +6,7 @@
 import pandas as pd
 from typing import List, Dict, Any, Optional
 
-from PyQt5.QtWidgets import QTableWidgetItem, QColorDialog, QApplication
+from PyQt5.QtWidgets import QTableWidgetItem, QColorDialog, QApplication, QDialog
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QBrush, QFont
 
@@ -208,37 +208,29 @@ class EditingMixin:
 
     def change_text_color(self):
         """Изменение цвета текста"""
-        dlg = QColorDialog(self)
-        app = QApplication.instance()
-        if app and app.styleSheet():
-            dlg.setStyleSheet(app.styleSheet())
-        if dlg.exec_() == QDialog.Accepted:
-            color = dlg.currentColor()
-            if color.isValid():
-                for item in self.selectedItems():
-                    row = item.row()
-                    col = item.column()
-                    cell = self.get_cell(row, col)
-                    if cell:
-                        cell.text_color = color.name()
-                        self.apply_cell_formatting(row, col)
+        color = QColorDialog.getColor(QColor("#000000"), self, "Цвет текста")
+        if color.isValid():
+            for rng in self.selectedRanges():
+                for row in range(rng.topRow(), rng.bottomRow() + 1):
+                    for col in range(rng.leftColumn(), rng.rightColumn() + 1):
+                        cell = self.get_cell(row, col)
+                        if cell:
+                            cell.text_color = color.name()
+                            self.apply_cell_formatting(row, col)
+            self.viewport().update()
 
     def change_bg_color(self):
         """Изменение цвета фона"""
-        dlg = QColorDialog(self)
-        app = QApplication.instance()
-        if app and app.styleSheet():
-            dlg.setStyleSheet(app.styleSheet())
-        if dlg.exec_() == QDialog.Accepted:
-            color = dlg.currentColor()
-            if color.isValid():
-                for item in self.selectedItems():
-                    row = item.row()
-                    col = item.column()
-                    cell = self.get_cell(row, col)
-                    if cell:
-                        cell.background_color = color.name()
-                        self.apply_cell_formatting(row, col)
+        color = QColorDialog.getColor(QColor("#FFFFFF"), self, "Цвет фона")
+        if color.isValid():
+            for rng in self.selectedRanges():
+                for row in range(rng.topRow(), rng.bottomRow() + 1):
+                    for col in range(rng.leftColumn(), rng.rightColumn() + 1):
+                        cell = self.get_cell(row, col)
+                        if cell:
+                            cell.background_color = color.name()
+                            self.apply_cell_formatting(row, col)
+            self.viewport().update()
 
     def insert_row(self):
         """Вставка строки"""
@@ -547,22 +539,19 @@ class EditingMixin:
         # Для цветов: открываем диалог один раз ДО цикла
         selected_color = None
         if format_type in ('text_color', 'bg_color') and value is None:
-            dlg = QColorDialog(self)
-            app = QApplication.instance()
-            if app and app.styleSheet():
-                dlg.setStyleSheet(app.styleSheet())
-            if dlg.exec_() == QDialog.Accepted:
-                selected_color = dlg.currentColor()
-                if not selected_color.isValid():
-                    return  # Отмена выбора цвета
-                value = selected_color.name()
-            else:
-                return  # Отмена диалога
+            initial_color = QColor("#000000") if format_type == 'text_color' else QColor("#FFFFFF")
+            title = "Цвет текста" if format_type == 'text_color' else "Цвет фона"
+            selected_color = QColorDialog.getColor(initial_color, self, title)
+            if not selected_color.isValid():
+                return  # Отмена выбора цвета
+            value = selected_color.name()
         
-        # Собираем все выделённые ячейки (включая из rangов)
+        # Собираем все выделённые ячейки через selectedRanges (работает и для пустых ячеек)
         rows_cols = set()
-        for item in self.selectedItems():
-            rows_cols.add((item.row(), item.column()))
+        for rng in self.selectedRanges():
+            for r in range(rng.topRow(), rng.bottomRow() + 1):
+                for c in range(rng.leftColumn(), rng.rightColumn() + 1):
+                    rows_cols.add((r, c))
         
         # Применяем формат ко всем выделенным ячейкам
         for row, col in rows_cols:
@@ -598,8 +587,8 @@ class EditingMixin:
                 cell.bold = False
                 cell.italic = False
                 cell.underline = False
-                cell.text_color = "#000000"
-                cell.background_color = "#FFFFFF"
+                cell.text_color = None
+                cell.background_color = None
                 cell.alignment = "left"
                 if hasattr(cell, 'strike'):
                     cell.strike = False

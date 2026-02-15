@@ -122,45 +122,50 @@ class CellOperationsMixin:
         cell = self.get_cell(row, col)
         item = self.item(row, col)
 
-        if cell and item:
-            # Шрифт
-            font = QFont()
-            font.setFamily(cell.font_family or "Arial")
-            font.setBold(bool(cell.bold))
-            font.setItalic(bool(cell.italic))
-            font.setUnderline(bool(cell.underline))
-            if hasattr(cell, 'strike'):
-                font.setStrikeOut(bool(cell.strike))
-            font.setPointSize(cell.font_size or 11)
-            item.setFont(font)
+        if not cell:
+            return
+        
+        # Создаём item если его нет (важно для пустых ячеек)
+        if item is None:
+            from PyQt5.QtWidgets import QTableWidgetItem
+            item = QTableWidgetItem()
+            self.setItem(row, col, item)
 
-            # Выравнивание
-            alignment = Qt.AlignmentFlag.AlignVCenter
-            if cell.alignment == 'left':
-                alignment |= Qt.AlignmentFlag.AlignLeft
-            elif cell.alignment == 'center':
-                alignment |= Qt.AlignmentFlag.AlignHCenter
-            elif cell.alignment == 'right':
-                alignment |= Qt.AlignmentFlag.AlignRight
-            item.setTextAlignment(alignment)
+        # Шрифт
+        font = QFont()
+        font.setFamily(cell.font_family or "Arial")
+        font.setBold(bool(cell.bold))
+        font.setItalic(bool(cell.italic))
+        font.setUnderline(bool(cell.underline))
+        if hasattr(cell, 'strike'):
+            font.setStrikeOut(bool(cell.strike))
+        font.setPointSize(cell.font_size or 11)
+        item.setFont(font)
 
-            # Цвета
-            try:
-                if cell.text_color and cell.text_color != "#FFFFFF" and cell.text_color != "#000000":
-                    text_color = QColor(cell.text_color)
-                    if text_color.isValid():
-                        item.setForeground(QBrush(text_color))
-                elif cell.text_color:
-                    text_color = QColor(cell.text_color)
-                    if text_color.isValid():
-                        item.setForeground(QBrush(text_color))
-                        
-                if cell.background_color and cell.background_color != "#FFFFFF":
-                    bg_color = QColor(cell.background_color)
-                    if bg_color.isValid():
-                        item.setBackground(QBrush(bg_color))
-            except Exception as e:
-                print(f"[ERROR] Ошибка при применении цветов ({row},{col}): {e}")
+        # Выравнивание
+        alignment = Qt.AlignmentFlag.AlignVCenter
+        if cell.alignment == 'left':
+            alignment |= Qt.AlignmentFlag.AlignLeft
+        elif cell.alignment == 'center':
+            alignment |= Qt.AlignmentFlag.AlignHCenter
+        elif cell.alignment == 'right':
+            alignment |= Qt.AlignmentFlag.AlignRight
+        item.setTextAlignment(alignment)
+
+        # Цвет текста — применяем только если явно задан
+        try:
+            if cell.text_color:
+                text_color = QColor(cell.text_color)
+                if text_color.isValid():
+                    item.setData(Qt.ForegroundRole, QBrush(text_color))
+            
+            # Цвет фона — применяем только если явно задан
+            if cell.background_color:
+                bg_color = QColor(cell.background_color)
+                if bg_color.isValid():
+                    item.setData(Qt.BackgroundRole, QBrush(bg_color))
+        except Exception as e:
+            print(f"[ERROR] Ошибка при применении цветов ({row},{col}): {e}")
 
     def refresh_display(self):
         """Обновление отображения на основе модели"""

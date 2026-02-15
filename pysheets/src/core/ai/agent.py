@@ -40,10 +40,15 @@ AVAILABLE ACTIONS (you can use these in your plan):
 6. set_cell — set a specific cell value (column, row, value)
 7. set_formula — set a formula in a cell (column, row, formula)
 8. sort_column — sort by a column (column, order: asc/desc)
-9. format_cells — format cells (range, bold/italic/color/bg_color)
-10. insert_row — insert a row at position
-11. delete_row — delete a row
-12. analyze — analyze current table data and return insights
+9. format_cells — conditional formatting (conditions with column, condition, value, bg_color, text_color)
+10. color_column — color all non-empty cells in a column (column, bg_color, text_color)
+11. color_cells — color specific cells (cells: [{column, row, bg_color, text_color}])
+12. color_row — color all non-empty cells in a row (row, bg_color, text_color)
+13. color_range — color a range of cells (start_col, start_row, end_col, end_row, bg_color, text_color)
+14. bold_column — make text bold in a column (column)
+15. insert_row — insert a row at position
+16. delete_row — delete a row
+17. analyze — analyze current table data and return insights
 
 RESPONSE FORMAT — you MUST return a JSON array of steps:
 ```json
@@ -71,6 +76,15 @@ RESPONSE FORMAT — you MUST return a JSON array of steps:
   },
   {
     "step": 3,
+    "action": "color_column",
+    "description": "Окрашиваю столбец с выручкой зелёным",
+    "params": {
+      "column": "D",
+      "text_color": "#00AA00"
+    }
+  },
+  {
+    "step": 4,
     "action": "format_cells",
     "description": "Выделяю красным убыточные позиции",
     "params": {
@@ -160,7 +174,8 @@ class AIAgent:
         multi_action_keywords = [
             # Русские
             'и потом', 'затем', 'после этого', 'а потом', 'далее',
-            'отсортируй', 'выдели', 'подсветь', 'раскрась',
+            'отсортируй', 'выдели', 'подсветь', 'раскрась', 'окрась', 'покрась',
+            'сделай красным', 'сделай зелёным', 'сделай синим', 'цвет текста', 'цвет фона',
             'создай и', 'заполни и', 'сделай и',
             'проанализируй', 'найди и',
             # Комбинации действий
@@ -179,6 +194,7 @@ class AIAgent:
         action_words = [
             'создай', 'заполни', 'отсортируй', 'выдели', 'удали',
             'очисти', 'добавь', 'вставь', 'раскрась', 'подсветь',
+            'окрась', 'покрась', 'цвет',
             'проанализируй', 'посчитай', 'сгенерируй', 'построй',
             'create', 'fill', 'sort', 'highlight', 'delete',
             'clear', 'add', 'insert', 'color', 'analyze', 'generate',
@@ -377,6 +393,62 @@ class AIAgent:
                     'conditions': conditions
                 })
                 return f"Применено {len(conditions)} условий форматирования"
+        
+        elif action == 'color_column':
+            col = params.get('column', 'A')
+            bg_color = params.get('bg_color', None)
+            text_color = params.get('text_color', None)
+            bold = params.get('bold', False)
+            if self._action_callback:
+                self._action_callback({
+                    'type': 'color_column',
+                    'column': col,
+                    'bg_color': bg_color,
+                    'text_color': text_color,
+                    'bold': bold
+                })
+                return f"Окрашен столбец {col}"
+        
+        elif action == 'color_cells':
+            cells = params.get('cells', [])
+            if cells and self._action_callback:
+                self._action_callback({
+                    'type': 'color_cells',
+                    'cells': cells
+                })
+                return f"Окрашено {len(cells)} ячеек"
+        
+        elif action == 'color_row':
+            row = params.get('row', 1)
+            bg_color = params.get('bg_color', None)
+            text_color = params.get('text_color', None)
+            bold = params.get('bold', False)
+            if self._action_callback:
+                self._action_callback({
+                    'type': 'color_row',
+                    'row': row,
+                    'bg_color': bg_color,
+                    'text_color': text_color,
+                    'bold': bold
+                })
+                return f"Окрашена строка {row}"
+        
+        elif action == 'color_range':
+            if self._action_callback:
+                self._action_callback({
+                    'type': 'color_range',
+                    **params
+                })
+                return "Окрашен диапазон"
+        
+        elif action == 'bold_column':
+            col = params.get('column', 'A')
+            if self._action_callback:
+                self._action_callback({
+                    'type': 'bold_column',
+                    'column': col
+                })
+                return f"Жирный текст в столбце {col}"
         
         elif action == 'clear_cell':
             col = params.get('column', 'A')

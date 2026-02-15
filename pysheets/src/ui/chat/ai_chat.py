@@ -811,6 +811,72 @@ class AIChatWidget(QWidget):
                 conditions = action_dict.get('conditions', [])
                 self._apply_format_conditions(spreadsheet, conditions)
             
+            elif action_type == 'color_column':
+                col_letter = action_dict.get('column', 'A').upper()
+                bg_color = action_dict.get('bg_color', None)
+                text_color = action_dict.get('text_color', None)
+                bold = action_dict.get('bold', False)
+                col_idx = ord(col_letter) - ord('A')
+                if 0 <= col_idx < spreadsheet.columnCount():
+                    for row in range(spreadsheet.rowCount()):
+                        item = spreadsheet.item(row, col_idx)
+                        if not item or not item.text():
+                            continue
+                        self._color_single_cell(spreadsheet, row, col_idx, bg_color, text_color, bold)
+                    logger.info(f"Агент: окрашен столбец {col_letter}")
+            
+            elif action_type == 'color_cells':
+                cells_list = action_dict.get('cells', [])
+                self._apply_color_to_cells(spreadsheet, cells_list)
+                logger.info(f"Агент: окрашено {len(cells_list)} ячеек")
+            
+            elif action_type == 'color_row':
+                row_num = int(action_dict.get('row', 1))
+                bg_color = action_dict.get('bg_color', None)
+                text_color = action_dict.get('text_color', None)
+                bold = action_dict.get('bold', False)
+                row_idx = row_num - 1
+                if 0 <= row_idx < spreadsheet.rowCount():
+                    for col in range(spreadsheet.columnCount()):
+                        item = spreadsheet.item(row_idx, col)
+                        if not item or not item.text():
+                            continue
+                        self._color_single_cell(spreadsheet, row_idx, col, bg_color, text_color, bold)
+                    logger.info(f"Агент: окрашена строка {row_num}")
+            
+            elif action_type == 'color_range':
+                start_col = action_dict.get('start_col', '').upper()
+                start_row = int(action_dict.get('start_row', 1))
+                end_col = action_dict.get('end_col', '').upper()
+                end_row = int(action_dict.get('end_row', 1))
+                bg_color = action_dict.get('bg_color', None)
+                text_color = action_dict.get('text_color', None)
+                bold = action_dict.get('bold', False)
+                if start_col and end_col:
+                    col1 = ord(start_col) - ord('A')
+                    col2 = ord(end_col) - ord('A')
+                    row1 = start_row - 1
+                    row2 = end_row - 1
+                    for r in range(min(row1, row2), min(max(row1, row2) + 1, spreadsheet.rowCount())):
+                        for c in range(min(col1, col2), min(max(col1, col2) + 1, spreadsheet.columnCount())):
+                            self._color_single_cell(spreadsheet, r, c, bg_color, text_color, bold)
+                    logger.info(f"Агент: окрашен диапазон {start_col}{start_row}:{end_col}{end_row}")
+            
+            elif action_type == 'bold_column':
+                col_letter = action_dict.get('column', 'A').upper()
+                col_idx = ord(col_letter) - ord('A')
+                if 0 <= col_idx < spreadsheet.columnCount():
+                    for row in range(spreadsheet.rowCount()):
+                        item = spreadsheet.item(row, col_idx)
+                        if item and item.text():
+                            font = item.font()
+                            font.setBold(True)
+                            item.setFont(font)
+                            cell = spreadsheet.get_cell(row, col_idx) if hasattr(spreadsheet, 'get_cell') else None
+                            if cell:
+                                cell.bold = True
+                    logger.info(f"Агент: жирный текст в столбце {col_letter}")
+            
             elif action_type == 'insert_row':
                 position = int(action_dict.get('position', 0))
                 if hasattr(spreadsheet, 'insertRow'):
@@ -879,22 +945,84 @@ class AIChatWidget(QWidget):
                             match = cell_text == str(threshold)
                     
                     if match:
+                        # Обновляем модель данных ячейки
+                        cell = spreadsheet.get_cell(row, col_idx)
                         if bg_color:
                             color = QColor(bg_color)
                             if color.isValid():
-                                item.setBackground(QBrush(color))
+                                item.setData(Qt.BackgroundRole, QBrush(color))
+                                if cell:
+                                    cell.background_color = bg_color
                         if text_color:
                             color = QColor(text_color)
                             if color.isValid():
-                                item.setForeground(QBrush(color))
+                                item.setData(Qt.ForegroundRole, QBrush(color))
+                                if cell:
+                                    cell.text_color = text_color
                         if bold:
                             font = item.font()
                             font.setBold(True)
                             item.setFont(font)
+                            if cell:
+                                cell.bold = True
                 
                 logger.info(f"Агент: применено условное форматирование для столбца {col_letter}")
             except Exception as e:
                 logger.warning(f"Ошибка применения условия: {e}")
+
+    def _color_single_cell(self, spreadsheet, row: int, col: int, bg_color=None, text_color=None, bold=False):
+        """Окрашивает одну ячейку (фон, текст, жирность)"""
+        from PyQt5.QtGui import QColor, QBrush
+        
+        item = spreadsheet.item(row, col)
+        if not item:
+            from PyQt5.QtWidgets import QTableWidgetItem
+            item = QTableWidgetItem()
+            spreadsheet.setItem(row, col, item)
+        
+        cell = spreadsheet.get_cell(row, col) if hasattr(spreadsheet, 'get_cell') else None
+        
+        if bg_color:
+            color = QColor(bg_color)
+            if color.isValid():
+                item.setData(Qt.BackgroundRole, QBrush(color))
+                if cell:
+                    cell.background_color = bg_color
+        
+        if text_color:
+            color = QColor(text_color)
+            if color.isValid():
+                item.setData(Qt.ForegroundRole, QBrush(color))
+                if cell:
+                    cell.text_color = text_color
+        
+        if bold:
+            font = item.font()
+            font.setBold(True)
+            item.setFont(font)
+            if cell:
+                cell.bold = True
+
+    def _apply_color_to_cells(self, spreadsheet, cells_list: list):
+        """Окрашивает список ячеек с индивидуальными цветами"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        for cell_info in cells_list:
+            try:
+                col_letter = cell_info.get('column', 'A').upper()
+                row_num = int(cell_info.get('row', 1))
+                bg_color = cell_info.get('bg_color', None)
+                text_color = cell_info.get('text_color', None)
+                bold = cell_info.get('bold', False)
+                
+                col_idx = ord(col_letter) - ord('A')
+                row_idx = row_num - 1
+                
+                if 0 <= col_idx < spreadsheet.columnCount() and 0 <= row_idx < spreadsheet.rowCount():
+                    self._color_single_cell(spreadsheet, row_idx, col_idx, bg_color, text_color, bold)
+            except Exception as e:
+                logger.warning(f"Ошибка окрашивания ячейки: {e}")
 
     def _extract_table_data(self) -> Optional[str]:
         """Extract current table data from spreadsheet widget as formatted string."""
@@ -1225,6 +1353,91 @@ class AIChatWidget(QWidget):
                             for c in range(min(col1, col2), min(max(col1, col2) + 1, spreadsheet.columnCount())):
                                 spreadsheet.set_cell_value(r, c, "")
                         logger.info(f"Cleared range {start_col}{start_row}:{end_col}{end_row}")
+            
+            elif action == 'color_cells':
+                # Окрашивание конкретных ячеек
+                cells_list = command.get('cells', [])
+                if cells_list and self.main_window and self.main_window.tab_widget:
+                    spreadsheet = self.main_window.tab_widget.currentWidget()
+                    if spreadsheet:
+                        self._apply_color_to_cells(spreadsheet, cells_list)
+                        logger.info(f"Colored {len(cells_list)} cells")
+            
+            elif action == 'color_column':
+                # Окрашивание всего столбца
+                col_letter = command.get('column', '').upper()
+                bg_color = command.get('bg_color', None)
+                text_color = command.get('text_color', None)
+                bold = command.get('bold', False)
+                if col_letter and self.main_window and self.main_window.tab_widget:
+                    spreadsheet = self.main_window.tab_widget.currentWidget()
+                    if spreadsheet:
+                        col_idx = ord(col_letter) - ord('A')
+                        if 0 <= col_idx < spreadsheet.columnCount():
+                            for row in range(spreadsheet.rowCount()):
+                                item = spreadsheet.item(row, col_idx)
+                                if not item or not item.text():
+                                    continue
+                                self._color_single_cell(spreadsheet, row, col_idx, bg_color, text_color, bold)
+                            logger.info(f"Colored column {col_letter}")
+            
+            elif action == 'color_row':
+                # Окрашивание строки
+                row_num = command.get('row', 0)
+                bg_color = command.get('bg_color', None)
+                text_color = command.get('text_color', None)
+                bold = command.get('bold', False)
+                if row_num and self.main_window and self.main_window.tab_widget:
+                    spreadsheet = self.main_window.tab_widget.currentWidget()
+                    if spreadsheet:
+                        row_idx = int(row_num) - 1
+                        if 0 <= row_idx < spreadsheet.rowCount():
+                            for col in range(spreadsheet.columnCount()):
+                                item = spreadsheet.item(row_idx, col)
+                                if not item or not item.text():
+                                    continue
+                                self._color_single_cell(spreadsheet, row_idx, col, bg_color, text_color, bold)
+                            logger.info(f"Colored row {row_num}")
+            
+            elif action == 'color_range':
+                # Окрашивание диапазона
+                start_col = command.get('start_col', '').upper()
+                start_row = command.get('start_row', 0)
+                end_col = command.get('end_col', '').upper()
+                end_row = command.get('end_row', 0)
+                bg_color = command.get('bg_color', None)
+                text_color = command.get('text_color', None)
+                bold = command.get('bold', False)
+                if start_col and end_col and start_row and end_row and self.main_window and self.main_window.tab_widget:
+                    spreadsheet = self.main_window.tab_widget.currentWidget()
+                    if spreadsheet:
+                        col1 = ord(start_col) - ord('A')
+                        col2 = ord(end_col) - ord('A')
+                        row1 = int(start_row) - 1
+                        row2 = int(end_row) - 1
+                        for r in range(min(row1, row2), min(max(row1, row2) + 1, spreadsheet.rowCount())):
+                            for c in range(min(col1, col2), min(max(col1, col2) + 1, spreadsheet.columnCount())):
+                                self._color_single_cell(spreadsheet, r, c, bg_color, text_color, bold)
+                        logger.info(f"Colored range {start_col}{start_row}:{end_col}{end_row}")
+            
+            elif action == 'bold_column':
+                # Жирный текст в столбце
+                col_letter = command.get('column', '').upper()
+                if col_letter and self.main_window and self.main_window.tab_widget:
+                    spreadsheet = self.main_window.tab_widget.currentWidget()
+                    if spreadsheet:
+                        col_idx = ord(col_letter) - ord('A')
+                        if 0 <= col_idx < spreadsheet.columnCount():
+                            for row in range(spreadsheet.rowCount()):
+                                item = spreadsheet.item(row, col_idx)
+                                if item and item.text():
+                                    font = item.font()
+                                    font.setBold(True)
+                                    item.setFont(font)
+                                    cell = spreadsheet.get_cell(row, col_idx) if hasattr(spreadsheet, 'get_cell') else None
+                                    if cell:
+                                        cell.bold = True
+                            logger.info(f"Bold column {col_letter}")
             
             else:
                 logger.warning(f"Unknown action: {action}")

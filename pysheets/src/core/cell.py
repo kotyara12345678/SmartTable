@@ -23,8 +23,8 @@ class Cell:
     italic: bool = False
     underline: bool = False
     strike: bool = False
-    text_color: str = "#000000"
-    background_color: str = "#FFFFFF"
+    text_color: Optional[str] = None
+    background_color: Optional[str] = None
     alignment: str = "left"  # left, center, right
 
     def set_value(self, value: str):
@@ -79,8 +79,8 @@ class Cell:
             italic=data.get('italic', False),
             underline=data.get('underline', False),
             strike=data.get('strike', False),
-            text_color=data.get('text_color', '#000000'),
-            background_color=data.get('background_color', '#FFFFFF'),
+            text_color=data.get('text_color', None),
+            background_color=data.get('background_color', None),
             alignment=data.get('alignment', 'left')#
         )
 

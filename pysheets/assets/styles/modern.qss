@@ -53,15 +53,6 @@ QTableWidget {
     border-radius: 4px;
 }
 
-QTableWidget::item {
-    padding: 4px 8px;
-    border-right: 1px solid #edebe9;
-    border-bottom: 1px solid #edebe9;
-}
-
-QTableWidget::item:selected {
-    background-color: #e6f2ff;
-}
 
 /* Заголовки таблицы */
 QHeaderView::section {

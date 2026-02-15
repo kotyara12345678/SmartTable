@@ -178,23 +178,6 @@ class ThemeManager:
                     selection-color: #202124;
                     font-size: 12px;
                 }}
-                QTableWidget::item {{ 
-                    padding: 10px 12px; 
-                    border-right: 1px solid #dadce0; 
-                    border-bottom: 1px solid #dadce0;
-                    background-color: #ffffff;
-                }}
-                QTableWidget::item:alternate {{
-                    background-color: #f8f9fa;
-                }}
-                QTableWidget::item:hover {{
-                    background-color: #f1f3f4;
-                }}
-                QTableWidget::item:selected {{ 
-                    background-color: {accent_light}; 
-                    color: #202124;
-                    font-weight: 500;
-                }}
 
                 /* HEADERS */
                 QHeaderView::section {{ 
@@ -521,24 +504,6 @@ class ThemeManager:
                     selection-color: #e8eaed;
                     font-size: 12px;
                     color: #e8eaed;
-                }}
-                QTableWidget::item {{ 
-                    padding: 10px 12px; 
-                    border-right: 1px solid #4a4a4a; 
-                    border-bottom: 1px solid #4a4a4a;
-                    background-color: #1e1e1e;
-                    color: #e8eaed;
-                }}
-                QTableWidget::item:alternate {{
-                    background-color: #262626;
-                }}
-                QTableWidget::item:hover {{
-                    background-color: #323232;
-                }}
-                QTableWidget::item:selected {{ 
-                    background-color: {accent_dark}; 
-                    color: #e8eaed;
-                    font-weight: 500;
                 }}
 
                 /* HEADERS */

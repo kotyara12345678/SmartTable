@@ -44,16 +44,6 @@ QTableWidget {
     selection-color: #ffffff;
 }
 
-QTableWidget::item {
-    padding: 2px 4px;
-    border-right: 1px solid #404040;
-    border-bottom: 1px solid #404040;
-    color: #ffffff;
-}
-
-QTableWidget::item:selected {
-    background-color: #264f78;
-}
 
 /* Заголовки таблицы */
 QHeaderView::section {
