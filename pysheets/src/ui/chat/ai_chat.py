@@ -15,6 +15,8 @@ class AIChatWidget(QWidget):
 
     ai_response_ready = pyqtSignal(str)
     ai_response_done = pyqtSignal()
+    agent_progress = pyqtSignal(str, int, int)  # message, current_step, total_steps
+    agent_action = pyqtSignal(dict)  # action dict для выполнения в главном потоке
     
     def __init__(self, theme="dark", accent_color=None, parent=None, main_window=None):
         super().__init__(parent)
@@ -28,11 +30,17 @@ class AIChatWidget(QWidget):
         self._animation_timer.timeout.connect(self._update_typing_animation)
         self._typing_dots = 0
         
+        # AI Агент
+        self._agent = None
+        self._init_agent()
+        
         self.init_ui()
         self.apply_theme()
 
         self.ai_response_ready.connect(self._on_ai_response)
         self.ai_response_done.connect(self._on_ai_done)
+        self.agent_progress.connect(self._on_agent_progress)
+        self.agent_action.connect(self._execute_agent_action)
 
     def init_ui(self):
         """Инициализация современного интерфейса"""
@@ -646,9 +654,35 @@ class AIChatWidget(QWidget):
         # Показываем индикатор набора
         self._show_typing_indicator()
 
-    def _send_to_ai(self, message: str):
-        """Выполняет запрос к локальной модели в отдельном потоке"""
+    def _init_agent(self):
+        """Инициализация AI Агента"""
         try:
+            from pysheets.src.core.ai.agent import AIAgent
+            self._agent = AIAgent(get_table_state=self._extract_table_data)
+            
+            # Callback для прогресса — отправляем через сигнал в главный поток
+            def progress_cb(msg, step, total):
+                self.agent_progress.emit(msg, step, total)
+            
+            # Callback для действий — отправляем через сигнал в главный поток
+            def action_cb(action_dict):
+                self.agent_action.emit(action_dict)
+            
+            self._agent.set_progress_callback(progress_cb)
+            self._agent.set_action_callback(action_cb)
+        except Exception as e:
+            import logging
+            logging.warning(f"Failed to init AI Agent: {e}")
+            self._agent = None
+
+    def _send_to_ai(self, message: str):
+        """Выполняет запрос к модели в отдельном потоке. Если запрос сложный — использует AI Агента."""
+        try:
+            # Проверяем, нужен ли агент
+            if self._agent and self._agent.is_agent_request(message):
+                self._run_agent(message)
+                return
+            
             from pysheets.src.core.ai.chat import RequestMessage
             
             table_data = None
@@ -667,6 +701,200 @@ class AIChatWidget(QWidget):
 
         self.ai_response_ready.emit(str(resp))
         self.ai_response_done.emit()
+
+    def _run_agent(self, message: str):
+        """Запускает AI Агента для сложного запроса"""
+        try:
+            import logging
+            logger = logging.getLogger(__name__)
+            
+            # 1. Планирование
+            plan = self._agent.plan(message)
+            
+            if not plan:
+                self.ai_response_ready.emit("❌ Не удалось составить план. Попробуйте переформулировать запрос.")
+                self.ai_response_done.emit()
+                return
+            
+            # 2. Выполняем план (без промежуточных сообщений)
+            result = self._agent.execute_plan(plan)
+            
+            # 3. Одно финальное сообщение
+            self.ai_response_ready.emit(f"✅ Готово!\n{result}")
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self.ai_response_ready.emit(f"❌ Ошибка агента: {e}")
+        
+        self.ai_response_done.emit()
+
+    def _on_agent_progress(self, message: str, step: int, total: int):
+        """Обработка прогресса агента — обновляем индикатор"""
+        if hasattr(self, 'typing_label') and self.typing_label:
+            progress = f"[{step}/{total}]" if total > 0 else ""
+            self.typing_label.setText(f"🤖 {progress} {message}")
+
+    def _execute_agent_action(self, action_dict: dict):
+        """Выполняет действие агента над таблицей (в главном потоке)"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        if not self.main_window or not self.main_window.tab_widget:
+            logger.warning("Нет главного окна для выполнения действия агента")
+            return
+        
+        spreadsheet = self.main_window.tab_widget.currentWidget()
+        if not spreadsheet or not hasattr(spreadsheet, 'set_cell_value'):
+            logger.warning("Нет активной таблицы")
+            return
+        
+        action_type = action_dict.get('type', '')
+        
+        try:
+            if action_type == 'fill_table':
+                data = action_dict.get('data', [])
+                for row_idx, row in enumerate(data):
+                    if row_idx >= spreadsheet.rowCount():
+                        break
+                    for col_idx, value in enumerate(row):
+                        if col_idx >= spreadsheet.columnCount():
+                            break
+                        spreadsheet.set_cell_value(row_idx, col_idx, str(value) if value else "")
+                logger.info(f"Агент: заполнено {len(data)} строк")
+            
+            elif action_type == 'set_cell':
+                col_letter = action_dict.get('column', 'A').upper()
+                row_num = int(action_dict.get('row', 1))
+                value = action_dict.get('value', '')
+                col_idx = ord(col_letter) - ord('A')
+                row_idx = row_num - 1
+                if 0 <= col_idx < spreadsheet.columnCount() and 0 <= row_idx < spreadsheet.rowCount():
+                    spreadsheet.set_cell_value(row_idx, col_idx, str(value))
+                logger.info(f"Агент: установлено {col_letter}{row_num} = {value}")
+            
+            elif action_type == 'clear_cell':
+                col_letter = action_dict.get('column', 'A').upper()
+                row_num = int(action_dict.get('row', 1))
+                col_idx = ord(col_letter) - ord('A')
+                row_idx = row_num - 1
+                if 0 <= col_idx < spreadsheet.columnCount() and 0 <= row_idx < spreadsheet.rowCount():
+                    spreadsheet.set_cell_value(row_idx, col_idx, "")
+            
+            elif action_type == 'clear_column':
+                col_letter = action_dict.get('column', 'A').upper()
+                col_idx = ord(col_letter) - ord('A')
+                if 0 <= col_idx < spreadsheet.columnCount():
+                    for row in range(spreadsheet.rowCount()):
+                        cell = spreadsheet.get_cell(row, col_idx) if hasattr(spreadsheet, 'get_cell') else None
+                        if cell and cell.value:
+                            spreadsheet.set_cell_value(row, col_idx, "")
+            
+            elif action_type == 'clear_all':
+                for row in range(spreadsheet.rowCount()):
+                    for col in range(spreadsheet.columnCount()):
+                        cell = spreadsheet.get_cell(row, col) if hasattr(spreadsheet, 'get_cell') else None
+                        if cell and cell.value:
+                            spreadsheet.set_cell_value(row, col, "")
+            
+            elif action_type == 'sort_column':
+                col_letter = action_dict.get('column', 'A').upper()
+                order = action_dict.get('order', 'asc')
+                col_idx = ord(col_letter) - ord('A')
+                if hasattr(spreadsheet, 'sortItems'):
+                    from PyQt5.QtCore import Qt
+                    sort_order = Qt.AscendingOrder if order == 'asc' else Qt.DescendingOrder
+                    spreadsheet.sortItems(col_idx, sort_order)
+                    logger.info(f"Агент: отсортировано по {col_letter} ({order})")
+            
+            elif action_type == 'format_cells':
+                conditions = action_dict.get('conditions', [])
+                self._apply_format_conditions(spreadsheet, conditions)
+            
+            elif action_type == 'insert_row':
+                position = int(action_dict.get('position', 0))
+                if hasattr(spreadsheet, 'insertRow'):
+                    spreadsheet.insertRow(position)
+            
+            elif action_type == 'delete_row':
+                position = int(action_dict.get('position', 0))
+                if hasattr(spreadsheet, 'removeRow'):
+                    spreadsheet.removeRow(position)
+            
+            else:
+                logger.warning(f"Неизвестное действие агента: {action_type}")
+        
+        except Exception as e:
+            logger.exception(f"Ошибка выполнения действия агента '{action_type}': {e}")
+
+    def _apply_format_conditions(self, spreadsheet, conditions: list):
+        """Применяет условное форматирование от агента"""
+        from PyQt5.QtGui import QColor, QBrush
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        for cond in conditions:
+            try:
+                col_letter = cond.get('column', 'A').upper()
+                col_idx = ord(col_letter) - ord('A')
+                condition_type = cond.get('condition', '')
+                threshold = cond.get('value', '0')
+                bg_color = cond.get('bg_color', None)
+                text_color = cond.get('text_color', None)
+                bold = cond.get('bold', False)
+                
+                if col_idx < 0 or col_idx >= spreadsheet.columnCount():
+                    continue
+                
+                for row in range(spreadsheet.rowCount()):
+                    item = spreadsheet.item(row, col_idx)
+                    if not item or not item.text():
+                        continue
+                    
+                    cell_text = item.text().strip()
+                    
+                    # Проверяем условие
+                    match = False
+                    try:
+                        cell_val = float(cell_text.replace(',', '.').replace(' ', ''))
+                        thresh_val = float(str(threshold).replace(',', '.').replace(' ', ''))
+                        
+                        if condition_type == 'less_than':
+                            match = cell_val < thresh_val
+                        elif condition_type == 'greater_than':
+                            match = cell_val > thresh_val
+                        elif condition_type == 'equals':
+                            match = abs(cell_val - thresh_val) < 0.001
+                        elif condition_type == 'not_equals':
+                            match = abs(cell_val - thresh_val) >= 0.001
+                        elif condition_type == 'contains':
+                            match = str(threshold).lower() in cell_text.lower()
+                        elif condition_type == 'negative':
+                            match = cell_val < 0
+                    except ValueError:
+                        # Текстовое сравнение
+                        if condition_type == 'contains':
+                            match = str(threshold).lower() in cell_text.lower()
+                        elif condition_type == 'equals':
+                            match = cell_text == str(threshold)
+                    
+                    if match:
+                        if bg_color:
+                            color = QColor(bg_color)
+                            if color.isValid():
+                                item.setBackground(QBrush(color))
+                        if text_color:
+                            color = QColor(text_color)
+                            if color.isValid():
+                                item.setForeground(QBrush(color))
+                        if bold:
+                            font = item.font()
+                            font.setBold(True)
+                            item.setFont(font)
+                
+                logger.info(f"Агент: применено условное форматирование для столбца {col_letter}")
+            except Exception as e:
+                logger.warning(f"Ошибка применения условия: {e}")
 
     def _extract_table_data(self) -> Optional[str]:
         """Extract current table data from spreadsheet widget as formatted string."""
