@@ -1014,8 +1014,11 @@ class AIChatWidget(QWidget):
         self.input_field.setEnabled(False)
         self.send_button.setEnabled(False)
 
+        # Извлекаем данные таблицы в главном потоке (доступ к Qt виджетам)
+        pre_extracted_table = self._extract_table_data() if self.main_window else None
+
         # Запускаем фоновую отправку
-        threading.Thread(target=self._send_to_ai, args=(message,), daemon=True).start()
+        threading.Thread(target=self._send_to_ai, args=(message, pre_extracted_table), daemon=True).start()
 
         # Показываем индикатор набора
         self._show_typing_indicator()
@@ -1041,7 +1044,7 @@ class AIChatWidget(QWidget):
             logging.warning(f"Failed to init AI Agent: {e}")
             self._agent = None
 
-    def _send_to_ai(self, message: str):
+    def _send_to_ai(self, message: str, pre_extracted_table: Optional[str] = None):
         """Выполняет запрос к модели в отдельном потоке. Если запрос сложный — использует AI Агента."""
         try:
             # Парсим @-упоминания листов
@@ -1072,11 +1075,17 @@ class AIChatWidget(QWidget):
                     sheets_context += "\nЕсли нужно заполнить конкретный лист, используй маркер [SHEET:ИмяЛиста] перед JSON блоком."
                     sheets_context += "\nЕсли нужно заполнить несколько листов, используй отдельный [SHEET:ИмяЛиста] + ```json ... ``` для каждого."
             
-            # Если нет упоминаний — берём текущий лист как раньше
-            if not sheets_context and self.main_window:
-                table_data = self._extract_table_data()
-                if table_data:
-                    sheets_context = f"\n\n{table_data}"
+            # Если нет упоминаний — используем предварительно извлечённые данные текущего листа
+            if not sheets_context and pre_extracted_table:
+                sheets_context = f"\n\n{pre_extracted_table}"
+            
+            # Всегда добавляем данные текущего листа даже если есть @-упоминания
+            if sheets_context and pre_extracted_table and pre_extracted_table not in sheets_context:
+                sheets_context = f"\n\n{pre_extracted_table}" + sheets_context
+            
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Table data sent to AI: {bool(sheets_context)}, length: {len(sheets_context) if sheets_context else 0}")
             
             final_message = clean_message
             if sheets_context:
@@ -1466,7 +1475,8 @@ class AIChatWidget(QWidget):
                 logger.warning(f"Ошибка окрашивания ячейки: {e}")
 
     def _extract_table_data(self) -> Optional[str]:
-        """Extract current table data from spreadsheet widget as formatted string."""
+        """Extract current table data from spreadsheet widget as formatted string.
+        Includes row numbers so AI can reference specific cells."""
         try:
             if not self.main_window or not self.main_window.tab_widget:
                 return None
@@ -1475,47 +1485,61 @@ class AIChatWidget(QWidget):
             if not spreadsheet_widget:
                 return None
             
-            if not hasattr(spreadsheet_widget, 'cells'):
-                return None
-            
-            cells = spreadsheet_widget.cells
-            if not cells:
-                return None
-            
-            lines = []
-            max_cols = len(cells[0]) if cells else 0
+            # Определяем количество колонок
+            max_cols = min(spreadsheet_widget.columnCount() if hasattr(spreadsheet_widget, 'columnCount') else 26, 26)
             if max_cols == 0:
                 return None
             
-            header = " | ".join([chr(65 + i) for i in range(min(max_cols, 26))])
+            lines = []
+            # Заголовок с номерами строк
+            col_letters = [chr(65 + i) for i in range(max_cols)]
+            header = "Row | " + " | ".join(col_letters)
             lines.append(header)
             lines.append("-" * len(header))
             
             has_data = False
-            for row_idx, row in enumerate(cells[:10]):
+            max_rows = min(spreadsheet_widget.rowCount() if hasattr(spreadsheet_widget, 'rowCount') else 50, 50)
+            
+            for row_idx in range(max_rows):
                 row_data = []
-                for col_idx in range(min(max_cols, 26)):
-                    cell = row[col_idx] if col_idx < len(row) else None
-                    if cell and hasattr(cell, 'value'):
-                        value = cell.value
-                    else:
-                        value = None
+                for col_idx in range(max_cols):
+                    value = None
                     
-                    if value is not None:
-                        cell_str = str(value)[:15]
+                    # 1. Проверяем dropdown виджет (ComboBox)
+                    combo = spreadsheet_widget.cellWidget(row_idx, col_idx)
+                    if combo and hasattr(combo, 'currentText'):
+                        value = combo.currentText()
+                    
+                    # 2. Проверяем QTableWidgetItem (отображаемый текст)
+                    if not value:
+                        item = spreadsheet_widget.item(row_idx, col_idx)
+                        if item and item.text():
+                            value = item.text()
+                    
+                    # 3. Проверяем модель Cell
+                    if not value and hasattr(spreadsheet_widget, 'cells'):
+                        cells = spreadsheet_widget.cells
+                        if row_idx < len(cells) and col_idx < len(cells[row_idx]):
+                            cell = cells[row_idx][col_idx]
+                            if cell and hasattr(cell, 'value') and cell.value:
+                                value = str(cell.value)
+                    
+                    if value:
+                        cell_str = str(value)[:30]
                         has_data = True
                     else:
                         cell_str = ""
                     row_data.append(cell_str)
                 
                 if any(row_data):
-                    lines.append(" | ".join(row_data))
+                    # Добавляем номер строки (1-based)
+                    lines.append(f"{row_idx + 1:3d} | " + " | ".join(row_data))
             
             if not has_data or len(lines) <= 2:
                 return None
             
             table_str = "\n".join(lines)
-            return f"CURRENT SPREADSHEET DATA:\n{table_str}"
+            return f"CURRENT SPREADSHEET DATA (Row numbers are 1-based, columns are A-Z):\n{table_str}"
             
         except Exception as e:
             import logging
@@ -1571,12 +1595,35 @@ class AIChatWidget(QWidget):
         mentioned_sheets = getattr(self, '_last_mentioned_sheets', [])
         
         try:
-            # 1. Парсим [SHEET:Имя] + ```json ... ``` блоки
+            # 1. Сначала проверяем [TABLE_COMMAND] маркеры (приоритет над JSON блоками)
+            command_pattern = r'\[TABLE_COMMAND\](.*?)\[/TABLE_COMMAND\]'
+            matches = list(re.finditer(command_pattern, response, re.DOTALL))
+            has_set_cell = False
+            
+            for match in matches:
+                try:
+                    command = json.loads(match.group(1).strip())
+                    logger.info(f"Found [TABLE_COMMAND] marker with action: {command.get('action')}")
+                    if command.get('action') == 'set_cell':
+                        has_set_cell = True
+                    self._execute_table_command(command)
+                    commands_found += 1
+                    removed_positions.append((match.start(), match.end()))
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse [TABLE_COMMAND]: {e}")
+            
+            # 2. Парсим [SHEET:Имя] + ```json ... ``` блоки
+            # НО: если были set_cell команды, пропускаем JSON таблицы (чтобы не перезаписать)
             # Паттерн: опциональный [SHEET:name] перед ```json
             sheet_json_pattern = r'(?:\[SHEET[:\s]*([^\]]+)\]\s*)?```json\s*\n?(\[.*?\])\s*\n?```'
             json_matches = list(re.finditer(sheet_json_pattern, response, re.DOTALL))
             
             for idx, match in enumerate(json_matches):
+                if has_set_cell:
+                    # Если были set_cell команды, пропускаем JSON таблицы (чтобы не перезаписать изменения)
+                    logger.info("Skipping JSON table block because set_cell commands were found")
+                    removed_positions.append((match.start(), match.end()))
+                    continue
                 try:
                     target_sheet = match.group(1)  # может быть None
                     if target_sheet:
@@ -1616,20 +1663,6 @@ class AIChatWidget(QWidget):
                     logger.warning(f"Failed to parse JSON block: {e}")
                 except Exception as e:
                     logger.warning(f"Error processing JSON table data: {e}")
-            
-            # 2. Потом проверяем [TABLE_COMMAND] маркеры (окрашивание будет отложено если анимация идёт)
-            command_pattern = r'\[TABLE_COMMAND\](.*?)\[/TABLE_COMMAND\]'
-            matches = re.finditer(command_pattern, response, re.DOTALL)
-            
-            for match in matches:
-                try:
-                    command = json.loads(match.group(1).strip())
-                    logger.info(f"Found [TABLE_COMMAND] marker with action: {command.get('action')}")
-                    self._execute_table_command(command)
-                    commands_found += 1
-                    removed_positions.append((match.start(), match.end()))
-                except json.JSONDecodeError as e:
-                    logger.warning(f"Failed to parse [TABLE_COMMAND]: {e}")
             
             # Очищаем response от команд и JSON-блоков
             cleaned_response = response
@@ -1799,9 +1832,9 @@ class AIChatWidget(QWidget):
             # Подсвечиваем ячейку ярким цветом (accent color)
             item = spreadsheet.item(row_idx, col_idx)
             if item:
-                # Используем accent color или зелёный по умолчанию
-                highlight_color = QColor(self.accent_color) if hasattr(self, 'accent_color') else QColor("#4CAF50")
-                highlight_color.setAlpha(120)  # Полупрозрачный
+                # Используем жёлтый цвет подсветки
+                highlight_color = QColor("#FFEB3B")
+                highlight_color.setAlpha(160)  # Полупрозрачный
                 item.setData(Qt.BackgroundRole, QBrush(highlight_color))
                 
                 # Сохраняем для последующего fade-out
@@ -1866,8 +1899,8 @@ class AIChatWidget(QWidget):
             return
         
         # Плавно уменьшаем alpha подсветки
-        alpha = int(120 * (1.0 - progress))
-        highlight_color = QColor(self.accent_color) if hasattr(self, 'accent_color') else QColor("#4CAF50")
+        alpha = int(160 * (1.0 - progress))
+        highlight_color = QColor("#FFEB3B")
         highlight_color.setAlpha(max(0, alpha))
         
         for row_idx, col_idx, spreadsheet in self._highlight_cells:
@@ -1984,90 +2017,16 @@ class AIChatWidget(QWidget):
                 pass
 
     def _animate_update_cells(self, spreadsheet, cells: list):
-        """Анимация изменения: жёлтая подсветка → fade-out
-        
-        Args:
-            spreadsheet: виджет таблицы
-            cells: список (row, col) изменённых ячеек
-        """
-        from PyQt5.QtGui import QColor, QBrush
-        
-        if not cells or not spreadsheet:
-            return
-        
-        # Подсвечиваем жёлтым
-        yellow_highlight = QColor("#FFD700")
-        yellow_highlight.setAlpha(120)
-        
-        update_cells = []
-        for row, col in cells:
-            item = spreadsheet.item(row, col)
-            if item:
-                # Сохраняем оригинальный фон
-                cell = spreadsheet.get_cell(row, col) if hasattr(spreadsheet, 'get_cell') else None
-                orig_bg = cell.background_color if cell else None
-                item.setData(Qt.BackgroundRole, QBrush(yellow_highlight))
-                update_cells.append((row, col, orig_bg))
-        
-        if not update_cells:
-            return
-        
-        # Сохраняем данные для анимации
-        self._update_anim_cells = update_cells
-        self._update_anim_spreadsheet = spreadsheet
-        self._update_anim_step = 0
-        self._update_anim_total = 6
-        
-        if not hasattr(self, '_update_anim_timer'):
-            self._update_anim_timer = QTimer()
-            self._update_anim_timer.timeout.connect(self._animate_update_step)
-        
-        # Начинаем fade через 250мс
-        QTimer.singleShot(250, lambda: self._update_anim_timer.start(70))
+        """Анимация изменения ячеек — отключена"""
+        pass
+    
+    def _start_update_fade(self):
+        """Запускает fade-out анимацию изменения — отключена"""
+        pass
 
     def _animate_update_step(self):
-        """Шаг анимации изменения: fade-out жёлтого"""
-        from PyQt5.QtGui import QColor, QBrush
-        
-        if not hasattr(self, '_update_anim_cells') or not self._update_anim_cells:
-            if hasattr(self, '_update_anim_timer'):
-                self._update_anim_timer.stop()
-            return
-        
-        self._update_anim_step += 1
-        progress = self._update_anim_step / self._update_anim_total
-        spreadsheet = self._update_anim_spreadsheet
-        
-        if progress >= 1.0:
-            # Завершаем — восстанавливаем оригинальные цвета
-            for row, col, orig_bg in self._update_anim_cells:
-                try:
-                    item = spreadsheet.item(row, col)
-                    if item:
-                        if orig_bg:
-                            item.setBackground(QBrush(QColor(orig_bg)))
-                            item.setData(Qt.BackgroundRole, QBrush(QColor(orig_bg)))
-                        else:
-                            item.setData(Qt.BackgroundRole, None)
-                except Exception:
-                    pass
-            
-            self._update_anim_cells = []
-            self._update_anim_timer.stop()
-            return
-        
-        # Плавно уменьшаем alpha
-        alpha = int(120 * (1.0 - progress))
-        yellow_color = QColor("#FFD700")
-        yellow_color.setAlpha(max(0, alpha))
-        
-        for row, col, orig_bg in self._update_anim_cells:
-            try:
-                item = spreadsheet.item(row, col)
-                if item:
-                    item.setData(Qt.BackgroundRole, QBrush(yellow_color))
-            except Exception:
-                pass
+        """Шаг анимации — отключена"""
+        pass
 
     def _animate_color_cells(self, spreadsheet, cells_with_colors: list):
         """Анимация окрашивания: плавное появление цвета (alpha 0 → 255)
@@ -2151,7 +2110,29 @@ class AIChatWidget(QWidget):
             return
         
         try:
-            if action == 'insert_rows':
+            if action == 'set_cell':
+                # Установка значения конкретной ячейки
+                col_letter = command.get('column', '').upper()
+                row_num = int(command.get('row', 1))
+                value = str(command.get('value', ''))
+                if col_letter and self.main_window and self.main_window.tab_widget:
+                    spreadsheet = self.main_window.tab_widget.currentWidget()
+                    if spreadsheet and hasattr(spreadsheet, 'set_cell_value'):
+                        col_idx = ord(col_letter) - ord('A')
+                        row_idx = row_num - 1
+                        if 0 <= col_idx < spreadsheet.columnCount() and 0 <= row_idx < spreadsheet.rowCount():
+                            # Проверяем, есть ли dropdown в этой ячейке
+                            combo = spreadsheet.cellWidget(row_idx, col_idx)
+                            if combo and hasattr(combo, 'setCurrentText'):
+                                # Обновляем dropdown
+                                combo.setCurrentText(value)
+                            else:
+                                spreadsheet.set_cell_value(row_idx, col_idx, value)
+                            # Анимация изменения
+                            self._animate_update_cells(spreadsheet, [(row_idx, col_idx)])
+                            logger.info(f"Set cell {col_letter}{row_num} = {value}")
+            
+            elif action == 'insert_rows':
                 # Вставка строк
                 rows = command.get('data', [])
                 if rows and self.main_window and self.main_window.tab_widget:

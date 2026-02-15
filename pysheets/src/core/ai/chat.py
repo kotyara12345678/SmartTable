@@ -197,8 +197,32 @@ Rules:
 - Headers go in the first row
 
 === TABLE COMMANDS ===
-When user asks to clear, delete, or modify cells/columns/rows, you MUST use [TABLE_COMMAND] markers.
+When user asks to clear, delete, modify, or change cells/columns/rows, you MUST use [TABLE_COMMAND] markers.
 ALWAYS include the command even if you also write explanatory text.
+
+Set/change a specific cell value (USE THIS for single cell edits!):
+[TABLE_COMMAND]{"action": "set_cell", "column": "D", "row": 2, "value": "2000000"}[/TABLE_COMMAND]
+
+Set multiple cells at once:
+[TABLE_COMMAND]{"action": "set_cell", "column": "D", "row": 2, "value": "2000000"}[/TABLE_COMMAND]
+[TABLE_COMMAND]{"action": "set_cell", "column": "D", "row": 3, "value": "900000"}[/TABLE_COMMAND]
+
+IMPORTANT: When user asks to CHANGE/EDIT/UPDATE a specific cell value, ALWAYS use set_cell command!
+Do NOT return a full ```json table when only one or a few cells need to change!
+set_cell also works for dropdown cells - it will change the selected option in the dropdown.
+
+WHEN TO USE set_cell vs ```json:
+- User says "change X to Y" or "update cell" or "set value" → USE set_cell!
+- User says "change revenue for CompanyX" → USE set_cell! Find the row and column from the table data.
+- User says "fill the table" or "create a table" or "generate data" → USE ```json
+- If you need to change 1-5 cells → USE set_cell for EACH cell
+- If you need to change 6+ cells or create new data → USE ```json
+- NEVER use ```json to change just one value — it will overwrite the entire table!
+
+Example: User says "Change revenue for MediaGroup to 5000000"
+You see the table has MediaGroup in column A, row 3, and revenue is in column D.
+Correct response:
+[TABLE_COMMAND]{"action": "set_cell", "column": "D", "row": 3, "value": "5000000"}[/TABLE_COMMAND]
 
 Clear a specific cell:
 [TABLE_COMMAND]{"action": "clear_cell", "column": "A", "row": 2}[/TABLE_COMMAND]
@@ -264,14 +288,18 @@ If no [SHEET:] marker is used, data goes to the current active sheet.
 You can fill multiple sheets in one response by using multiple [SHEET:name] + ```json blocks.
 
 === CRITICAL RULES ===
-1. ALWAYS include [TABLE_COMMAND] when user asks to clear/delete/remove anything
+1. ALWAYS include [TABLE_COMMAND] when user asks to clear/delete/remove/change anything
 2. Column letters: A, B, C, D, ... Z
 3. Row numbers are 1-based (first row = 1)
 4. Understand typos! "паля" = "поля", "ячейка" = "ячейку", etc.
 5. If user says "A2" it means column A, row 2
 6. Always respond in Russian
 7. Put explanatory text BEFORE or AFTER the command/JSON block
-8. When user mentions specific sheets with @, use [SHEET:name] to target the correct sheet"""
+8. When user mentions specific sheets with @, use [SHEET:name] to target the correct sheet
+9. You ALWAYS receive the current table data before the user's message. USE IT to find the correct row/column!
+10. When user says "change X for CompanyName" - LOOK at the table data to find which row has CompanyName and which column has X
+11. NEVER say "I don't see this data" if the table data is provided above the user's message
+12. The table data shows: Row number | Column A | Column B | ... Use these to build set_cell commands"""
             
             resp = chat_with_openrouter(message, extra_system=system_prompt)
             if resp:

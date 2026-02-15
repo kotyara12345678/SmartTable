@@ -11,7 +11,7 @@
     {"name": "Контакт", "column_index": 1, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": []},
     {"name": "Email", "column_index": 2, "pattern": "email", "format_string": "", "is_key_field": false, "validation_rules": []},
     {"name": "Сумма сделки", "column_index": 3, "pattern": "currency", "format_string": "", "is_key_field": false, "validation_rules": []},
-    {"name": "Этап", "column_index": 4, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": []},
+    {"name": "Этап", "column_index": 4, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": [], "dropdown_options": ["🟢 Закрыта", "🔵 Переговоры", "🟡 Предложение", "🔴 Первый контакт"]},
     {"name": "Вероятность", "column_index": 5, "pattern": "percentage", "format_string": "", "is_key_field": false, "validation_rules": []},
     {"name": "Следующий шаг", "column_index": 6, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": []}
   ],
