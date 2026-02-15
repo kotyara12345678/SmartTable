@@ -428,15 +428,203 @@ class MainWindow(QMainWindow):
 
         dialog = TemplateManagerDialog(self)
         dialog.exec_()
-        dialog.exec_()
 
     def apply_template(self, template_name: str):
-        """Применяет выбранный шаблон, создавая новую таблицу"""
+        """Применяет выбранный шаблон, создавая новую таблицу с данными и стилями"""
+        try:
+            import json
+            from pathlib import Path
+            from PyQt5.QtGui import QColor, QPalette
+            
+            # Ищем шаблон в папке templates
+            templates_dir = Path(__file__).parent.parent.parent / "templates"
+            template_path = templates_dir / f"{template_name}.json"
+            
+            if not template_path.exists():
+                # Fallback: старый формат через TemplateManager
+                self._apply_template_legacy(template_name)
+                return
+            
+            with open(template_path, 'r', encoding='utf-8') as f:
+                template = json.load(f)
+            
+            # Создаем новый документ
+            self.new_file()
+            spreadsheet = self.get_current_spreadsheet()
+            if not spreadsheet:
+                show_error_message(self, "Не удалось создать новую таблицу")
+                return
+            
+            # Определяем тёмная ли тема
+            is_dark = False
+            try:
+                app = QApplication.instance()
+                if app:
+                    palette = app.palette()
+                    window_color = palette.color(QPalette.Window)
+                    brightness = (window_color.red() + window_color.green() + window_color.blue()) / 3
+                    is_dark = brightness < 128
+            except:
+                pass
+            
+            # === Заполняем данные ===
+            sample_data = template.get('sample_data', [])
+            if not sample_data:
+                # Если нет sample_data, используем только заголовки из fields
+                fields = template.get('fields', [])
+                headers = [f['name'] for f in sorted(fields, key=lambda x: x.get('column_index', 0))]
+                if headers:
+                    for col_idx, header in enumerate(headers):
+                        try:
+                            spreadsheet.set_cell_value(0, col_idx, header)
+                        except:
+                            pass
+            else:
+                for row_idx, row in enumerate(sample_data):
+                    for col_idx, value in enumerate(row):
+                        if value:  # Не заполняем пустые ячейки
+                            try:
+                                spreadsheet.set_cell_value(row_idx, col_idx, str(value))
+                            except Exception as e:
+                                print(f"[WARNING] Ошибка при заполнении ({row_idx},{col_idx}): {e}")
+            
+            # === Применяем стили ===
+            styling = template.get('styling', {})
+            
+            def _adapt_color(color_hex, is_bg=True):
+                """Адаптирует цвет для текущей темы. Убирает белый фон в тёмной теме."""
+                if not color_hex:
+                    return None
+                # Не применяем белый/почти белый фон в тёмной теме
+                if is_bg and is_dark:
+                    c = QColor(color_hex)
+                    if c.isValid():
+                        brightness = (c.red() + c.green() + c.blue()) / 3
+                        if brightness > 240:  # Почти белый
+                            return None
+                        # Слишком светлые пастельные цвета — затемняем
+                        if brightness > 200:
+                            return c.darker(180).name()
+                # Не применяем чёрный/тёмный фон в светлой теме
+                if is_bg and not is_dark:
+                    c = QColor(color_hex)
+                    if c.isValid():
+                        brightness = (c.red() + c.green() + c.blue()) / 3
+                        if brightness < 30:  # Почти чёрный
+                            return None
+                return color_hex
+            
+            def _apply_style_to_cell(row_idx, col_idx, style):
+                """Безопасно применяет стиль к ячейке"""
+                try:
+                    cell = spreadsheet.get_cell(row_idx, col_idx)
+                    if not cell:
+                        return
+                    bg = _adapt_color(style.get('bg_color'), is_bg=True)
+                    tc = _adapt_color(style.get('text_color'), is_bg=False)
+                    if bg:
+                        cell.background_color = bg
+                    if tc:
+                        cell.text_color = tc
+                    if style.get('bold'):
+                        cell.bold = True
+                    spreadsheet.apply_cell_formatting(row_idx, col_idx)
+                except Exception as e:
+                    print(f"[WARNING] Ошибка стиля ({row_idx},{col_idx}): {e}")
+            
+            # Стиль заголовка
+            header_style = styling.get('header_row', {})
+            if header_style and sample_data:
+                num_cols = len(sample_data[0]) if sample_data else 0
+                for col_idx in range(num_cols):
+                    _apply_style_to_cell(0, col_idx, header_style)
+            
+            # Стили строк
+            row_styles = styling.get('rows', {})
+            for row_str, style in row_styles.items():
+                try:
+                    row_idx = int(row_str)
+                    if row_idx < len(sample_data):
+                        num_cols = len(sample_data[0]) if sample_data else 0
+                        for col_idx in range(num_cols):
+                            _apply_style_to_cell(row_idx, col_idx, style)
+                except Exception as e:
+                    print(f"[WARNING] Ошибка стиля строки {row_str}: {e}")
+            
+            # Стили колонок
+            col_styles = styling.get('columns', {})
+            for col_str, style in col_styles.items():
+                try:
+                    col_idx = int(col_str)
+                    for row_idx in range(1, len(sample_data)):
+                        _apply_style_to_cell(row_idx, col_idx, style)
+                except Exception as e:
+                    print(f"[WARNING] Ошибка стиля колонки {col_str}: {e}")
+            
+            # Чередующиеся строки (адаптивные к теме)
+            alt_rows = styling.get('alternating_rows', {})
+            if alt_rows and sample_data:
+                even_bg = _adapt_color(alt_rows.get('even_bg'), is_bg=True)
+                odd_bg = _adapt_color(alt_rows.get('odd_bg'), is_bg=True)
+                num_cols = len(sample_data[0]) if sample_data else 0
+                for row_idx in range(1, len(sample_data)):
+                    if str(row_idx) in row_styles:
+                        continue
+                    bg = even_bg if row_idx % 2 == 0 else odd_bg
+                    if bg:
+                        for col_idx in range(num_cols):
+                            try:
+                                cell = spreadsheet.get_cell(row_idx, col_idx)
+                                if cell and not cell.background_color:
+                                    cell.background_color = bg
+                                    spreadsheet.apply_cell_formatting(row_idx, col_idx)
+                            except:
+                                pass
+            
+            # Условное форматирование
+            conditional = styling.get('conditional', [])
+            for rule in conditional:
+                try:
+                    col_idx = rule.get('column', 0)
+                    contains_text = rule.get('contains', '')
+                    rule_style = {
+                        'bg_color': rule.get('bg_color'),
+                        'text_color': rule.get('text_color')
+                    }
+                    for row_idx in range(1, len(sample_data)):
+                        if col_idx < len(sample_data[row_idx]):
+                            cell_value = sample_data[row_idx][col_idx]
+                            if contains_text and contains_text in str(cell_value):
+                                _apply_style_to_cell(row_idx, col_idx, rule_style)
+                except Exception as e:
+                    print(f"[WARNING] Ошибка условного форматирования: {e}")
+            
+            # Переименовываем вкладку
+            tab_idx = self.tab_widget.currentIndex()
+            if tab_idx >= 0:
+                self.tab_widget.setTabText(tab_idx, template_name)
+            
+            icon = template.get('icon', '📋')
+            category = template.get('category', '')
+            desc = template.get('description', '')
+            info_msg = f"{icon} Шаблон '{template_name}' применён!\n"
+            info_msg += f"Категория: {category}\n" if category else ""
+            info_msg += f"{desc}\n" if desc else ""
+            info_msg += f"Строк: {len(sample_data)}, Колонок: {len(sample_data[0]) if sample_data else 0}"
+            
+            QMessageBox.information(self, "Шаблон применён", info_msg)
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            show_error_message(self, f"Ошибка при применении шаблона: {e}")
+    
+    def _apply_template_legacy(self, template_name: str):
+        """Применяет шаблон старого формата (только заголовки)"""
         try:
             from pysheets.src.ui.template.templates.template_manager import TemplateManager
             from pysheets.src.ui.template.templates.template_applier import TemplateApplier
             
-            # Загружаем менеджер и получаем шаблон
             template_manager = TemplateManager("template", "user_templates")
             template = template_manager.get_template(template_name)
             
@@ -444,19 +632,12 @@ class MainWindow(QMainWindow):
                 show_error_message(self, f"Шаблон '{template_name}' не найден")
                 return
             
-            # Создаем новый документ с структурой из шаблона
             self.new_file()
-            
-            # Получаем активную таблицу
             spreadsheet = self.get_current_spreadsheet()
             if not spreadsheet:
-                show_error_message(self, "Не удалось создать новую таблицу")
                 return
             
-            # Применяем структуру шаблона
             template_data = TemplateApplier.apply_template_structure(template, max_rows=50)
-            
-            # Заполняем заголовки
             headers = template_data['headers']
             for col_idx, header in enumerate(headers):
                 try:
@@ -464,17 +645,12 @@ class MainWindow(QMainWindow):
                 except:
                     pass
             
-            # Показываем информацию о созданной таблице
-            info_msg = f"✓ Таблица создана из шаблона '{template_name}'\n"
-            info_msg += f"Колонки: {', '.join(headers)}\n"
-            info_msg += f"Создано {len(headers)} полей"
-            
-            QMessageBox.information(self, "Шаблон применен", info_msg)
-            
+            QMessageBox.information(self, "Шаблон применён",
+                f"✓ Таблица создана из шаблона '{template_name}'\nКолонки: {', '.join(headers)}")
         except Exception as e:
             import traceback
             traceback.print_exc()
-            show_error_message(self, f"Ошибка при применении шаблона: {e}")
+            show_error_message(self, f"Ошибка: {e}")
 
     def create_template_from_selection(self):
         """Создает шаблон из выделенных колонок"""

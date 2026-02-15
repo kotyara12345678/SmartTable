@@ -608,283 +608,372 @@ class TemplateManagerDialog(QDialog):
         self.accept()
 
 
-class TemplateGalleryDialog(QDialog):
-    """Расширенная галерея шаблонов с визуальным отображением"""
+class TemplateCard(QFrame):
+    """Карточка шаблона в галерее"""
+    
+    selected = pyqtSignal(str)  # Имя выбранного шаблона
+    
+    def __init__(self, template_name: str, template_data: dict, parent=None):
+        super().__init__(parent)
+        self.template_name = template_name
+        self.template_data = template_data
+        
+        self.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFixedSize(220, 260)
+        
+        self._setup_ui()
+        self._apply_style()
+    
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 10)
+        layout.setSpacing(6)
+        
+        # Цветная полоса заголовка
+        header_color = '#4A90D9'  # По умолчанию
+        styling = self.template_data.get('styling', {})
+        header_row = styling.get('header_row', {})
+        if header_row.get('bg_color'):
+            header_color = header_row['bg_color']
+        
+        color_bar = QWidget()
+        color_bar.setFixedHeight(50)
+        color_bar.setStyleSheet(f"background-color: {header_color}; border-radius: 8px 8px 0 0;")
+        
+        # Иконка поверх цветной полосы
+        bar_layout = QHBoxLayout(color_bar)
+        bar_layout.setContentsMargins(12, 8, 12, 8)
+        icon = self.template_data.get('icon', '📋')
+        icon_label = QLabel(icon)
+        icon_label.setStyleSheet("font-size: 24px; background: transparent;")
+        bar_layout.addWidget(icon_label)
+        bar_layout.addStretch()
+        
+        # Категория на полосе
+        category = self.template_data.get('category', '')
+        if category:
+            cat_label = QLabel(category)
+            cat_label.setStyleSheet("color: rgba(255,255,255,0.85); font-size: 10px; background: transparent;")
+            bar_layout.addWidget(cat_label)
+        
+        layout.addWidget(color_bar)
+        
+        # Контент карточки
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(12, 6, 12, 0)
+        content_layout.setSpacing(4)
+        
+        # Название
+        name_label = QLabel(self.template_name)
+        name_font = name_label.font()
+        name_font.setPointSize(11)
+        name_font.setBold(True)
+        name_label.setFont(name_font)
+        name_label.setWordWrap(True)
+        content_layout.addWidget(name_label)
+        
+        # Описание
+        desc = self.template_data.get('description', '')
+        if desc:
+            desc_label = QLabel(desc)
+            desc_label.setWordWrap(True)
+            desc_label.setStyleSheet("font-size: 10px; opacity: 0.7;")
+            desc_label.setMaximumHeight(36)
+            content_layout.addWidget(desc_label)
+        
+        # Инфо строка
+        sample_data = self.template_data.get('sample_data', [])
+        if sample_data:
+            cols = len(sample_data[0]) if sample_data else 0
+            rows = len(sample_data) - 1
+            info_label = QLabel(f"📊 {cols} колонок · {rows} строк")
+            info_label.setStyleSheet("font-size: 9px; opacity: 0.6;")
+            content_layout.addWidget(info_label)
+        
+        content_layout.addStretch()
+        
+        # Кнопка
+        apply_btn = QPushButton("✓ Создать таблицу")
+        apply_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {header_color};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 6px 12px;
+                font-weight: bold;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{
+                opacity: 0.9;
+            }}
+        """)
+        apply_btn.setCursor(Qt.PointingHandCursor)
+        apply_btn.clicked.connect(lambda: self.selected.emit(self.template_name))
+        content_layout.addWidget(apply_btn)
+        
+        layout.addWidget(content)
+    
+    def _apply_style(self):
+        self.setStyleSheet("""
+            TemplateCard {
+                border: 1px solid rgba(128, 128, 128, 0.3);
+                border-radius: 8px;
+            }
+            TemplateCard:hover {
+                border: 2px solid rgba(128, 128, 128, 0.6);
+            }
+        """)
 
-    template_selected = pyqtSignal(str)  # Сигнал с именем выбранного шаблона
+
+class TemplateGalleryDialog(QDialog):
+    """Галерея шаблонов с карточками"""
+
+    template_selected = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.template_manager = TemplateManager()
+        self._json_templates = {}
+        self._all_cards = []
         self.init_ui()
         self.load_templates()
 
     def init_ui(self):
         self.setWindowTitle("Галерея шаблонов")
-        self.setFixedSize(900, 650)
+        self.setMinimumSize(950, 650)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(10)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
 
-        # Заголовок и поиск
+        # === Заголовок ===
         header_layout = QHBoxLayout()
-
-        title = QLabel("Галерея шаблонов")
-        title.setStyleSheet("font-size: 16px; font-weight: bold;")
+        
+        title = QLabel("📋 Галерея шаблонов")
+        title_font = title.font()
+        title_font.setPointSize(16)
+        title_font.setBold(True)
+        title.setFont(title_font)
         header_layout.addWidget(title)
-
+        
         header_layout.addStretch()
-
-        # Поле поиска
+        
+        # Поиск
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍 Поиск по названию...")
-        self.search_input.setMaximumWidth(250)
-        self.search_input.textChanged.connect(self.filter_templates)
-        header_layout.addWidget(self.search_input)
-
-        layout.addLayout(header_layout)
-
-        # Основной контент - два столбца
-        content_layout = QHBoxLayout()
-        content_layout.setSpacing(15)
-
-        # Левая часть - список шаблонов
-        left_layout = QVBoxLayout()
-
-        list_label = QLabel("Доступные шаблоны:")
-        list_label.setStyleSheet("font-weight: bold;")
-        left_layout.addWidget(list_label)
-
-        self.templates_list = QListWidget()
-        self.templates_list.itemSelectionChanged.connect(self.show_template_details)
-        left_layout.addWidget(self.templates_list)
-
-        content_layout.addLayout(left_layout, 1)
-
-        # Правая часть - информация о шаблоне
-        right_layout = QVBoxLayout()
-
-        info_label = QLabel("Информация о шаблоне:")
-        info_label.setStyleSheet("font-weight: bold;")
-        right_layout.addWidget(info_label)
-
-        # Карточка с информацией
-        self.info_card = QTextEdit()
-        self.info_card.setReadOnly(True)
-        self.info_card.setStyleSheet("""
-            QTextEdit {
-                background-color: #f5f5f5;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                padding: 10px;
-                font-family: 'Courier New', monospace;
-                font-size: 10pt;
+        self.search_input.setPlaceholderText("🔍 Поиск шаблона...")
+        self.search_input.setMaximumWidth(280)
+        self.search_input.setMinimumHeight(32)
+        self.search_input.setStyleSheet("""
+            QLineEdit {
+                border: 1px solid rgba(128,128,128,0.4);
+                border-radius: 8px;
+                padding: 4px 12px;
+                font-size: 12px;
             }
         """)
-        right_layout.addWidget(self.info_card)
+        self.search_input.textChanged.connect(self._filter_cards)
+        header_layout.addWidget(self.search_input)
+        
+        layout.addLayout(header_layout)
+        
+        # === Фильтр по категориям ===
+        self.category_layout = QHBoxLayout()
+        self.category_layout.setSpacing(6)
+        layout.addLayout(self.category_layout)
 
-        content_layout.addLayout(right_layout, 1)
+        # === Область с карточками ===
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; }")
+        
+        self.cards_container = QWidget()
+        self.cards_grid = QGridLayout(self.cards_container)
+        self.cards_grid.setSpacing(14)
+        self.cards_grid.setContentsMargins(4, 4, 4, 4)
+        
+        scroll.setWidget(self.cards_container)
+        layout.addWidget(scroll, 1)
 
-        layout.addLayout(content_layout, 1)
-
-        # Нижние кнопки
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
-
+        # === Нижние кнопки ===
+        bottom_layout = QHBoxLayout()
+        
         import_btn = QPushButton("📥 Импортировать")
-        import_btn.clicked.connect(self.import_template)
-        button_layout.addWidget(import_btn)
-
-        export_btn = QPushButton("📤 Экспортировать")
-        export_btn.clicked.connect(self.export_template)
-        button_layout.addWidget(export_btn)
-
-        button_layout.addStretch()
-
-        cancel_btn = QPushButton("Отмена")
-        cancel_btn.clicked.connect(self.reject)
-        cancel_btn.setMinimumWidth(100)
-        button_layout.addWidget(cancel_btn)
-
-        select_btn = QPushButton("✓ Создать таблицу")
-        select_btn.clicked.connect(self.select_template_and_apply)
-        select_btn.setDefault(True)
-        select_btn.setMinimumWidth(140)
-        select_btn.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
-        button_layout.addWidget(select_btn)
-
-        layout.addLayout(button_layout)
+        import_btn.clicked.connect(self._import_template)
+        bottom_layout.addWidget(import_btn)
+        
+        bottom_layout.addStretch()
+        
+        close_btn = QPushButton("Закрыть")
+        close_btn.setMinimumWidth(100)
+        close_btn.clicked.connect(self.reject)
+        bottom_layout.addWidget(close_btn)
+        
+        layout.addLayout(bottom_layout)
 
     def load_templates(self):
-        """Загружает список шаблонов"""
-        self.templates_list.clear()
-        template_names = sorted(self.template_manager.get_template_names())
-
-        for name in template_names:
-            item = QListWidgetItem(f"📋 {name}")
-            self.templates_list.addItem(item)
-
-    def filter_templates(self, text: str):
-        """Фильтрует шаблоны по поисковому запросу"""
+        """Загружает шаблоны и создаёт карточки"""
+        self._json_templates.clear()
+        self._all_cards.clear()
+        
+        # Очищаем сетку
+        while self.cards_grid.count():
+            item = self.cards_grid.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        # Очищаем категории
+        while self.category_layout.count():
+            item = self.category_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        categories = set()
+        templates_list = []
+        
+        # 1. Загружаем из папки templates/
+        try:
+            import json
+            templates_dir = Path(__file__).parent.parent.parent.parent.parent / "templates"
+            if templates_dir.exists():
+                for json_file in sorted(templates_dir.glob("*.json")):
+                    try:
+                        with open(json_file, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                        name = json_file.stem
+                        self._json_templates[name] = data
+                        cat = data.get('category', 'Другое')
+                        categories.add(cat)
+                        templates_list.append((name, data, cat))
+                    except Exception as e:
+                        print(f"[WARNING] Не удалось загрузить шаблон {json_file}: {e}")
+        except Exception as e:
+            print(f"[WARNING] Ошибка загрузки шаблонов: {e}")
+        
+        # 2. Загружаем из TemplateManager (старый формат)
+        try:
+            for name in sorted(self.template_manager.get_template_names()):
+                if name not in self._json_templates:
+                    # Создаём минимальный data для карточки
+                    tmpl = self.template_manager.get_template(name)
+                    data = {
+                        'icon': '📋',
+                        'description': tmpl.get('description', '') if tmpl else '',
+                        'category': 'Пользовательские',
+                        'sample_data': [],
+                        'styling': {}
+                    }
+                    categories.add('Пользовательские')
+                    templates_list.append((name, data, 'Пользовательские'))
+        except Exception as e:
+            print(f"[WARNING] Ошибка загрузки из TemplateManager: {e}")
+        
+        # Создаём кнопки категорий
+        all_btn = QPushButton("Все")
+        all_btn.setCheckable(True)
+        all_btn.setChecked(True)
+        all_btn.setStyleSheet(self._category_btn_style(True))
+        all_btn.clicked.connect(lambda: self._filter_by_category(None))
+        self.category_layout.addWidget(all_btn)
+        self._category_buttons = {'__all__': all_btn}
+        
+        for cat in sorted(categories):
+            btn = QPushButton(cat)
+            btn.setCheckable(True)
+            btn.setStyleSheet(self._category_btn_style(False))
+            btn.clicked.connect(lambda checked, c=cat: self._filter_by_category(c))
+            self.category_layout.addWidget(btn)
+            self._category_buttons[cat] = btn
+        
+        self.category_layout.addStretch()
+        
+        # Создаём карточки
+        col = 0
+        row = 0
+        cols_per_row = 4
+        
+        for name, data, cat in templates_list:
+            card = TemplateCard(name, data)
+            card.selected.connect(self._on_template_selected)
+            card.setProperty('category', cat)
+            self._all_cards.append(card)
+            self.cards_grid.addWidget(card, row, col)
+            col += 1
+            if col >= cols_per_row:
+                col = 0
+                row += 1
+    
+    def _category_btn_style(self, active: bool) -> str:
+        if active:
+            return """
+                QPushButton {
+                    border: none;
+                    border-radius: 12px;
+                    padding: 4px 14px;
+                    font-size: 11px;
+                    font-weight: bold;
+                    background-color: rgba(74, 144, 217, 0.2);
+                    color: #4A90D9;
+                }
+            """
+        return """
+            QPushButton {
+                border: none;
+                border-radius: 12px;
+                padding: 4px 14px;
+                font-size: 11px;
+                background-color: rgba(128, 128, 128, 0.1);
+            }
+            QPushButton:hover {
+                background-color: rgba(128, 128, 128, 0.2);
+            }
+        """
+    
+    def _filter_by_category(self, category):
+        """Фильтрует карточки по категории"""
+        for key, btn in self._category_buttons.items():
+            is_active = (category is None and key == '__all__') or (key == category)
+            btn.setChecked(is_active)
+            btn.setStyleSheet(self._category_btn_style(is_active))
+        
+        for card in self._all_cards:
+            if category is None:
+                card.setVisible(True)
+            else:
+                card.setVisible(card.property('category') == category)
+    
+    def _filter_cards(self, text: str):
+        """Фильтрует карточки по тексту поиска"""
         text = text.lower()
-        for i in range(self.templates_list.count()):
-            item = self.templates_list.item(i)
-            item.setHidden(text not in item.text().lower())
-
-    def show_template_details(self):
-        """Показывает детали выбранного шаблона"""
-        current = self.templates_list.currentItem()
-        if not current:
-            self.info_card.clear()
-            return
-
-        template_name = current.text().replace("📋 ", "").strip()
-        template = self.template_manager.get_template(template_name)
-
-        if not template:
-            self.info_card.clear()
-            return
-
-        # Форматируем информацию
-        from .template_applier import TemplateApplier
-        info_text = TemplateApplier.get_template_description_text(template)
-
-        self.info_card.setPlainText(info_text)
-
-    def import_template(self):
-        """Импортирует шаблон из файла"""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Импортировать шаблон",
-            "",
-            "JSON файлы (*.json)"
-        )
-
-        if file_path:
-            from pathlib import Path
-            if self.template_manager.import_template(Path(file_path), is_user_template=True):
-                QMessageBox.information(self, "Успех", "Шаблон успешно импортирован")
-                self.load_templates()
-            else:
-                QMessageBox.critical(self, "Ошибка", "Не удалось импортировать шаблон")
-
-    def export_template(self):
-        """Экспортирует выбранный шаблон"""
-        current = self.templates_list.currentItem()
-        if not current:
-            QMessageBox.warning(self, "Ошибка", "Выберите шаблон для экспорта")
-            return
-
-        template_name = current.text().replace("📋 ", "").strip()
-
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Экспортировать шаблон",
-            f"{template_name}.json",
-            "JSON файлы (*.json)"
-        )
-
-        if file_path:
-            from pathlib import Path
-            if self.template_manager.export_template(template_name, Path(file_path)):
-                QMessageBox.information(self, "Успех", "Шаблон успешно экспортирован")
-            else:
-                QMessageBox.critical(self, "Ошибка", "Не удалось экспортировать шаблон")
-
-    def select_template_and_apply(self):
-        """Выбирает и применяет шаблон"""
-        current = self.templates_list.currentItem()
-        if not current:
-            QMessageBox.warning(self, "Ошибка", "Выберите шаблон")
-            return
-
-        template_name = current.text().replace("📋 ", "").strip()
+        for card in self._all_cards:
+            name = card.template_name.lower()
+            desc = card.template_data.get('description', '').lower()
+            cat = card.template_data.get('category', '').lower()
+            card.setVisible(text in name or text in desc or text in cat)
+    
+    def _on_template_selected(self, template_name: str):
+        """Обработка выбора шаблона"""
         self.template_selected.emit(template_name)
         self.accept()
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(8)
-
-        # Основной контент
-        content_layout = QHBoxLayout()
-
-        # Левая часть - основные параметры
-        left_layout = QFormLayout()
-        left_layout.setSpacing(6)
-
-        # Имя поля
-        self.name_input = QLineEdit()
-        self.name_input.setText(self.field_data.get("name", ""))
-        self.name_input.setMinimumWidth(150)
-        left_layout.addRow("Имя поля:", self.name_input)
-
-        # Тип данных
-        self.type_combo = QComboBox()
-        self.type_combo.addItems([
-            "text", "number", "date", "time",
-            "email", "phone", "url", "currency", "percentage"
-        ])
-        self.type_combo.setCurrentText(self.field_data.get("pattern", "text"))
-        left_layout.addRow("Тип данных:", self.type_combo)
-
-        # Формат
-        self.format_input = QLineEdit()
-        self.format_input.setText(self.field_data.get("format_string", ""))
-        self.format_input.setPlaceholderText("Например: dd.mm.yyyy для дат")
-        left_layout.addRow("Формат:", self.format_input)
-
-        content_layout.addLayout(left_layout)
-
-        # Правая часть - дополнительные параметры
-        right_layout = QVBoxLayout()
-
-        # Ключевое поле
-        self.key_check = QCheckBox("Ключевое поле")
-        self.key_check.setChecked(self.field_data.get("is_key_field", False))
-        right_layout.addWidget(self.key_check)
-
-        # Описание
-        desc_label = QLabel("Описание:")
-        desc_label.setStyleSheet("font-weight: bold; font-size: 9pt;")
-        right_layout.addWidget(desc_label)
-
-        self.description_input = QTextEdit()
-        self.description_input.setPlainText(self.field_data.get("description", ""))
-        self.description_input.setMaximumHeight(70)
-        self.description_input.setMaximumWidth(200)
-        right_layout.addWidget(self.description_input)
-
-        content_layout.addLayout(right_layout)
-
-        # Кнопка удаления
-        delete_btn = QPushButton("🗑️ Удалить")
-        delete_btn.setMaximumWidth(100)
-        delete_btn.setStyleSheet("color: #d32f2f;")
-        delete_btn.clicked.connect(self.emit_removed)
-        content_layout.addWidget(delete_btn)
-
-        layout.addLayout(content_layout)
-
-        # Разделитель
-        separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        separator.setFrameShadow(QFrame.Sunken)
-        layout.addWidget(separator)
-
-    def emit_removed(self):
-        """Сигнал удаления"""
-        self.removed.emit()
-
-    def get_field_data(self) -> dict:
-        """Возвращает данные поля"""
-        return {
-            "name": self.name_input.text().strip(),
-            "pattern": self.type_combo.currentText(),
-            "format_string": self.format_input.text().strip(),
-            "is_key_field": self.key_check.isChecked(),
-            "description": self.description_input.toPlainText().strip()
-        }
+    
+    def _import_template(self):
+        """Импортирует шаблон из файла"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Импортировать шаблон", "", "JSON файлы (*.json)"
+        )
+        if file_path:
+            try:
+                import json, shutil
+                templates_dir = Path(__file__).parent.parent.parent.parent.parent / "templates"
+                templates_dir.mkdir(parents=True, exist_ok=True)
+                dest = templates_dir / Path(file_path).name
+                shutil.copy2(file_path, dest)
+                QMessageBox.information(self, "Успех", "Шаблон импортирован")
+                self.load_templates()
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Не удалось импортировать: {e}")
 
 
 class TemplateCreatorDialog(QDialog):

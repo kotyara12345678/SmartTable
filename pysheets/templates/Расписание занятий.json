@@ -1,0 +1,50 @@
+{
+  "name": "Расписание занятий",
+  "description": "Недельное расписание уроков/пар",
+  "category": "Образование",
+  "icon": "📚",
+  "created_at": "2026-02-15T12:00:00",
+  "modified_at": "2026-02-15T12:00:00",
+  "source_range": null,
+  "fields": [
+    {"name": "Время", "column_index": 0, "pattern": "text", "format_string": "", "is_key_field": true, "validation_rules": []},
+    {"name": "Понедельник", "column_index": 1, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": []},
+    {"name": "Вторник", "column_index": 2, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": []},
+    {"name": "Среда", "column_index": 3, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": []},
+    {"name": "Четверг", "column_index": 4, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": []},
+    {"name": "Пятница", "column_index": 5, "pattern": "text", "format_string": "", "is_key_field": false, "validation_rules": []}
+  ],
+  "sample_data": [
+    ["Время", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница"],
+    ["08:30 – 10:00", "Математика", "Физика", "Математика", "Химия", "История"],
+    ["10:15 – 11:45", "Русский язык", "Информатика", "Английский", "Физика", "Литература"],
+    ["12:00 – 13:30", "Физкультура", "Математика", "Биология", "Русский язык", "География"],
+    ["14:00 – 15:30", "История", "Английский", "Физкультура", "Информатика", "Математика"],
+    ["15:45 – 17:15", "", "Доп. занятия", "", "Доп. занятия", ""]
+  ],
+  "styling": {
+    "header_row": {"bg_color": "#9B8EC4", "text_color": "#FFFFFF", "bold": true},
+    "columns": {
+      "0": {"bg_color": "#EDE8F5", "text_color": "#6B5B95", "bold": true}
+    },
+    "alternating_rows": {"even_bg": "#F6F3FA", "odd_bg": "#FFFFFF"},
+    "cell_styles": {
+      "B2": {"bg_color": "#C8DDF0"},
+      "D2": {"bg_color": "#C8DDF0"},
+      "C3": {"bg_color": "#C3E6CB"},
+      "F3": {"bg_color": "#F5E6B8"},
+      "B4": {"bg_color": "#F5D0CC"},
+      "D4": {"bg_color": "#C8E6CF"},
+      "E5": {"bg_color": "#C3E6CB"},
+      "C6": {"bg_color": "#D4EDDA", "text_color": "#3D7A47", "bold": true},
+      "E6": {"bg_color": "#D4EDDA", "text_color": "#3D7A47", "bold": true}
+    }
+  },
+  "logic_rules": [],
+  "settings": {
+    "auto_detect_patterns": true,
+    "preserve_formulas": true,
+    "include_headers": true,
+    "skip_empty_rows": false
+  }
+}
