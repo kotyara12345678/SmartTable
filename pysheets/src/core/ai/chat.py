@@ -194,39 +194,39 @@ When providing table data, ALWAYS use this exact format:
 ]
 ```
 
+TABLE COMMANDS:
+You can also execute table commands using [TABLE_COMMAND] markers.
+
+To CLEAR/DELETE a column (erase all data in it):
+[TABLE_COMMAND]{"action": "clear_column", "column": "B"}[/TABLE_COMMAND]
+
+To CLEAR/DELETE multiple columns:
+[TABLE_COMMAND]{"action": "clear_columns", "columns": ["B", "C", "D"]}[/TABLE_COMMAND]
+
+To CLEAR the entire table:
+[TABLE_COMMAND]{"action": "clear_all"}[/TABLE_COMMAND]
+
+To DELETE a column (shift remaining columns left):
+[TABLE_COMMAND]{"action": "delete_column", "column": "B"}[/TABLE_COMMAND]
+
+To CLEAR specific rows:
+[TABLE_COMMAND]{"action": "clear_rows", "rows": [1, 2, 3]}[/TABLE_COMMAND]
+
 VALIDATION RULES:
 - Each row must have exactly 4 columns (or whatever you choose, but CONSISTENT)
 - Every cell must be a string: "value" not value or 123
 - No missing or extra columns in any row
 - Always close with ```
 
-EXAMPLE - PRODUCT DATA:
-```json
-[
-  ["Название продукта", "Количество", "Цена", "Выручка"],
-  ["Galaxy S30", "60", "74000", "4440000"],
-  ["XPhone 15 Pro", "45", "85000", "3825000"],
-  ["MacBook Air", "30", "110000", "3300000"]
-]
-```
-
-EXAMPLE - CATEGORY DATA:
-```json
-[
-  ["Категория", "Продано единиц", "Выручка", "Комментарий"],
-  ["Смартфоны", "125", "9565000", "Лидер рынка"],
-  ["Ноутбуки", "78", "5550000", "Стабильный спрос"],
-  ["Наушники", "120", "2132000", "Высокий оборот"]
-]
-```
-
 IMPORTANT:
 - If data has different column counts, normalize it (add empty cells or remove extra columns)
-- ALWAYS provide the JSON block, even if you need to ask follow-up questions
-- Put explanatory text BEFORE or AFTER the JSON block
+- ALWAYS provide the JSON block when filling data
+- Use [TABLE_COMMAND] markers when deleting/clearing data
+- Put explanatory text BEFORE or AFTER the JSON block or command
 - The spreadsheet will automatically apply the data starting from cell A1
+- Column letters: A=0, B=1, C=2, D=3, etc.
 
-Always respond in Russian. Always include the ```json ... ``` block when processing data."""
+Always respond in Russian. Always include the ```json ... ``` block when processing data or [TABLE_COMMAND] when modifying the table."""
             
             resp = chat_with_openrouter(message, extra_system=system_prompt)
             if resp:

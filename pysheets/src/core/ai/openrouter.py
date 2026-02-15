@@ -8,11 +8,11 @@ from requests.exceptions import RequestException
 
 # List of available API keys
 OPENROUTER_KEYS = [
-   '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'
-   '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'
-   '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'
-   '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'
-   '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'
+   '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',
+   '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',
+   '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',
+   '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',
+   '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',
 ]
 
 # Track dead keys (401 errors)

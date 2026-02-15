@@ -1738,7 +1738,7 @@ class SpreadsheetWidget(QTableWidget):
         # Сохраняем позицию прокрутки перед изменением размеров
         scroll_x = self.horizontalScrollBar().value()
         scroll_y = self.verticalScrollBar().value()
-        
+
         font = self.font()
         base_size = 10
         new_size = base_size * self.zoom_level / 100
@@ -1756,11 +1756,11 @@ class SpreadsheetWidget(QTableWidget):
             self.setRowHeight(i, int(25 * self.zoom_level / 100))
         for i in range(self.columnCount()):
             self.setColumnWidth(i, int(100 * self.zoom_level / 100))
-        
+
         # Восстанавливаем позицию прокрутки
         self.horizontalScrollBar().setValue(scroll_x)
         self.verticalScrollBar().setValue(scroll_y)
-        
+
         # Обновляем позицию corner button после зума (с большей задержкой для стабилизации layout)
         if hasattr(self, '_corner_button') and self._corner_button:
             QTimer.singleShot(50, self._position_corner_button)
