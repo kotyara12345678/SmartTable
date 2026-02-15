@@ -775,6 +775,8 @@ class AIChatWidget(QWidget):
                 row_idx = row_num - 1
                 if 0 <= col_idx < spreadsheet.columnCount() and 0 <= row_idx < spreadsheet.rowCount():
                     spreadsheet.set_cell_value(row_idx, col_idx, str(value))
+                    # Анимация изменения
+                    self._animate_update_cells(spreadsheet, [(row_idx, col_idx)])
                 logger.info(f"Агент: установлено {col_letter}{row_num} = {value}")
             
             elif action_type == 'clear_cell':
@@ -783,23 +785,30 @@ class AIChatWidget(QWidget):
                 col_idx = ord(col_letter) - ord('A')
                 row_idx = row_num - 1
                 if 0 <= col_idx < spreadsheet.columnCount() and 0 <= row_idx < spreadsheet.rowCount():
-                    spreadsheet.set_cell_value(row_idx, col_idx, "")
+                    # Анимация удаления
+                    self._animate_clear_cells(spreadsheet, [(row_idx, col_idx)])
             
             elif action_type == 'clear_column':
                 col_letter = action_dict.get('column', 'A').upper()
                 col_idx = ord(col_letter) - ord('A')
                 if 0 <= col_idx < spreadsheet.columnCount():
+                    cells_to_clear = []
                     for row in range(spreadsheet.rowCount()):
                         cell = spreadsheet.get_cell(row, col_idx) if hasattr(spreadsheet, 'get_cell') else None
                         if cell and cell.value:
-                            spreadsheet.set_cell_value(row, col_idx, "")
+                            cells_to_clear.append((row, col_idx))
+                    if cells_to_clear:
+                        self._animate_clear_cells(spreadsheet, cells_to_clear)
             
             elif action_type == 'clear_all':
+                cells_to_clear = []
                 for row in range(spreadsheet.rowCount()):
                     for col in range(spreadsheet.columnCount()):
                         cell = spreadsheet.get_cell(row, col) if hasattr(spreadsheet, 'get_cell') else None
                         if cell and cell.value:
-                            spreadsheet.set_cell_value(row, col, "")
+                            cells_to_clear.append((row, col))
+                if cells_to_clear:
+                    self._animate_clear_cells(spreadsheet, cells_to_clear)
             
             elif action_type == 'sort_column':
                 col_letter = action_dict.get('column', 'A').upper()
@@ -822,16 +831,34 @@ class AIChatWidget(QWidget):
                 bold = action_dict.get('bold', False)
                 col_idx = ord(col_letter) - ord('A')
                 if 0 <= col_idx < spreadsheet.columnCount():
+                    cells_to_color = []
                     for row in range(spreadsheet.rowCount()):
                         item = spreadsheet.item(row, col_idx)
                         if not item or not item.text():
                             continue
-                        self._color_single_cell(spreadsheet, row, col_idx, bg_color, text_color, bold)
+                        cells_to_color.append((row, col_idx, bg_color, text_color, bold))
+                    if cells_to_color:
+                        self._animate_color_cells(spreadsheet, cells_to_color)
                     logger.info(f"Агент: окрашен столбец {col_letter}")
             
             elif action_type == 'color_cells':
                 cells_list = action_dict.get('cells', [])
-                self._apply_color_to_cells(spreadsheet, cells_list)
+                # Конвертируем в формат для анимации
+                cells_to_color = []
+                for cell_info in cells_list:
+                    try:
+                        cl = cell_info.get('column', 'A').upper()
+                        rn = int(cell_info.get('row', 1))
+                        ci = ord(cl) - ord('A')
+                        ri = rn - 1
+                        bg = cell_info.get('bg_color', None)
+                        tc = cell_info.get('text_color', None)
+                        bl = cell_info.get('bold', False)
+                        cells_to_color.append((ri, ci, bg, tc, bl))
+                    except Exception:
+                        pass
+                if cells_to_color:
+                    self._animate_color_cells(spreadsheet, cells_to_color)
                 logger.info(f"Агент: окрашено {len(cells_list)} ячеек")
             
             elif action_type == 'color_row':
@@ -841,11 +868,14 @@ class AIChatWidget(QWidget):
                 bold = action_dict.get('bold', False)
                 row_idx = row_num - 1
                 if 0 <= row_idx < spreadsheet.rowCount():
+                    cells_to_color = []
                     for col in range(spreadsheet.columnCount()):
                         item = spreadsheet.item(row_idx, col)
                         if not item or not item.text():
                             continue
-                        self._color_single_cell(spreadsheet, row_idx, col, bg_color, text_color, bold)
+                        cells_to_color.append((row_idx, col, bg_color, text_color, bold))
+                    if cells_to_color:
+                        self._animate_color_cells(spreadsheet, cells_to_color)
                     logger.info(f"Агент: окрашена строка {row_num}")
             
             elif action_type == 'color_range':
@@ -861,9 +891,12 @@ class AIChatWidget(QWidget):
                     col2 = ord(end_col) - ord('A')
                     row1 = start_row - 1
                     row2 = end_row - 1
+                    cells_to_color = []
                     for r in range(min(row1, row2), min(max(row1, row2) + 1, spreadsheet.rowCount())):
                         for c in range(min(col1, col2), min(max(col1, col2) + 1, spreadsheet.columnCount())):
-                            self._color_single_cell(spreadsheet, r, c, bg_color, text_color, bold)
+                            cells_to_color.append((r, c, bg_color, text_color, bold))
+                    if cells_to_color:
+                        self._animate_color_cells(spreadsheet, cells_to_color)
                     logger.info(f"Агент: окрашен диапазон {start_col}{start_row}:{end_col}{end_row}")
             
             elif action_type == 'bold_column':
@@ -1376,6 +1409,253 @@ class AIChatWidget(QWidget):
             except Exception:
                 pass
 
+    # ============================================================
+    # Анимации для удаления, изменения и окрашивания
+    # ============================================================
+
+    def _animate_clear_cells(self, spreadsheet, cells: list):
+        """Анимация удаления: красная подсветка → fade-out → очистка
+        
+        Args:
+            spreadsheet: виджет таблицы
+            cells: список (row, col) ячеек для удаления
+        """
+        from PyQt5.QtGui import QColor, QBrush
+        
+        if not cells or not spreadsheet:
+            return
+        
+        self._animation_running = True
+        
+        # Подсвечиваем красным
+        red_highlight = QColor("#FF4444")
+        red_highlight.setAlpha(140)
+        
+        clear_highlight_cells = []
+        for row, col in cells:
+            item = spreadsheet.item(row, col)
+            if item and item.text():
+                item.setData(Qt.BackgroundRole, QBrush(red_highlight))
+                clear_highlight_cells.append((row, col))
+        
+        if not clear_highlight_cells:
+            self._animation_running = False
+            return
+        
+        # Сохраняем данные для анимации
+        self._clear_anim_cells = clear_highlight_cells
+        self._clear_anim_spreadsheet = spreadsheet
+        self._clear_anim_step = 0
+        self._clear_anim_total = 6  # 6 шагов fade
+        
+        if not hasattr(self, '_clear_anim_timer'):
+            self._clear_anim_timer = QTimer()
+            self._clear_anim_timer.timeout.connect(self._animate_clear_step)
+        
+        # Начинаем fade через 300мс (чтобы красный был виден)
+        QTimer.singleShot(300, lambda: self._clear_anim_timer.start(80))
+
+    def _animate_clear_step(self):
+        """Шаг анимации удаления: fade-out красного → очистка"""
+        from PyQt5.QtGui import QColor, QBrush
+        
+        if not hasattr(self, '_clear_anim_cells') or not self._clear_anim_cells:
+            if hasattr(self, '_clear_anim_timer'):
+                self._clear_anim_timer.stop()
+            self._animation_running = False
+            return
+        
+        self._clear_anim_step += 1
+        progress = self._clear_anim_step / self._clear_anim_total
+        spreadsheet = self._clear_anim_spreadsheet
+        
+        if progress >= 1.0:
+            # Завершаем — очищаем ячейки
+            for row, col in self._clear_anim_cells:
+                try:
+                    if spreadsheet and hasattr(spreadsheet, 'set_cell_value'):
+                        spreadsheet.set_cell_value(row, col, "")
+                    item = spreadsheet.item(row, col)
+                    if item:
+                        item.setData(Qt.BackgroundRole, None)
+                except Exception:
+                    pass
+            
+            self._clear_anim_cells = []
+            self._clear_anim_timer.stop()
+            self._animation_running = False
+            
+            # Выполняем отложенные действия
+            if self._deferred_actions:
+                deferred = self._deferred_actions[:]
+                self._deferred_actions = []
+                for action_dict in deferred:
+                    self._execute_agent_action(action_dict)
+            return
+        
+        # Плавно уменьшаем alpha
+        alpha = int(140 * (1.0 - progress))
+        red_color = QColor("#FF4444")
+        red_color.setAlpha(max(0, alpha))
+        
+        for row, col in self._clear_anim_cells:
+            try:
+                item = spreadsheet.item(row, col)
+                if item:
+                    item.setData(Qt.BackgroundRole, QBrush(red_color))
+            except Exception:
+                pass
+
+    def _animate_update_cells(self, spreadsheet, cells: list):
+        """Анимация изменения: жёлтая подсветка → fade-out
+        
+        Args:
+            spreadsheet: виджет таблицы
+            cells: список (row, col) изменённых ячеек
+        """
+        from PyQt5.QtGui import QColor, QBrush
+        
+        if not cells or not spreadsheet:
+            return
+        
+        # Подсвечиваем жёлтым
+        yellow_highlight = QColor("#FFD700")
+        yellow_highlight.setAlpha(120)
+        
+        update_cells = []
+        for row, col in cells:
+            item = spreadsheet.item(row, col)
+            if item:
+                # Сохраняем оригинальный фон
+                cell = spreadsheet.get_cell(row, col) if hasattr(spreadsheet, 'get_cell') else None
+                orig_bg = cell.background_color if cell else None
+                item.setData(Qt.BackgroundRole, QBrush(yellow_highlight))
+                update_cells.append((row, col, orig_bg))
+        
+        if not update_cells:
+            return
+        
+        # Сохраняем данные для анимации
+        self._update_anim_cells = update_cells
+        self._update_anim_spreadsheet = spreadsheet
+        self._update_anim_step = 0
+        self._update_anim_total = 6
+        
+        if not hasattr(self, '_update_anim_timer'):
+            self._update_anim_timer = QTimer()
+            self._update_anim_timer.timeout.connect(self._animate_update_step)
+        
+        # Начинаем fade через 250мс
+        QTimer.singleShot(250, lambda: self._update_anim_timer.start(70))
+
+    def _animate_update_step(self):
+        """Шаг анимации изменения: fade-out жёлтого"""
+        from PyQt5.QtGui import QColor, QBrush
+        
+        if not hasattr(self, '_update_anim_cells') or not self._update_anim_cells:
+            if hasattr(self, '_update_anim_timer'):
+                self._update_anim_timer.stop()
+            return
+        
+        self._update_anim_step += 1
+        progress = self._update_anim_step / self._update_anim_total
+        spreadsheet = self._update_anim_spreadsheet
+        
+        if progress >= 1.0:
+            # Завершаем — восстанавливаем оригинальные цвета
+            for row, col, orig_bg in self._update_anim_cells:
+                try:
+                    item = spreadsheet.item(row, col)
+                    if item:
+                        if orig_bg:
+                            item.setBackground(QBrush(QColor(orig_bg)))
+                            item.setData(Qt.BackgroundRole, QBrush(QColor(orig_bg)))
+                        else:
+                            item.setData(Qt.BackgroundRole, None)
+                except Exception:
+                    pass
+            
+            self._update_anim_cells = []
+            self._update_anim_timer.stop()
+            return
+        
+        # Плавно уменьшаем alpha
+        alpha = int(120 * (1.0 - progress))
+        yellow_color = QColor("#FFD700")
+        yellow_color.setAlpha(max(0, alpha))
+        
+        for row, col, orig_bg in self._update_anim_cells:
+            try:
+                item = spreadsheet.item(row, col)
+                if item:
+                    item.setData(Qt.BackgroundRole, QBrush(yellow_color))
+            except Exception:
+                pass
+
+    def _animate_color_cells(self, spreadsheet, cells_with_colors: list):
+        """Анимация окрашивания: плавное появление цвета (alpha 0 → 255)
+        
+        Args:
+            spreadsheet: виджет таблицы
+            cells_with_colors: список (row, col, bg_color, text_color, bold)
+        """
+        from PyQt5.QtGui import QColor, QBrush
+        
+        if not cells_with_colors or not spreadsheet:
+            return
+        
+        self._color_anim_cells = cells_with_colors
+        self._color_anim_spreadsheet = spreadsheet
+        self._color_anim_step = 0
+        self._color_anim_total = 6
+        
+        if not hasattr(self, '_color_anim_timer'):
+            self._color_anim_timer = QTimer()
+            self._color_anim_timer.timeout.connect(self._animate_color_step)
+        
+        self._color_anim_timer.start(50)
+
+    def _animate_color_step(self):
+        """Шаг анимации окрашивания: плавное появление цвета"""
+        from PyQt5.QtGui import QColor, QBrush
+        
+        if not hasattr(self, '_color_anim_cells') or not self._color_anim_cells:
+            if hasattr(self, '_color_anim_timer'):
+                self._color_anim_timer.stop()
+            return
+        
+        self._color_anim_step += 1
+        progress = self._color_anim_step / self._color_anim_total
+        spreadsheet = self._color_anim_spreadsheet
+        
+        if progress >= 1.0:
+            # Завершаем — устанавливаем финальные цвета
+            for row, col, bg_color, text_color, bold in self._color_anim_cells:
+                self._color_single_cell(spreadsheet, row, col, bg_color, text_color, bold)
+            
+            self._color_anim_cells = []
+            self._color_anim_timer.stop()
+            return
+        
+        # Плавно увеличиваем alpha
+        alpha = int(255 * progress)
+        
+        for row, col, bg_color, text_color, bold in self._color_anim_cells:
+            try:
+                item = spreadsheet.item(row, col)
+                if item:
+                    if bg_color:
+                        color = QColor(bg_color)
+                        color.setAlpha(max(0, alpha))
+                        item.setData(Qt.BackgroundRole, QBrush(color))
+                    if text_color:
+                        color = QColor(text_color)
+                        color.setAlpha(max(0, alpha))
+                        item.setForeground(QBrush(color))
+                        item.setData(Qt.ForegroundRole, QBrush(color))
+            except Exception:
+                pass
+
     def _execute_table_command(self, command: dict):
         """Выполняет команду модификации таблицы"""
         import logging
@@ -1424,15 +1704,15 @@ class AIChatWidget(QWidget):
                         logger.info(f"Created formula '{formula}' at cell {cell}")
             
             elif action == 'clear_column':
-                # Очистка одного столбца
+                # Очистка одного столбца с анимацией
                 col_letter = command.get('column', '').upper()
                 if col_letter and self.main_window and self.main_window.tab_widget:
                     spreadsheet = self.main_window.tab_widget.currentWidget()
                     if spreadsheet and hasattr(spreadsheet, 'set_cell_value'):
                         col_idx = ord(col_letter) - ord('A')
                         if 0 <= col_idx < spreadsheet.columnCount():
+                            cells_to_clear = []
                             for row in range(spreadsheet.rowCount()):
-                                # Очищаем и модель, и визуальный элемент
                                 item = spreadsheet.item(row, col_idx)
                                 cell = spreadsheet.get_cell(row, col_idx) if hasattr(spreadsheet, 'get_cell') else None
                                 has_data = False
@@ -1441,34 +1721,42 @@ class AIChatWidget(QWidget):
                                 elif item and item.text():
                                     has_data = True
                                 if has_data:
-                                    spreadsheet.set_cell_value(row, col_idx, "")
+                                    cells_to_clear.append((row, col_idx))
+                            if cells_to_clear:
+                                self._animate_clear_cells(spreadsheet, cells_to_clear)
                             logger.info(f"Cleared column {col_letter}")
             
             elif action == 'clear_columns':
-                # Очистка нескольких столбцов
+                # Очистка нескольких столбцов с анимацией
                 columns = command.get('columns', [])
                 if columns and self.main_window and self.main_window.tab_widget:
                     spreadsheet = self.main_window.tab_widget.currentWidget()
                     if spreadsheet and hasattr(spreadsheet, 'set_cell_value'):
+                        cells_to_clear = []
                         for col_letter in columns:
                             col_idx = ord(col_letter.upper()) - ord('A')
                             if 0 <= col_idx < spreadsheet.columnCount():
                                 for row in range(spreadsheet.rowCount()):
                                     cell = spreadsheet.get_cell(row, col_idx) if hasattr(spreadsheet, 'get_cell') else None
                                     if cell and cell.value:
-                                        spreadsheet.set_cell_value(row, col_idx, "")
+                                        cells_to_clear.append((row, col_idx))
+                        if cells_to_clear:
+                            self._animate_clear_cells(spreadsheet, cells_to_clear)
                         logger.info(f"Cleared columns: {columns}")
             
             elif action == 'clear_all':
-                # Очистка всей таблицы
+                # Очистка всей таблицы с анимацией
                 if self.main_window and self.main_window.tab_widget:
                     spreadsheet = self.main_window.tab_widget.currentWidget()
                     if spreadsheet and hasattr(spreadsheet, 'set_cell_value'):
+                        cells_to_clear = []
                         for row in range(spreadsheet.rowCount()):
                             for col in range(spreadsheet.columnCount()):
                                 cell = spreadsheet.get_cell(row, col) if hasattr(spreadsheet, 'get_cell') else None
                                 if cell and cell.value:
-                                    spreadsheet.set_cell_value(row, col, "")
+                                    cells_to_clear.append((row, col))
+                        if cells_to_clear:
+                            self._animate_clear_cells(spreadsheet, cells_to_clear)
                         logger.info("Cleared entire table")
             
             elif action == 'delete_column':
@@ -1491,22 +1779,25 @@ class AIChatWidget(QWidget):
                             logger.info(f"Deleted column {col_letter} and shifted data left")
             
             elif action == 'clear_rows':
-                # Очистка конкретных строк
+                # Очистка конкретных строк с анимацией
                 rows = command.get('rows', [])
                 if rows and self.main_window and self.main_window.tab_widget:
                     spreadsheet = self.main_window.tab_widget.currentWidget()
                     if spreadsheet and hasattr(spreadsheet, 'set_cell_value'):
+                        cells_to_clear = []
                         for row_num in rows:
                             row_idx = int(row_num) - 1  # 1-based to 0-based
                             if 0 <= row_idx < spreadsheet.rowCount():
                                 for col in range(spreadsheet.columnCount()):
                                     cell = spreadsheet.get_cell(row_idx, col) if hasattr(spreadsheet, 'get_cell') else None
                                     if cell and cell.value:
-                                        spreadsheet.set_cell_value(row_idx, col, "")
+                                        cells_to_clear.append((row_idx, col))
+                        if cells_to_clear:
+                            self._animate_clear_cells(spreadsheet, cells_to_clear)
                         logger.info(f"Cleared rows: {rows}")
             
             elif action == 'clear_cell':
-                # Очистка конкретной ячейки
+                # Очистка конкретной ячейки с анимацией
                 col_letter = command.get('column', '').upper()
                 row_num = command.get('row', 0)
                 if col_letter and row_num and self.main_window and self.main_window.tab_widget:
@@ -1515,11 +1806,11 @@ class AIChatWidget(QWidget):
                         col_idx = ord(col_letter) - ord('A')
                         row_idx = int(row_num) - 1  # 1-based to 0-based
                         if 0 <= col_idx < spreadsheet.columnCount() and 0 <= row_idx < spreadsheet.rowCount():
-                            spreadsheet.set_cell_value(row_idx, col_idx, "")
+                            self._animate_clear_cells(spreadsheet, [(row_idx, col_idx)])
                             logger.info(f"Cleared cell {col_letter}{row_num}")
             
             elif action == 'clear_range':
-                # Очистка диапазона ячеек
+                # Очистка диапазона ячеек с анимацией
                 start_col = command.get('start_col', '').upper()
                 start_row = command.get('start_row', 0)
                 end_col = command.get('end_col', '').upper()
@@ -1531,22 +1822,41 @@ class AIChatWidget(QWidget):
                         col2 = ord(end_col) - ord('A')
                         row1 = int(start_row) - 1
                         row2 = int(end_row) - 1
+                        cells_to_clear = []
                         for r in range(min(row1, row2), min(max(row1, row2) + 1, spreadsheet.rowCount())):
                             for c in range(min(col1, col2), min(max(col1, col2) + 1, spreadsheet.columnCount())):
-                                spreadsheet.set_cell_value(r, c, "")
+                                cell = spreadsheet.get_cell(r, c) if hasattr(spreadsheet, 'get_cell') else None
+                                if cell and cell.value:
+                                    cells_to_clear.append((r, c))
+                        if cells_to_clear:
+                            self._animate_clear_cells(spreadsheet, cells_to_clear)
                         logger.info(f"Cleared range {start_col}{start_row}:{end_col}{end_row}")
             
             elif action == 'color_cells':
-                # Окрашивание конкретных ячеек
+                # Окрашивание конкретных ячеек с анимацией
                 cells_list = command.get('cells', [])
                 if cells_list and self.main_window and self.main_window.tab_widget:
                     spreadsheet = self.main_window.tab_widget.currentWidget()
                     if spreadsheet:
-                        self._apply_color_to_cells(spreadsheet, cells_list)
+                        cells_to_color = []
+                        for cell_info in cells_list:
+                            try:
+                                cl = cell_info.get('column', 'A').upper()
+                                rn = int(cell_info.get('row', 1))
+                                ci = ord(cl) - ord('A')
+                                ri = rn - 1
+                                bg = cell_info.get('bg_color', None)
+                                tc = cell_info.get('text_color', None)
+                                bl = cell_info.get('bold', False)
+                                cells_to_color.append((ri, ci, bg, tc, bl))
+                            except Exception:
+                                pass
+                        if cells_to_color:
+                            self._animate_color_cells(spreadsheet, cells_to_color)
                         logger.info(f"Colored {len(cells_list)} cells")
             
             elif action == 'color_column':
-                # Окрашивание всего столбца
+                # Окрашивание всего столбца с анимацией
                 col_letter = command.get('column', '').upper()
                 bg_color = command.get('bg_color', None)
                 text_color = command.get('text_color', None)
@@ -1556,15 +1866,18 @@ class AIChatWidget(QWidget):
                     if spreadsheet:
                         col_idx = ord(col_letter) - ord('A')
                         if 0 <= col_idx < spreadsheet.columnCount():
+                            cells_to_color = []
                             for row in range(spreadsheet.rowCount()):
                                 item = spreadsheet.item(row, col_idx)
                                 if not item or not item.text():
                                     continue
-                                self._color_single_cell(spreadsheet, row, col_idx, bg_color, text_color, bold)
+                                cells_to_color.append((row, col_idx, bg_color, text_color, bold))
+                            if cells_to_color:
+                                self._animate_color_cells(spreadsheet, cells_to_color)
                             logger.info(f"Colored column {col_letter}")
             
             elif action == 'color_row':
-                # Окрашивание строки
+                # Окрашивание строки с анимацией
                 row_num = command.get('row', 0)
                 bg_color = command.get('bg_color', None)
                 text_color = command.get('text_color', None)
@@ -1574,15 +1887,18 @@ class AIChatWidget(QWidget):
                     if spreadsheet:
                         row_idx = int(row_num) - 1
                         if 0 <= row_idx < spreadsheet.rowCount():
+                            cells_to_color = []
                             for col in range(spreadsheet.columnCount()):
                                 item = spreadsheet.item(row_idx, col)
                                 if not item or not item.text():
                                     continue
-                                self._color_single_cell(spreadsheet, row_idx, col, bg_color, text_color, bold)
+                                cells_to_color.append((row_idx, col, bg_color, text_color, bold))
+                            if cells_to_color:
+                                self._animate_color_cells(spreadsheet, cells_to_color)
                             logger.info(f"Colored row {row_num}")
             
             elif action == 'color_range':
-                # Окрашивание диапазона
+                # Окрашивание диапазона с анимацией
                 start_col = command.get('start_col', '').upper()
                 start_row = command.get('start_row', 0)
                 end_col = command.get('end_col', '').upper()
@@ -1597,9 +1913,12 @@ class AIChatWidget(QWidget):
                         col2 = ord(end_col) - ord('A')
                         row1 = int(start_row) - 1
                         row2 = int(end_row) - 1
+                        cells_to_color = []
                         for r in range(min(row1, row2), min(max(row1, row2) + 1, spreadsheet.rowCount())):
                             for c in range(min(col1, col2), min(max(col1, col2) + 1, spreadsheet.columnCount())):
-                                self._color_single_cell(spreadsheet, r, c, bg_color, text_color, bold)
+                                cells_to_color.append((r, c, bg_color, text_color, bold))
+                        if cells_to_color:
+                            self._animate_color_cells(spreadsheet, cells_to_color)
                         logger.info(f"Colored range {start_col}{start_row}:{end_col}{end_row}")
             
             elif action == 'bold_column':
