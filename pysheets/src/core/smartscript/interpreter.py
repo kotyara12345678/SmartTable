@@ -26,6 +26,10 @@ SmartScript Interpreter — интерпретатор скриптового я
     b = D2
     c = SUM(a:b)   # использует ячейки D3:D2
     
+    # Импорт другого листа
+    import Лист1 from l1
+    val = l1.D3
+    
     # Условия
     if total > 1000:
         result = "Хорошо"
@@ -47,6 +51,9 @@ import re
 from typing import Any, Dict, List, Optional, Callable
 
 from pysheets.src.core.smartscript.errors import SmartScriptError
+from pysheets.src.core.smartscript.evaluator import EvaluatorMixin
+from pysheets.src.core.smartscript.builtins import BuiltinsMixin
+from pysheets.src.core.smartscript.completions import CompletionsMixin
 from pysheets.src.core.smartscript.functions import TableFunctions
 
 # Regex для голых ссылок на ячейки: A1, D2, AA10, ABC999
@@ -59,7 +66,7 @@ class _ReturnSignal(Exception):
         self.value = value
 
 
-class SmartScriptInterpreter:
+class SmartScriptInterpreter(EvaluatorMixin, BuiltinsMixin, CompletionsMixin):
     """Интерпретатор SmartScript — Python-подобный язык для таблиц"""
     
     # Встроенные функции таблицы
@@ -91,18 +98,21 @@ class SmartScriptInterpreter:
     KEYWORDS = [
         'if', 'else', 'elif', 'for', 'in', 'while',
         'return', 'and', 'or', 'not', 'True', 'False', 'None',
-        'func',
+        'func', 'import', 'from', 'print',
     ]
     
-    def __init__(self, cell_getter: Optional[Callable] = None):
+    def __init__(self, cell_getter: Optional[Callable] = None, sheet_getter: Optional[Callable] = None):
         """
         Args:
-            cell_getter: функция (row, col) -> value для чтения данных из таблицы
+            cell_getter: функция (row, col) -> value для чтения данных из текущей таблицы
+            sheet_getter: функция (sheet_name, row, col) -> value для чтения из других листов
         """
         self.cell_getter = cell_getter
+        self.sheet_getter = sheet_getter  # (sheet_name, row, col) -> value
         self.variables: Dict[str, Any] = {}
         self.variable_sources: Dict[str, str] = {}  # {var_name: "D3"} — original cell ref
         self.user_functions: Dict[str, dict] = {}
+        self.imported_sheets: Dict[str, str] = {}  # {alias: sheet_name}
         self.output: List[str] = []
         self._max_iterations = 10000
         self._iteration_count = 0
@@ -113,11 +123,20 @@ class SmartScriptInterpreter:
         self.cell_getter = getter
         self._table_funcs.set_cell_getter(getter)
     
+    def set_sheet_getter(self, getter: Callable):
+        """Устанавливает функцию для чтения ячеек из других листов
+        
+        Args:
+            getter: (sheet_name: str, row: int, col: int) -> value
+        """
+        self.sheet_getter = getter
+    
     def execute(self, code: str) -> List[str]:
         """Выполняет SmartScript код и возвращает список результатов (return)"""
         self.variables = {}
         self.variable_sources = {}
         self.user_functions = {}
+        self.imported_sheets = {}
         self.output = []
         self._iteration_count = 0
         
@@ -150,11 +169,30 @@ class SmartScriptInterpreter:
             # Определяем отступ
             current_indent = len(line) - len(line.lstrip())
             
+            # import — импорт другого листа
+            if stripped.startswith('import '):
+                self._handle_import(stripped, i + 1)
+                i += 1
+                continue
+            
             # return — прерывает выполнение всего скрипта
-            if stripped.startswith('return '):
+            if stripped.startswith('return ') or stripped == 'return':
+                if stripped == 'return':
+                    raise _ReturnSignal('')
                 expr = stripped[7:].strip()
                 result = self._eval_expression(expr, i + 1)
                 raise _ReturnSignal(result)
+            
+            # print() — lowercase alias, treated as statement
+            if stripped.startswith('print(') and stripped.endswith(')'):
+                inner = stripped[6:-1].strip()
+                if inner:
+                    value = self._eval_expression(inner, i + 1)
+                    self.output.append(str(value))
+                else:
+                    self.output.append('')
+                i += 1
+                continue
             
             # func — определение пользовательской функции
             if stripped.startswith('func ') and stripped.endswith(':'):
@@ -188,6 +226,16 @@ class SmartScriptInterpreter:
                         # Track if the expression is a bare cell reference
                         if _CELL_REF_PATTERN.match(expr):
                             self.variable_sources[var_name] = expr
+                        else:
+                            # Track sheet cell references: alias.CELL or alias,CELL
+                            for sep in ('.', ','):
+                                if sep in expr:
+                                    parts = expr.split(sep, 1)
+                                    alias = parts[0].strip()
+                                    cell_ref = parts[1].strip()
+                                    if alias in self.imported_sheets and _CELL_REF_PATTERN.match(cell_ref):
+                                        self.variable_sources[var_name] = cell_ref
+                                        break
                         value = self._eval_expression(expr, i + 1)
                         self.variables[var_name] = value
                         i += 1
@@ -196,8 +244,6 @@ class SmartScriptInterpreter:
             # Просто выражение (вызов функции и тп)
             try:
                 result = self._eval_expression(stripped, i + 1)
-                # Если результат от вызова функции — добавляем в output
-                # (для main() и подобных вызовов)
             except SmartScriptError:
                 raise
             except _ReturnSignal:
@@ -207,6 +253,8 @@ class SmartScriptInterpreter:
             
             i += 1
     
+    # ============ Вспомогательные методы ============
+    
     def _is_valid_identifier(self, name: str) -> bool:
         """Проверяет, является ли строка допустимым идентификатором"""
         return bool(re.match(
@@ -214,6 +262,64 @@ class SmartScriptInterpreter:
             r'[a-zA-Z\u0430-\u044f\u0451\u0410-\u042f\u04010-9_]*$',
             name
         ))
+    
+    def _handle_import(self, line: str, line_num: int):
+        """Обрабатывает import стейтмент
+        
+        Синтаксис:
+            import Лист1 from l1     -> l1.ячейка (алиас l1)
+            import Лист1              -> Лист1.ячейка (алиас = имя листа)
+        """
+        rest = line[7:].strip()  # after 'import '
+        
+        if ' from ' in rest:
+            parts = rest.split(' from ', 1)
+            sheet_name = parts[0].strip()
+            alias = parts[1].strip()
+        else:
+            sheet_name = rest.strip()
+            alias = sheet_name
+        
+        if not sheet_name:
+            raise SmartScriptError("Не указано имя листа для import", line_num)
+        
+        if not self.sheet_getter:
+            raise SmartScriptError("Импорт листов недоступен (нет sheet_getter)", line_num)
+        
+        self.imported_sheets[alias] = sheet_name
+    
+    def _resolve_sheet_cell(self, expr: str, line_num: int):
+        """Проверяет, является ли выражение ссылкой на ячейку другого листа
+        
+        Форматы:
+            l1.D3      -> алиас.CELL_REF
+            l1,D3      -> алиас,CELL_REF (альтернативный синтаксис)
+        
+        Returns:
+            value если это ссылка на лист, иначе None
+        """
+        for sep in ('.', ','):
+            if sep in expr:
+                parts = expr.split(sep, 1)
+                alias = parts[0].strip()
+                cell_ref = parts[1].strip()
+                
+                if alias in self.imported_sheets and _CELL_REF_PATTERN.match(cell_ref):
+                    sheet_name = self.imported_sheets[alias]
+                    from pysheets.src.util.validators import parse_cell_reference
+                    row, col = parse_cell_reference(cell_ref)
+                    if row is not None and col is not None:
+                        try:
+                            value = self.sheet_getter(sheet_name, row, col)
+                            if value is not None:
+                                try:
+                                    return float(value) if '.' in str(value) else int(value)
+                                except (ValueError, TypeError):
+                                    return str(value)
+                            return ''
+                        except Exception as e:
+                            raise SmartScriptError(f"Ошибка чтения {alias}.{cell_ref}: {e}", line_num)
+        return None
     
     def _find_block_end(self, lines: List[str], start: int, end: int, base_indent: int) -> int:
         """Находит конец блока по отступу"""
@@ -376,725 +482,3 @@ class SmartScriptInterpreter:
         self.variables = saved_vars
         
         return result
-    
-    # ============ Вычисление выражений ============
-    
-    def _eval_expression(self, expr: str, line_num: int = 0) -> Any:
-        """Вычисляет выражение SmartScript"""
-        expr = expr.strip()
-        
-        if not expr:
-            return None
-        
-        # Логические операторы (and, or, not)
-        parts = self._split_logical(expr, ' or ')
-        if len(parts) > 1:
-            result = self._eval_expression(parts[0], line_num)
-            for part in parts[1:]:
-                result = result or self._eval_expression(part, line_num)
-            return result
-        
-        parts = self._split_logical(expr, ' and ')
-        if len(parts) > 1:
-            result = self._eval_expression(parts[0], line_num)
-            for part in parts[1:]:
-                result = result and self._eval_expression(part, line_num)
-            return result
-        
-        if expr.startswith('not '):
-            return not self._eval_expression(expr[4:], line_num)
-        
-        # Сравнения: ==, !=, <=, >=, <, >
-        for op in ['==', '!=', '<=', '>=', '<', '>']:
-            parts = self._split_outside_strings(expr, op)
-            if len(parts) == 2:
-                left = self._eval_expression(parts[0], line_num)
-                right = self._eval_expression(parts[1], line_num)
-                return self._compare(left, right, op)
-        
-        # Арифметика: +, -, *, /, %
-        parts = self._split_arithmetic(expr, ['+', '-'])
-        if parts:
-            return self._eval_arithmetic(parts, line_num)
-        
-        parts = self._split_arithmetic(expr, ['*', '/', '%'])
-        if parts:
-            return self._eval_arithmetic(parts, line_num)
-        
-        # Унарный минус
-        if expr.startswith('-') and len(expr) > 1:
-            val = self._eval_expression(expr[1:], line_num)
-            if isinstance(val, (int, float)):
-                return -val
-        
-        # Скобки
-        if expr.startswith('(') and expr.endswith(')'):
-            return self._eval_expression(expr[1:-1], line_num)
-        
-        # Строковые литералы
-        if (expr.startswith('"') and expr.endswith('"')) or \
-           (expr.startswith("'") and expr.endswith("'")):
-            return expr[1:-1]
-        
-        # Числа
-        try:
-            if '.' in expr:
-                return float(expr)
-            return int(expr)
-        except ValueError:
-            pass
-        
-        # Булевы значения
-        if expr == 'True':
-            return True
-        if expr == 'False':
-            return False
-        if expr == 'None':
-            return None
-        
-        # Вызов функции: FUNC(args)
-        func_match = re.match(
-            r'^([A-Za-z\u0410-\u042f\u0430-\u044f\u0451\u0401_]\w*)\((.*)?\)$',
-            expr, re.DOTALL
-        )
-        if func_match:
-            func_name = func_match.group(1)
-            args_str = func_match.group(2) or ""
-            # Проверяем пользовательские функции (без upper)
-            if func_name in self.user_functions or func_name.upper() in self.user_functions:
-                args = self._parse_args(args_str, line_num)
-                return self._call_user_function(func_name, args, line_num)
-            return self._call_function(func_name.upper(), args_str, line_num)
-        
-        # Переменная
-        if expr in self.variables:
-            return self.variables[expr]
-        
-        # Голая ссылка на ячейку: D2, A1, AA10 → автоматически CELL("D2")
-        if _CELL_REF_PATTERN.match(expr):
-            return self._call_function('CELL', '"' + expr + '"', line_num)
-        
-        # Неизвестный идентификатор
-        if self._is_valid_identifier(expr):
-            raise SmartScriptError(f"Неизвестная переменная: '{expr}'", line_num)
-        
-        raise SmartScriptError(f"Не удалось вычислить выражение: '{expr}'", line_num)
-    
-    # ============ Парсинг выражений ============
-    
-    def _split_logical(self, expr: str, operator: str) -> List[str]:
-        """Разделяет выражение по логическому оператору (вне строк и скобок)"""
-        parts = []
-        depth = 0
-        in_string = None
-        current = ""
-        i = 0
-        
-        while i < len(expr):
-            ch = expr[i]
-            
-            if in_string:
-                current += ch
-                if ch == in_string and (i == 0 or expr[i-1] != '\\'):
-                    in_string = None
-            elif ch in ('"', "'"):
-                in_string = ch
-                current += ch
-            elif ch == '(':
-                depth += 1
-                current += ch
-            elif ch == ')':
-                depth -= 1
-                current += ch
-            elif depth == 0 and expr[i:i+len(operator)] == operator:
-                parts.append(current)
-                current = ""
-                i += len(operator)
-                continue
-            else:
-                current += ch
-            i += 1
-        
-        if current:
-            parts.append(current)
-        
-        return parts if len(parts) > 1 else [expr]
-    
-    def _split_outside_strings(self, expr: str, operator: str) -> List[str]:
-        """Разделяет по оператору вне строк и скобок"""
-        depth = 0
-        in_string = None
-        i = 0
-        
-        while i < len(expr):
-            ch = expr[i]
-            if in_string:
-                if ch == in_string and (i == 0 or expr[i-1] != '\\'):
-                    in_string = None
-            elif ch in ('"', "'"):
-                in_string = ch
-            elif ch == '(':
-                depth += 1
-            elif ch == ')':
-                depth -= 1
-            elif depth == 0 and expr[i:i+len(operator)] == operator:
-                before = expr[i-1] if i > 0 else ''
-                after = expr[i+len(operator)] if i+len(operator) < len(expr) else ''
-                if operator in ('==', '!=', '<=', '>='):
-                    return [expr[:i], expr[i+len(operator):]]
-                elif operator in ('<', '>'):
-                    if before != operator and after != '=':
-                        return [expr[:i], expr[i+len(operator):]]
-            i += 1
-        
-        return [expr]
-    
-    def _split_arithmetic(self, expr: str, operators: List[str]) -> Optional[List]:
-        """Разделяет арифметическое выражение на части с операторами"""
-        depth = 0
-        in_string = None
-        parts = []
-        current = ""
-        i = 0
-        found = False
-        
-        while i < len(expr):
-            ch = expr[i]
-            
-            if in_string:
-                current += ch
-                if ch == in_string and (i == 0 or expr[i-1] != '\\'):
-                    in_string = None
-                i += 1
-                continue
-            
-            if ch in ('"', "'"):
-                in_string = ch
-                current += ch
-                i += 1
-                continue
-            
-            if ch == '(':
-                depth += 1
-                current += ch
-                i += 1
-                continue
-            
-            if ch == ')':
-                depth -= 1
-                current += ch
-                i += 1
-                continue
-            
-            if depth == 0 and ch in operators:
-                # Не разделяем унарный минус
-                if ch == '-' and (not current.strip() or current.strip()[-1:] in ('', '+', '-', '*', '/', '%', '(', ',')):
-                    current += ch
-                    i += 1
-                    continue
-                
-                if current.strip():
-                    parts.append(('val', current.strip()))
-                parts.append(('op', ch))
-                current = ""
-                found = True
-                i += 1
-                continue
-            
-            current += ch
-            i += 1
-        
-        if current.strip():
-            parts.append(('val', current.strip()))
-        
-        return parts if found else None
-    
-    def _eval_arithmetic(self, parts: List, line_num: int) -> Any:
-        """Вычисляет арифметическое выражение из частей"""
-        if not parts:
-            return 0
-        
-        values = []
-        ops = []
-        for kind, val in parts:
-            if kind == 'val':
-                values.append(self._eval_expression(val, line_num))
-            else:
-                ops.append(val)
-        
-        if not values:
-            return 0
-        
-        result = values[0]
-        for i, op in enumerate(ops):
-            if i + 1 >= len(values):
-                break
-            right = values[i + 1]
-            
-            # Конкатенация строк (автоматически конвертирует в строку)
-            if op == '+' and (isinstance(result, str) or isinstance(right, str)):
-                result = str(result) + str(right)
-                continue
-            
-            # Числовая арифметика
-            try:
-                left_num = float(result) if not isinstance(result, (int, float)) else result
-                right_num = float(right) if not isinstance(right, (int, float)) else right
-            except (ValueError, TypeError):
-                raise SmartScriptError(f"Невозможно выполнить '{op}' с '{result}' и '{right}'", line_num)
-            
-            if op == '+':
-                result = left_num + right_num
-            elif op == '-':
-                result = left_num - right_num
-            elif op == '*':
-                result = left_num * right_num
-            elif op == '/':
-                if right_num == 0:
-                    raise SmartScriptError("Деление на ноль", line_num)
-                result = left_num / right_num
-            elif op == '%':
-                if right_num == 0:
-                    raise SmartScriptError("Деление на ноль (модуль)", line_num)
-                result = left_num % right_num
-            
-            if isinstance(result, float) and result == int(result):
-                result = int(result)
-        
-        return result
-    
-    def _compare(self, left: Any, right: Any, op: str) -> bool:
-        """Сравнивает два значения"""
-        try:
-            if isinstance(left, str) and isinstance(right, (int, float)):
-                left = float(left)
-            elif isinstance(right, str) and isinstance(left, (int, float)):
-                right = float(right)
-        except (ValueError, TypeError):
-            pass
-        
-        if op == '==':
-            return left == right
-        elif op == '!=':
-            return left != right
-        elif op == '<':
-            return left < right
-        elif op == '>':
-            return left > right
-        elif op == '<=':
-            return left <= right
-        elif op == '>=':
-            return left >= right
-        return False
-    
-    # ============ Вызов функций ============
-    
-    def _call_function(self, name: str, args_str: str, line_num: int) -> Any:
-        """Вызывает встроенную функцию"""
-        args = self._parse_args(args_str, line_num)
-        
-        # Функции работы с таблицей
-        if name == 'CELL':
-            return self._table_funcs.func_cell(args, line_num)
-        elif name == 'SUM':
-            return self._table_funcs.func_sum(args, line_num)
-        elif name in ('AVERAGE', 'AVG'):
-            return self._table_funcs.func_average(args, line_num)
-        elif name == 'COUNT':
-            return self._table_funcs.func_count(args, line_num)
-        elif name == 'MAX':
-            return self._table_funcs.func_max(args, line_num)
-        elif name == 'MIN':
-            return self._table_funcs.func_min(args, line_num)
-        elif name == 'COUNTIF':
-            return self._table_funcs.func_countif(args, line_num)
-        elif name == 'SUMIF':
-            return self._table_funcs.func_sumif(args, line_num)
-        elif name == 'COLUMN':
-            return self._table_funcs.func_column(args, line_num)
-        elif name == 'ROW_COUNT':
-            return self._table_funcs.func_row_count(args, line_num)
-        elif name == 'COL_COUNT':
-            return self._table_funcs.func_col_count(args, line_num)
-        
-        # Утилиты
-        elif name == 'RANGE':
-            return self._table_funcs.func_range(args, line_num)
-        elif name == 'STR':
-            if len(args) != 1:
-                raise SmartScriptError("STR() принимает 1 аргумент", line_num)
-            return str(args[0])
-        elif name == 'INT':
-            if len(args) != 1:
-                raise SmartScriptError("INT() принимает 1 аргумент", line_num)
-            try:
-                return int(float(args[0]))
-            except (ValueError, TypeError):
-                raise SmartScriptError(f"Невозможно преобразовать '{args[0]}' в INT", line_num)
-        elif name == 'FLOAT':
-            if len(args) != 1:
-                raise SmartScriptError("FLOAT() принимает 1 аргумент", line_num)
-            try:
-                return float(args[0])
-            except (ValueError, TypeError):
-                raise SmartScriptError(f"Невозможно преобразовать '{args[0]}' в FLOAT", line_num)
-        elif name == 'LEN':
-            if len(args) != 1:
-                raise SmartScriptError("LEN() принимает 1 аргумент", line_num)
-            return len(str(args[0]))
-        elif name == 'ABS':
-            if len(args) != 1:
-                raise SmartScriptError("ABS() принимает 1 аргумент", line_num)
-            return abs(float(args[0]))
-        elif name == 'ROUND':
-            if len(args) < 1 or len(args) > 2:
-                raise SmartScriptError("ROUND() принимает 1-2 аргумента", line_num)
-            digits = int(args[1]) if len(args) == 2 else 0
-            return round(float(args[0]), digits)
-        elif name == 'UPPER':
-            if len(args) != 1:
-                raise SmartScriptError("UPPER() принимает 1 аргумент", line_num)
-            return str(args[0]).upper()
-        elif name == 'LOWER':
-            if len(args) != 1:
-                raise SmartScriptError("LOWER() принимает 1 аргумент", line_num)
-            return str(args[0]).lower()
-        elif name == 'TRIM':
-            if len(args) != 1:
-                raise SmartScriptError("TRIM() принимает 1 аргумент", line_num)
-            return str(args[0]).strip()
-        elif name == 'CONCAT':
-            return "".join(str(a) for a in args)
-        
-        # Математические
-        elif name == 'SQRT':
-            if len(args) != 1:
-                raise SmartScriptError("SQRT() принимает 1 аргумент", line_num)
-            import math
-            return math.sqrt(float(args[0]))
-        elif name == 'POWER':
-            if len(args) != 2:
-                raise SmartScriptError("POWER() принимает 2 аргумента", line_num)
-            return float(args[0]) ** float(args[1])
-        elif name == 'MOD':
-            if len(args) != 2:
-                raise SmartScriptError("MOD() принимает 2 аргумента", line_num)
-            return float(args[0]) % float(args[1])
-        
-        # Логические
-        elif name == 'IF':
-            if len(args) != 3:
-                raise SmartScriptError("IF() принимает 3 аргумента: IF(cond, true_val, false_val)", line_num)
-            return args[1] if args[0] else args[2]
-        
-        # Дата и время
-        elif name == 'NOW':
-            from datetime import datetime
-            return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        elif name == 'TODAY':
-            from datetime import datetime
-            return datetime.now().strftime("%Y-%m-%d")
-        elif name == 'DATE':
-            if len(args) != 3:
-                raise SmartScriptError("DATE() принимает 3 аргумента: DATE(year, month, day)", line_num)
-            return f"{int(args[0])}-{int(args[1]):02d}-{int(args[2]):02d}"
-        
-        # Текстовые расширенные
-        elif name == 'CONCATENATE':
-            return "".join(str(a) for a in args)
-        elif name == 'PROPER':
-            if len(args) != 1:
-                raise SmartScriptError("PROPER() принимает 1 аргумент", line_num)
-            return str(args[0]).title()
-        elif name == 'LEFT':
-            if len(args) != 2:
-                raise SmartScriptError("LEFT() принимает 2 аргумента", line_num)
-            return str(args[0])[:int(args[1])]
-        elif name == 'RIGHT':
-            if len(args) != 2:
-                raise SmartScriptError("RIGHT() принимает 2 аргумента", line_num)
-            return str(args[0])[-int(args[1]):]
-        elif name == 'MID':
-            if len(args) != 3:
-                raise SmartScriptError("MID() принимает 3 аргумента", line_num)
-            start = int(args[1]) - 1
-            length = int(args[2])
-            return str(args[0])[start:start + length]
-        elif name == 'FIND':
-            if len(args) < 2:
-                raise SmartScriptError("FIND() принимает 2-3 аргумента", line_num)
-            text = str(args[1])
-            search = str(args[0])
-            start = int(args[2]) - 1 if len(args) > 2 else 0
-            pos = text.find(search, start)
-            return pos + 1 if pos >= 0 else -1
-        elif name == 'SEARCH':
-            if len(args) < 2:
-                raise SmartScriptError("SEARCH() принимает 2-3 аргумента", line_num)
-            text = str(args[1]).lower()
-            search = str(args[0]).lower()
-            start = int(args[2]) - 1 if len(args) > 2 else 0
-            pos = text.find(search, start)
-            return pos + 1 if pos >= 0 else -1
-        elif name == 'REPLACE':
-            if len(args) != 4:
-                raise SmartScriptError("REPLACE() принимает 4 аргумента", line_num)
-            text = str(args[0])
-            start = int(args[1]) - 1
-            length = int(args[2])
-            new_text = str(args[3])
-            return text[:start] + new_text + text[start + length:]
-        elif name == 'SUBSTITUTE':
-            if len(args) < 3:
-                raise SmartScriptError("SUBSTITUTE() принимает 3-4 аргумента", line_num)
-            text = str(args[0])
-            old = str(args[1])
-            new = str(args[2])
-            if len(args) > 3:
-                count = int(args[3])
-                return text.replace(old, new, count)
-            return text.replace(old, new)
-        elif name == 'REPT':
-            if len(args) != 2:
-                raise SmartScriptError("REPT() принимает 2 аргумента", line_num)
-            return str(args[0]) * int(args[1])
-        elif name == 'TEXT':
-            if len(args) != 2:
-                raise SmartScriptError("TEXT() принимает 2 аргумента", line_num)
-            return str(args[0])
-        elif name == 'VALUE':
-            if len(args) != 1:
-                raise SmartScriptError("VALUE() принимает 1 аргумент", line_num)
-            try:
-                return float(args[0])
-            except (ValueError, TypeError):
-                raise SmartScriptError(f"Невозможно преобразовать '{args[0]}' в число", line_num)
-        elif name == 'CHAR':
-            if len(args) != 1:
-                raise SmartScriptError("CHAR() принимает 1 аргумент", line_num)
-            return chr(int(args[0]))
-        elif name == 'CODE':
-            if len(args) != 1:
-                raise SmartScriptError("CODE() принимает 1 аргумент", line_num)
-            return ord(str(args[0])[0])
-        elif name == 'CLEAN':
-            if len(args) != 1:
-                raise SmartScriptError("CLEAN() принимает 1 аргумент", line_num)
-            return re.sub(r'[\x00-\x1f]', '', str(args[0]))
-        elif name == 'EXACT':
-            if len(args) != 2:
-                raise SmartScriptError("EXACT() принимает 2 аргумента", line_num)
-            return str(args[0]) == str(args[1])
-        elif name == 'T':
-            if len(args) != 1:
-                raise SmartScriptError("T() принимает 1 аргумент", line_num)
-            return str(args[0]) if isinstance(args[0], str) else ""
-        elif name == 'TEXTJOIN':
-            if len(args) < 2:
-                raise SmartScriptError("TEXTJOIN() принимает минимум 2 аргумента", line_num)
-            delimiter = str(args[0])
-            return delimiter.join(str(a) for a in args[1:])
-        elif name == 'NUMBERVALUE':
-            if len(args) != 1:
-                raise SmartScriptError("NUMBERVALUE() принимает 1 аргумент", line_num)
-            text = str(args[0]).replace(',', '.').replace(' ', '')
-            return float(text)
-        elif name == 'FIXED':
-            if len(args) < 1 or len(args) > 2:
-                raise SmartScriptError("FIXED() принимает 1-2 аргумента", line_num)
-            decimals = int(args[1]) if len(args) > 1 else 2
-            return f"{float(args[0]):.{decimals}f}"
-        
-        # Утилиты
-        elif name == 'PRINT':
-            text = " ".join(str(a) for a in args)
-            self.output.append(text)
-            return text
-        elif name == 'TYPE':
-            if len(args) != 1:
-                raise SmartScriptError("TYPE() принимает 1 аргумент", line_num)
-            return type(args[0]).__name__
-        elif name == 'BOOL':
-            if len(args) != 1:
-                raise SmartScriptError("BOOL() принимает 1 аргумент", line_num)
-            return bool(args[0])
-        
-        # AI — единая функция
-        elif name == 'AI':
-            if len(args) < 1:
-                raise SmartScriptError("AI() принимает минимум 1 аргумент: AI(\"запрос\")", line_num)
-            prompt = " ".join(str(a) for a in args)
-            return self._call_ai(prompt, line_num)
-        
-        # Пользовательские функции
-        if name in self.user_functions or name.upper() in self.user_functions:
-            return self._call_user_function(name, args, line_num)
-        
-        raise SmartScriptError(f"Неизвестная функция: {name}()", line_num)
-    
-    def _call_ai(self, prompt: str, line_num: int) -> str:
-        """Вызывает AI через OpenRouter — единая функция AI()"""
-        try:
-            from pysheets.src.core.ai.chat import RequestMessage
-            result = RequestMessage(prompt)
-            return str(result) if result else "AI не ответил"
-        except Exception as e:
-            return f"AI ошибка: {e}"
-    
-    def _parse_args(self, args_str: str, line_num: int) -> List[Any]:
-        """Парсит аргументы функции"""
-        if not args_str.strip():
-            return []
-        
-        args = []
-        depth = 0
-        in_string = None
-        current = ""
-        
-        for ch in args_str:
-            if in_string:
-                current += ch
-                if ch == in_string:
-                    in_string = None
-                continue
-            
-            if ch in ('"', "'"):
-                in_string = ch
-                current += ch
-            elif ch == '(':
-                depth += 1
-                current += ch
-            elif ch == ')':
-                depth -= 1
-                current += ch
-            elif ch == ',' and depth == 0:
-                args.append(self._eval_arg(current.strip(), line_num))
-                current = ""
-            else:
-                current += ch
-        
-        if current.strip():
-            args.append(self._eval_arg(current.strip(), line_num))
-        
-        return args
-    
-    def _eval_arg(self, arg: str, line_num: int) -> Any:
-        """Вычисляет аргумент функции, поддерживая синтаксис var1:var2 для диапазонов"""
-        arg = arg.strip()
-        
-        # Проверяем синтаксис var1:var2 (переменные с двоеточием)
-        # Но не строковые литералы и не обычные ячейки (A1:B10)
-        if ':' in arg and not arg.startswith('"') and not arg.startswith("'"):
-            parts = arg.split(':', 1)
-            left_part = parts[0].strip()
-            right_part = parts[1].strip()
-            
-            # Если обе части — переменные, используем их source (оригинальную ячейку)
-            if left_part in self.variables and right_part in self.variables:
-                # Если переменные были присвоены из ячеек, используем ячейки
-                left_ref = self.variable_sources.get(left_part, str(self.variables[left_part]))
-                right_ref = self.variable_sources.get(right_part, str(self.variables[right_part]))
-                return left_ref + ':' + right_ref
-            
-            # Если это обычные ссылки на ячейки (A1:B10) — оставляем как есть
-            if _CELL_REF_PATTERN.match(left_part) and _CELL_REF_PATTERN.match(right_part):
-                return arg
-        
-        return self._eval_expression(arg, line_num)
-    
-    # ============ Автокомплит ============
-    
-    @classmethod
-    def get_completions(cls) -> List[str]:
-        """Возвращает список всех доступных функций и ключевых слов для автокомплита"""
-        completions = []
-        
-        func_hints = {
-            # Основные табличные
-            'SUM': 'SUM("A1:A10")',
-            'AVERAGE': 'AVERAGE("A1:A10")',
-            'AVG': 'AVG("A1:A10")',
-            'COUNT': 'COUNT("A1:A10")',
-            'MAX': 'MAX("A1:A10")',
-            'MIN': 'MIN("A1:A10")',
-            'CELL': 'CELL("A1")',
-            'RANGE': 'RANGE(1, 10)',
-            'COUNTIF': 'COUNTIF("A1:A10", "value")',
-            'SUMIF': 'SUMIF("A1:A10", "cond", "B1:B10")',
-            'COLUMN': 'COLUMN("A")',
-            'ROW_COUNT': 'ROW_COUNT()',
-            'COL_COUNT': 'COL_COUNT()',
-            # Преобразование типов
-            'STR': 'STR(value)',
-            'INT': 'INT(value)',
-            'FLOAT': 'FLOAT(value)',
-            'BOOL': 'BOOL(value)',
-            'TYPE': 'TYPE(value)',
-            'VALUE': 'VALUE(text)',
-            'NUMBERVALUE': 'NUMBERVALUE(text)',
-            # Математические
-            'ABS': 'ABS(number)',
-            'ROUND': 'ROUND(number, digits)',
-            'SQRT': 'SQRT(number)',
-            'POWER': 'POWER(base, exp)',
-            'MOD': 'MOD(number, divisor)',
-            'LEN': 'LEN(text)',
-            # Логические
-            'IF': 'IF(condition, true_val, false_val)',
-            # Дата и время
-            'NOW': 'NOW()',
-            'TODAY': 'TODAY()',
-            'DATE': 'DATE(year, month, day)',
-            # Текстовые
-            'UPPER': 'UPPER(text)',
-            'LOWER': 'LOWER(text)',
-            'TRIM': 'TRIM(text)',
-            'PROPER': 'PROPER(text)',
-            'CONCAT': 'CONCAT(a, b, c)',
-            'CONCATENATE': 'CONCATENATE(a, b, c)',
-            'LEFT': 'LEFT(text, count)',
-            'RIGHT': 'RIGHT(text, count)',
-            'MID': 'MID(text, start, length)',
-            'FIND': 'FIND(search, text)',
-            'SEARCH': 'SEARCH(search, text)',
-            'REPLACE': 'REPLACE(text, start, length, new)',
-            'SUBSTITUTE': 'SUBSTITUTE(text, old, new)',
-            'REPT': 'REPT(text, count)',
-            'TEXT': 'TEXT(value, format)',
-            'CHAR': 'CHAR(code)',
-            'CODE': 'CODE(char)',
-            'CLEAN': 'CLEAN(text)',
-            'EXACT': 'EXACT(text1, text2)',
-            'T': 'T(value)',
-            'TEXTJOIN': 'TEXTJOIN(delimiter, text1, text2)',
-            'FIXED': 'FIXED(number, decimals)',
-            # Утилиты
-            'PRINT': 'PRINT(value)',
-            # AI
-            'AI': 'AI("ваш запрос")',
-        }
-        
-        for func, hint in func_hints.items():
-            completions.append(hint)
-        
-        completions.extend(cls.KEYWORDS)
-        
-        return completions
-    
-    def get_instance_completions(self) -> List[str]:
-        """Возвращает автокомплит включая пользовательские переменные и функции"""
-        completions = self.get_completions()
-        
-        # Добавляем пользовательские переменные
-        for var_name in self.variables:
-            if var_name not in completions:
-                completions.append(var_name)
-        
-        # Добавляем пользовательские функции
-        for func_name, func_def in self.user_functions.items():
-            params = ', '.join(func_def['params'])
-            hint = f"{func_name}({params})"
-            if hint not in completions:
-                completions.append(hint)
-        
-        return completions

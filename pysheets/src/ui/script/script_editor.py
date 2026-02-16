@@ -1,4 +1,4 @@
-"""
+﻿"""
 SmartScript Editor — виджет редактора кода для SmartTable
 Включает: номера строк, подсветку синтаксиса, автокомплит, панель вывода
 """
@@ -33,9 +33,10 @@ class LineNumberArea(QWidget):
 class SmartScriptHighlighter(QSyntaxHighlighter):
     """Подсветка синтаксиса SmartScript"""
     
-    def __init__(self, parent=None, accent_color=None):
+    def __init__(self, parent=None, accent_color=None, is_dark=True):
         super().__init__(parent)
         self.accent_color = accent_color or QColor("#DC143C")
+        self.is_dark = is_dark
         self._setup_formats()
     
     def _setup_formats(self):
@@ -48,37 +49,38 @@ class SmartScriptHighlighter(QSyntaxHighlighter):
         # Функции — акцентный цвет (светлее)
         self.function_format = QTextCharFormat()
         func_color = QColor(self.accent_color)
-        func_color = func_color.lighter(130)
+        func_color = func_color.lighter(130) if self.is_dark else func_color.darker(120)
         self.function_format.setForeground(func_color)
         self.function_format.setFontWeight(QFont.Bold)
         
         # Строки — зелёный
         self.string_format = QTextCharFormat()
-        self.string_format.setForeground(QColor("#6A9955"))
+        self.string_format.setForeground(QColor("#6A9955") if self.is_dark else QColor("#098658"))
         
-        # Числа — оранжевый
+        # Числа
         self.number_format = QTextCharFormat()
-        self.number_format.setForeground(QColor("#B5CEA8"))
+        self.number_format.setForeground(QColor("#B5CEA8") if self.is_dark else QColor("#098658"))
         
         # Комментарии — серый
         self.comment_format = QTextCharFormat()
-        self.comment_format.setForeground(QColor("#6A9955"))
+        self.comment_format.setForeground(QColor("#6A9955") if self.is_dark else QColor("#008000"))
         self.comment_format.setFontItalic(True)
         
-        # Операторы — светлый
+        # Операторы
         self.operator_format = QTextCharFormat()
-        self.operator_format.setForeground(QColor("#D4D4D4"))
+        self.operator_format.setForeground(QColor("#D4D4D4") if self.is_dark else QColor("#333333"))
         
         # Ссылки на ячейки — голубой
         self.cell_ref_format = QTextCharFormat()
-        self.cell_ref_format.setForeground(QColor("#4EC9B0"))
+        self.cell_ref_format.setForeground(QColor("#4EC9B0") if self.is_dark else QColor("#267f99"))
         
         # Правила
         self.rules = []
         
         # Ключевые слова
         keywords = ['if', 'else', 'elif', 'for', 'in', 'while', 'return',
-                     'and', 'or', 'not', 'True', 'False', 'None', 'func']
+                     'and', 'or', 'not', 'True', 'False', 'None', 'func', 'print',
+                     'import', 'from']
         for kw in keywords:
             pattern = r'\b' + kw + r'\b'
             self.rules.append((re.compile(pattern), self.keyword_format))
@@ -105,9 +107,11 @@ class SmartScriptHighlighter(QSyntaxHighlighter):
         # Ссылки на ячейки (A1, B10, AA5)
         self.rules.append((re.compile(r'\b[A-Z]{1,2}\d+\b'), self.cell_ref_format))
     
-    def update_accent_color(self, color: QColor):
+    def update_accent_color(self, color: QColor, is_dark: bool = None):
         """Обновляет акцентный цвет"""
         self.accent_color = color
+        if is_dark is not None:
+            self.is_dark = is_dark
         self._setup_formats()
         self.rehighlight()
     
@@ -146,10 +150,11 @@ class SmartScriptEditor(QPlainTextEdit):
     
     execute_requested = pyqtSignal()  # Сигнал запуска скрипта (Ctrl+Enter)
     
-    def __init__(self, accent_color=None, parent=None):
+    def __init__(self, accent_color=None, sheet_names_getter=None, parent=None):
         super().__init__(parent)
         
         self.accent_color = accent_color or QColor("#DC143C")
+        self._sheet_names_getter = sheet_names_getter  # callable() -> List[str]
         
         # Номера строк
         self.line_number_area = LineNumberArea(self)
@@ -217,13 +222,29 @@ class SmartScriptEditor(QPlainTextEdit):
     def _insert_completion(self, completion: str):
         """Вставляет выбранное автодополнение"""
         tc = self.textCursor()
-        # Удаляем уже набранный текст
         prefix = self._completer.completionPrefix()
-        extra = len(completion) - len(prefix)
-        tc.movePosition(QTextCursor.Left)
-        tc.movePosition(QTextCursor.EndOfWord)
-        tc.insertText(completion[len(prefix):])
-        self.setTextCursor(tc)
+        
+        # Проверяем, находимся ли мы в контексте "import "
+        line = tc.block().text()
+        col_pos = tc.positionInBlock()
+        text_before = line[:col_pos]
+        import_match = re.match(r'^\s*import\s+(.*)$', text_before)
+        
+        if import_match:
+            # В контексте import — заменяем текст после "import "
+            typed = import_match.group(1)
+            # Удаляем набранный текст после import и вставляем выбранное имя
+            for _ in range(len(typed)):
+                tc.deletePreviousChar()
+            tc.insertText(completion)
+            self.setTextCursor(tc)
+        else:
+            # Стандартная вставка автодополнения
+            extra = len(completion) - len(prefix)
+            tc.movePosition(QTextCursor.Left)
+            tc.movePosition(QTextCursor.EndOfWord)
+            tc.insertText(completion[len(prefix):])
+            self.setTextCursor(tc)
     
     def keyPressEvent(self, event):
         """Обработка клавиш"""
@@ -263,6 +284,10 @@ class SmartScriptEditor(QPlainTextEdit):
     
     def _update_completer(self):
         """Обновляет автокомплит на основе текущего слова"""
+        # Проверяем контекст "import " — показываем имена листов
+        if self._try_show_sheet_names():
+            return
+        
         tc = self.textCursor()
         tc.select(QTextCursor.WordUnderCursor)
         prefix = tc.selectedText()
@@ -287,6 +312,63 @@ class SmartScriptEditor(QPlainTextEdit):
         else:
             self._completer.popup().hide()
     
+    def _try_show_sheet_names(self) -> bool:
+        """Проверяет, находится ли курсор после 'import ' и показывает имена листов.
+        Возвращает True если показал popup с листами, False иначе."""
+        if not self._sheet_names_getter:
+            return False
+        
+        cursor = self.textCursor()
+        line = cursor.block().text()
+        col_pos = cursor.positionInBlock()
+        text_before = line[:col_pos]
+        
+        # Проверяем паттерн: "import " в начале строки (с возможным пробелом)
+        import_pat = r'^\s*import\s+(.*)'
+        match = re.match(import_pat, text_before)
+        if not match:
+            return False
+        
+        # Получаем то, что пользователь уже набрал после "import "
+        typed_after_import = match.group(1)
+        
+        # Если уже есть " from" — не показываем (пользователь уже выбрал лист)
+        if ' from' in typed_after_import:
+            return False
+        
+        # Получаем список имён листов
+        try:
+            sheet_names = self._sheet_names_getter()
+        except Exception:
+            return False
+        
+        if not sheet_names:
+            return False
+        
+        # Фильтруем по набранному тексту
+        prefix = typed_after_import.strip()
+        if prefix:
+            filtered = [name for name in sheet_names if name.lower().startswith(prefix.lower())]
+        else:
+            filtered = list(sheet_names)
+        
+        if not filtered:
+            self._completer.popup().hide()
+            return True
+        
+        # Устанавливаем модель с именами листов
+        model = QStringListModel(filtered)
+        self._completer.setModel(model)
+        self._completer.setCompletionPrefix(prefix)
+        popup = self._completer.popup()
+        popup.setCurrentIndex(self._completer.completionModel().index(0, 0))
+        
+        cr = self.cursorRect()
+        cr.setWidth(popup.sizeHintForColumn(0) + 
+                   popup.verticalScrollBar().sizeHint().width() + 20)
+        self._completer.complete(cr)
+        return True
+    
     def _update_completions_from_code(self):
         """Сканирует текущий код и добавляет пользовательские переменные в автокомплит"""
         code = self.toPlainText()
@@ -297,7 +379,7 @@ class SmartScriptEditor(QPlainTextEdit):
         user_vars = set()
         for match in var_pattern.finditer(code):
             var_name = match.group(1)
-            if var_name not in ('if', 'else', 'elif', 'for', 'while', 'return', 'func', 'True', 'False', 'None'):
+            if var_name not in ('if', 'else', 'elif', 'for', 'while', 'return', 'func', 'import', 'from', 'print', 'True', 'False', 'None'):
                 user_vars.add(var_name)
         
         # Ищем func определения: func name(...):
@@ -355,7 +437,8 @@ class SmartScriptEditor(QPlainTextEdit):
     def line_number_area_paint_event(self, event):
         """Рисует номера строк"""
         painter = QPainter(self.line_number_area)
-        painter.fillRect(event.rect(), QColor("#1e1e1e"))
+        bg_color = getattr(self, '_line_num_bg', QColor("#1e1e1e"))
+        painter.fillRect(event.rect(), bg_color)
         
         block = self.firstVisibleBlock()
         block_number = block.blockNumber()
@@ -373,7 +456,8 @@ class SmartScriptEditor(QPlainTextEdit):
                     font.setBold(True)
                     painter.setFont(font)
                 else:
-                    painter.setPen(QColor("#858585"))
+                    ln_color = getattr(self, '_line_num_color', QColor("#858585"))
+                    painter.setPen(ln_color)
                     font = painter.font()
                     font.setBold(False)
                     painter.setFont(font)
@@ -395,7 +479,7 @@ class SmartScriptEditor(QPlainTextEdit):
         
         if not self.isReadOnly():
             selection = QTextEdit.ExtraSelection()
-            line_color = QColor("#2a2a2e")
+            line_color = getattr(self, '_current_line_bg', QColor("#2a2a2e"))
             selection.format.setBackground(line_color)
             selection.format.setProperty(QTextFormat.FullWidthSelection, True)
             selection.cursor = self.textCursor()
@@ -404,10 +488,10 @@ class SmartScriptEditor(QPlainTextEdit):
         
         self.setExtraSelections(extra_selections)
     
-    def update_accent_color(self, color: QColor):
+    def update_accent_color(self, color: QColor, is_dark: bool = None):
         """Обновляет акцентный цвет"""
         self.accent_color = color
-        self.highlighter.update_accent_color(color)
+        self.highlighter.update_accent_color(color, is_dark)
         self.highlight_current_line()
         self.line_number_area.update()
 
@@ -415,18 +499,41 @@ class SmartScriptEditor(QPlainTextEdit):
 class SmartScriptWidget(QWidget):
     """Полный виджет SmartScript: редактор + панель вывода + кнопка запуска"""
     
-    def __init__(self, source_sheet_name: str = "", cell_getter=None, 
-                 accent_color=None, parent=None):
+    def __init__(self, source_sheet_name: str = "", cell_getter=None, sheet_getter=None,
+                 sheet_names_getter=None, accent_color=None, theme_name=None, theme_mode=None, parent=None):
         super().__init__(parent)
         
         self.source_sheet_name = source_sheet_name
         self.accent_color = accent_color or QColor("#DC143C")
+        self.theme_name = theme_name
+        self.theme_mode = theme_mode
+        self._sheet_names_getter = sheet_names_getter
+        
+        # Detect dark/light
+        self._is_dark = self._detect_dark_theme()
         
         # Интерпретатор
-        self.interpreter = SmartScriptInterpreter(cell_getter)
+        self.interpreter = SmartScriptInterpreter(cell_getter, sheet_getter)
         
         self._init_ui()
-        self._apply_theme()
+        self._apply_theme(self._is_dark)
+    
+    def _detect_dark_theme(self) -> bool:
+        """Detect if current theme is dark"""
+        if self.theme_name == 'dark':
+            return True
+        if self.theme_name == 'light':
+            return False
+        if self.theme_name == 'gallery':
+            return self.theme_mode == 'dark'
+        # system or unknown — detect from palette
+        app = QApplication.instance()
+        if app:
+            palette = app.palette()
+            bg = palette.color(QPalette.Window)
+            brightness = (bg.red() + bg.green() + bg.blue()) / 3
+            return brightness < 128
+        return True  # default dark
     
     def _init_ui(self):
         """Инициализация UI"""
@@ -474,7 +581,7 @@ class SmartScriptWidget(QWidget):
         splitter = QSplitter(Qt.Vertical)
         
         # Редактор кода
-        self.editor = SmartScriptEditor(self.accent_color)
+        self.editor = SmartScriptEditor(self.accent_color, sheet_names_getter=self._sheet_names_getter)
         self.editor.execute_requested.connect(self.run_script)
         splitter.addWidget(self.editor)
         
@@ -532,21 +639,65 @@ class SmartScriptWidget(QWidget):
         
         layout.addWidget(splitter)
     
-    def _apply_theme(self):
-        """Применяет тёмную тему (VS Code стиль)"""
+    def _apply_theme(self, is_dark: bool = True):
+        """Применяет тему (поддержка светлой и тёмной)"""
         accent = self.accent_color.name()
         accent_hover = self.accent_color.lighter(120).name()
+        accent_pressed = self.accent_color.darker(110).name()
+        
+        if is_dark:
+            header_bg = "#252526"
+            header_border = "#3c3c3c"
+            title_color = "#cccccc"
+            source_color = "#858585"
+            output_bg = "#1e1e1e"
+            editor_bg = "#1e1e1e"
+            editor_color = "#d4d4d4"
+            selection_bg = "#264f78"
+            clear_hover_bg = "#3c3c3c"
+            line_num_bg = "#1e1e1e"
+            line_num_color = "#858585"
+            current_line_bg = "#2a2a2e"
+            completer_bg = "#1e1e1e"
+            completer_color = "#d4d4d4"
+            completer_border = "#454545"
+            completer_selected = "#094771"
+            completer_hover = "#2a2d2e"
+        else:
+            header_bg = "#f3f3f3"
+            header_border = "#d4d4d4"
+            title_color = "#333333"
+            source_color = "#666666"
+            output_bg = "#ffffff"
+            editor_bg = "#ffffff"
+            editor_color = "#1e1e1e"
+            selection_bg = "#add6ff"
+            clear_hover_bg = "#e0e0e0"
+            line_num_bg = "#f3f3f3"
+            line_num_color = "#999999"
+            current_line_bg = "#f0f0f0"
+            completer_bg = "#ffffff"
+            completer_color = "#1e1e1e"
+            completer_border = "#c8c8c8"
+            completer_selected = "#0060c0"
+            completer_hover = "#e8e8e8"
+        
+        # Store theme colors for line number painting
+        self._theme_is_dark = is_dark
+        self._line_num_bg = QColor(line_num_bg)
+        self._line_num_color = QColor(line_num_color)
+        self._current_line_bg = QColor(current_line_bg)
         
         self.setStyleSheet(f"""
             #scriptHeader {{
-                background-color: #252526;
-                border-bottom: 1px solid #3c3c3c;
+                background-color: {header_bg};
+                border-bottom: 1px solid {header_border};
             }}
             #scriptTitle {{
-                color: #cccccc;
+                color: {title_color};
             }}
             #scriptSource {{
-                color: #858585;
+                color: {source_color};
             }}
             #runButton {{
                 background-color: {accent};
@@ -561,43 +712,77 @@ class SmartScriptWidget(QWidget):
                 background-color: {accent_hover};
             }}
             #runButton:pressed {{
-                background-color: {self.accent_color.darker(110).name()};
+                background-color: {accent_pressed};
             }}
             #outputContainer {{
-                background-color: #1e1e1e;
+                background-color: {output_bg};
             }}
             #outputHeader {{
-                background-color: #252526;
-                border-top: 1px solid #3c3c3c;
+                background-color: {header_bg};
+                border-top: 1px solid {header_border};
             }}
             #outputTitle {{
-                color: #cccccc;
+                color: {title_color};
             }}
             #clearOutputBtn {{
                 background-color: transparent;
-                color: #858585;
+                color: {source_color};
                 border: none;
                 border-radius: 2px;
                 font-size: 12px;
             }}
             #clearOutputBtn:hover {{
-                background-color: #3c3c3c;
-                color: #cccccc;
+                background-color: {clear_hover_bg};
+                color: {title_color};
             }}
             #outputText {{
-                background-color: #1e1e1e;
-                color: #d4d4d4;
+                background-color: {output_bg};
+                color: {editor_color};
                 border: none;
                 padding: 8px;
             }}
             QPlainTextEdit {{
-                background-color: #1e1e1e;
-                color: #d4d4d4;
+                background-color: {editor_bg};
+                color: {editor_color};
                 border: none;
-                selection-background-color: #264f78;
+                selection-background-color: {selection_bg};
                 selection-color: #ffffff;
             }}
         """)
+        
+        # Update completer popup theme
+        if hasattr(self, 'editor') and hasattr(self.editor, '_completer'):
+            popup = self.editor._completer.popup()
+            popup.setStyleSheet(f"""
+                QListView {{
+                    background-color: {completer_bg};
+                    color: {completer_color};
+                    border: 1px solid {completer_border};
+                    border-radius: 4px;
+                    font-family: Consolas, 'Courier New', monospace;
+                    font-size: 12px;
+                    padding: 2px;
+                }}
+                QListView::item {{
+                    padding: 4px 8px;
+                    border-radius: 2px;
+                }}
+                QListView::item:selected {{
+                    background-color: {completer_selected};
+                    color: #ffffff;
+                }}
+                QListView::item:hover {{
+                    background-color: {completer_hover};
+                }}
+            """)
+        
+        # Update editor theme colors
+        if hasattr(self, 'editor'):
+            self.editor._line_num_bg = self._line_num_bg
+            self.editor._line_num_color = self._line_num_color
+            self.editor._current_line_bg = self._current_line_bg
+            self.editor.highlight_current_line()
+            self.editor.line_number_area.update()
     
     def set_cell_getter(self, getter):
         """Устанавливает функцию для чтения ячеек"""
@@ -616,14 +801,7 @@ class SmartScriptWidget(QWidget):
                 output = "\n".join(results)
                 self.output_text.setPlainText(f"✅ {output}")
             else:
-                self.output_text.setPlainText("✅ Скрипт выполнен (нет return)")
-            
-            # Показываем переменные
-            if self.interpreter.variables:
-                vars_str = "\n\n📊 Переменные:\n"
-                for name, value in self.interpreter.variables.items():
-                    vars_str += f"  {name} = {value}\n"
-                self.output_text.appendPlainText(vars_str)
+                self.output_text.setPlainText("✅ Скрипт выполнен")
             
             # Обновляем автокомплит с пользовательскими переменными и функциями
             self._refresh_completer()
@@ -649,8 +827,18 @@ class SmartScriptWidget(QWidget):
     def update_accent_color(self, color: QColor):
         """Обновляет акцентный цвет"""
         self.accent_color = color
-        self.editor.update_accent_color(color)
-        self._apply_theme()
+        self._is_dark = self._detect_dark_theme()
+        self.editor.update_accent_color(color, self._is_dark)
+        self._apply_theme(self._is_dark)
+    
+    def update_theme(self, theme_name: str, accent_color: QColor, theme_mode: str = "light"):
+        """Обновляет тему и цвета"""
+        self.theme_name = theme_name
+        self.theme_mode = theme_mode
+        self.accent_color = accent_color
+        self._is_dark = self._detect_dark_theme()
+        self.editor.update_accent_color(accent_color, self._is_dark)
+        self._apply_theme(self._is_dark)
     
     def get_code(self) -> str:
         """Возвращает текущий код"""

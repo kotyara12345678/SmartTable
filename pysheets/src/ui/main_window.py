@@ -1025,10 +1025,36 @@ class MainWindow(QMainWindow):
                 return cell.calculated_value or cell.value or ""
             return ""
 
+        # Функция чтения ячеек из любого листа по имени (sheet_name, row, col) -> value
+        def sheet_getter(sheet_name: str, row: int, col: int):
+            for idx in range(self.tab_widget.count()):
+                tab_name = self.tab_widget.tabText(idx)
+                widget = self.tab_widget.widget(idx)
+                if tab_name == sheet_name and isinstance(widget, SpreadsheetWidget):
+                    cell = widget.get_cell(row, col)
+                    if cell:
+                        return cell.calculated_value or cell.value or ""
+                    return ""
+            return ""
+
+        # Функция получения списка имён всех листов (для автокомплита import)
+        def sheet_names_getter():
+            names = []
+            for idx in range(self.tab_widget.count()):
+                tab_name = self.tab_widget.tabText(idx)
+                widget = self.tab_widget.widget(idx)
+                if isinstance(widget, SpreadsheetWidget):
+                    names.append(tab_name)
+            return names
+
         script_widget = SmartScriptWidget(
             source_sheet_name=sheet_name,
             cell_getter=cell_getter,
+            sheet_getter=sheet_getter,
+            sheet_names_getter=sheet_names_getter,
             accent_color=self.app_theme_color,
+            theme_name=self.current_theme,
+            theme_mode=getattr(self, 'current_theme_mode', 'light'),
             parent=self
         )
 
@@ -1887,6 +1913,10 @@ class MainWindow(QMainWindow):
                             # Обновляем стили corner button для каждой таблицы
                             if hasattr(sheet, 'update_corner_button_theme'):
                                 sheet.update_corner_button_theme()
+                            # Обновляем тему SmartScript вкладок
+                            if hasattr(sheet, 'update_theme'):
+                                tm = getattr(self, 'current_theme_mode', 'light')
+                                sheet.update_theme(theme_name, color, tm)
                     
                     # Обновляем все виджеты
                     all_widgets = app.allWidgets()
