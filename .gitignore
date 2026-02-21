@@ -4,4 +4,4 @@
 .vscode
 __pycache__/
 *.pyc
-.src/electron/node_modules/
+pysheets/src/electron/node_modules/
