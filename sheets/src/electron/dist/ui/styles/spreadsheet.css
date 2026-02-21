@@ -1,0 +1,359 @@
+/* Spreadsheet Component Styles */
+.spreadsheet-container {
+  flex: 1;
+  overflow: auto;
+  background: var(--surface-color);
+}
+
+.spreadsheet-wrapper {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 50px 1fr;
+  grid-template-rows: 32px 1fr;
+  overflow: hidden;
+}
+
+.corner-header {
+  grid-column: 1;
+  grid-row: 1;
+  background: var(--header-bg);
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  z-index: 20;
+  width: 50px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.column-headers {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--border-color);
+  overflow: hidden;
+  z-index: 15;
+}
+
+.column-header {
+  min-width: 100px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-right: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: background 0.15s;
+  user-select: none;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.column-header:hover {
+  background: var(--header-hover);
+}
+
+.column-header.selected {
+  background: var(--selected-bg);
+  color: var(--selected-border);
+}
+
+.row-headers {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  background: var(--header-bg);
+  border-right: 1px solid var(--border-color);
+  overflow-y: hidden;
+  z-index: 15;
+}
+
+.row-header {
+  width: 50px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: background 0.15s;
+  user-select: none;
+  position: relative;
+}
+
+.row-header:hover {
+  background: var(--header-hover);
+}
+
+.row-header.selected {
+  background: var(--selected-bg);
+  color: var(--selected-border);
+}
+
+.cell-grid-wrapper {
+  grid-column: 2;
+  grid-row: 2;
+  overflow: auto;
+  position: relative;
+}
+
+.cell-grid-wrapper::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+.cell-grid-wrapper::-webkit-scrollbar-track {
+  background: var(--bg-color);
+  border-left: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-color);
+}
+
+.cell-grid-wrapper::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 7px;
+  border: 3px solid var(--bg-color);
+}
+
+.cell-grid-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+.cell-grid-wrapper::-webkit-scrollbar-corner {
+  background: var(--bg-color);
+}
+
+.cell-grid {
+  display: grid;
+  grid-template-columns: repeat(26, 100px);
+  background: var(--surface-color);
+}
+
+.cell {
+  width: 100px;
+  height: 32px;
+  border-right: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+  padding: 4px 8px;
+  font-size: 13px;
+  outline: none;
+  cursor: cell;
+  overflow: hidden;
+  white-space: nowrap;
+  user-select: none;
+  position: relative;
+}
+
+.cell:hover {
+  outline: 1px solid var(--border-color);
+  outline-offset: -1px;
+}
+
+.cell:focus {
+  outline: 2px solid var(--primary-color);
+  outline-offset: -2px;
+  background: var(--surface-color);
+  z-index: 1;
+}
+
+.cell.selected {
+  background: var(--selected-bg);
+}
+
+.cell.editing {
+  white-space: normal;
+  word-break: break-word;
+  overflow: visible;
+  z-index: 2;
+  position: relative;
+}
+
+/* Sheets Bar */
+.sheets-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  background: var(--bg-color);
+  border-top: 1px solid var(--border-color);
+  height: 40px;
+}
+
+.sheets-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-sheet-nav {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.btn-sheet-nav:hover {
+  background: var(--hover-bg);
+}
+
+.btn-sheet-nav svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+}
+
+.sheets-list {
+  display: flex;
+  gap: 4px;
+}
+
+.sheet-tab {
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+  border-bottom: 2px solid transparent;
+}
+
+.sheet-tab:hover {
+  background: var(--hover-bg);
+}
+
+.sheet-tab.active {
+  background: var(--surface-color);
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+}
+
+.btn-add-sheet {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.btn-add-sheet:hover {
+  background: var(--hover-bg);
+}
+
+.btn-add-sheet svg {
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
+}
+
+.sheets-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-text {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Fill Handle */
+.fill-handle {
+  position: fixed;
+  width: 10px;
+  height: 10px;
+  background: var(--primary-color);
+  border: 2px solid var(--surface-color);
+  cursor: crosshair;
+  z-index: 100;
+  display: none;
+  transform: translate(50%, 50%);
+}
+
+.fill-handle.dragging {
+  opacity: 0.7;
+}
+
+/* Formula Autocomplete */
+.formula-autocomplete {
+  position: fixed;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  min-width: 280px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 10001;
+  display: none;
+}
+
+.formula-autocomplete.visible {
+  display: block;
+}
+
+.formula-autocomplete-header {
+  padding: 8px 12px;
+  background: var(--bg-color);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.formula-autocomplete-list {
+  padding: 4px 0;
+}
+
+.formula-item {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.formula-item:hover,
+.formula-item.selected {
+  background: var(--hover-bg);
+}
+
+.formula-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary-color);
+  margin-bottom: 2px;
+}
+
+.formula-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.formula-syntax {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  font-family: monospace;
+}

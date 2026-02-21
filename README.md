@@ -1,189 +1,63 @@
-# 🚀 Запуск SmartTable Modern
+<h1>UI часть</h1>
 
-## Быстрый старт
-
-### 1. Установка зависимостей
+<br>Для того что бы запустить проект необходимо для начала установаить node_modules 
 
 ```bash
-cd pysheets
-pip install -r requirements.txt
+cd sheets\src\electron
 ```
-
-### 2. Запуск приложения
 
 ```bash
-# Современный PyQt6 UI (рекомендуется)
-python main.py
-
-# Старый PyQt5 UI (legacy)
-python main.py --legacy
+npm install
 ```
 
----
+<br>После чего запускаем
 
-## 📋 Требования
-
-- **Python:** 3.8 или выше
-- **ОС:** Windows 10+, macOS 10.15+, Linux
-- **Память:** 512 MB RAM минимум
-- **Экран:** 1280x720 минимум
-
----
-
-## 🎨 Темы
-
-### Переключение тем
-
-1. Запустите приложение
-2. Меню **Вид** → **Темы**
-3. Выберите тему:
-   - ☀️ Светлая
-   - 🌙 Темная
-   - ⚙️ Системная
-
-### Настройка акцентного цвета
-
-Акцентный цвет можно изменить в настройках приложения или в коде:
-
-```python
-# pysheets/src/ui/main_window_modern.py
-self.accent_color = QColor("#1a73e8")  # Синий
-# или
-self.accent_color = QColor("#DC143C")  # Малиновый
-```
-
----
-
-## 🔧 Настройка
-
-### Файл настроек
-
-Настройки хранятся в:
-- **Windows:** `C:\Users\%USERNAME%\AppData\Roaming\SmartTable\SmartTable.ini`
-- **macOS:** `~/Library/Preferences/SmartTable/SmartTable.ini`
-- **Linux:** `~/.config/SmartTable/SmartTable.ini`
-
-### Основные настройки
-
-```ini
-[General]
-theme=light
-accent_color=#1a73e8
-language=ru
-```
-
----
-
-## 📁 Структура проекта
-
-```
-SmartTable/
-├── pysheets/
-│   ├── main.py                    # Точка входа
-│   ├── requirements.txt           # Зависимости
-│   ├── src/
-│   │   ├── core/                  # Ядро приложения
-│   │   ├── ui/                    # Пользовательский интерфейс
-│   │   │   ├── main_window_modern.py  # Современное окно
-│   │   │   ├── main_window.py     # Старое окно
-│   │   │   ├── toolbar/           # Панели инструментов
-│   │   │   ├── formula/           # Панель формул
-│   │   │   └── widghet/           # Виджеты
-│   │   └── io/                    # Импорт/экспорт
-│   └── assets/
-│       └── styles/                # Стили (QSS файлы)
-│           ├── modern_light.qss   # Светлая тема
-│           └── modern_dark.qss    # Темная тема
-└── md/
-    └── MODERN_DESIGN.md           # Документация дизайна
-```
-
----
-
-## 🐛 Решение проблем
-
-### Приложение не запускается
-
-**Проблема:** Ошибка импорта PyQt6
-
-**Решение:**
 ```bash
-pip uninstall PyQt6 PyQt5
-pip install PyQt6>=6.4.0
+npm run dev
 ```
 
----
 
-### Неправильная тема
 
-**Проблема:** Тема не применяется
 
-**Решение:**
-1. Удалите файл настроек
-2. Перезапустите приложение
-
----
-
-### Ошибка "ModuleNotFoundError"
-
-**Проблема:** Не найден модуль
-
-**Решение:**
-```bash
-# Убедитесь что находитесь в папке pysheets
-cd pysheets
-
-# Запустите от имени модуля
-python -m pysheets.main
 ```
-
----
-
-## 📚 Документация
-
-- [📖 Основное руководство](../README.md)
-- [🎨 Современный дизайн](../md/MODERN_DESIGN.md)
-- [🔧 Настройки тем](../user_themes/README.md)
-- [📋 Шаблоны таблиц](../user_templates/README.md)
-
----
-
-## 💡 Советы
-
-1. **Используйте Ctrl+N** для быстрого создания новой таблицы
-2. **Ctrl+S** сохраняет текущий файл
-3. **Ctrl+E** открывает меню экспорта
-4. **F1** открывает справку (если доступно)
-
----
-
-## 🎯 Горячие клавиши
-
-| Действие | Комбинация |
-|----------|------------|
-| Новый файл | Ctrl+N |
-| Открыть | Ctrl+O |
-| Сохранить | Ctrl+S |
-| Сохранить как | Ctrl+Shift+S |
-| Экспорт | Ctrl+E |
-| Выход | Ctrl+Q |
-| Отменить | Ctrl+Z |
-| Повторить | Ctrl+Y |
-| Вырезать | Ctrl+X |
-| Копировать | Ctrl+C |
-| Вставить | Ctrl+V |
-
----
-
-## 📞 Поддержка
-
-Возникли проблемы?
-
-1. Проверьте [документацию](../md/MODERN_DESIGN.md)
-2. Посмотрите [логи](~/.smarttable/smarttable.log)
-3. Создайте [issue](../../issues)
-
----
-
-**Версия:** 2.0  
-**Обновлено:** Февраль 2026
+sheets/src/electron/
+├── src/
+│   ├── ui/
+│   │   ├── components/           # UI компоненты
+│   │   │   ├── TopBarComponent.ts
+│   │   │   └── RibbonComponent.ts
+│   │   ├── core/                 # Ядро UI
+│   │   │   ├── ai/
+│   │   │   │   ├── ai-service.ts      # AI сервис (API ключи, промты, запросы)
+│   │   │   │   └── ai-agent.ts        # AI агент (будущий)
+│   │   │   ├── formulas/         # Формулы
+│   │   │   ├── component.ts      # Базовый класс компонента
+│   │   │   ├── widget.ts         # Базовый класс виджета
+│   │   │   ├── widget-loader.ts  # Загрузчик виджетов
+│   │   │   └── ipc-handlers.ts   # IPC обработчики
+│   │   ├── styles/               # CSS модули
+│   │   │   ├── variables.css
+│   │   │   ├── top-bar.css
+│   │   │   ├── ribbon.css
+│   │   │   ├── formula-bar.css
+│   │   │   ├── spreadsheet.css
+│   │   │   └── ai-panel.css
+│   │   ├── templates/            # HTML шаблоны
+│   │   │   ├── top-bar.html
+│   │   │   ├── ribbon.html
+│   │   │   ├── formula-bar.html
+│   │   │   ├── spreadsheet.html
+│   │   │   ├── ai-panel.html
+│   │   │   └── context-menu.html
+│   │   ├── icons/
+│   │   └── widgets/
+│   ├── api/
+│   ├── app.ts                    # Главный файл приложения
+│   ├── main.ts                   # Electron main процесс (только окно/меню)
+│   ├── preload.ts                # Preload скрипт
+│   └── index.html
+├── dist/                         # Скомпилированный код
+├── package.json
+├── tsconfig.json
+└── copy-assets.js
+```

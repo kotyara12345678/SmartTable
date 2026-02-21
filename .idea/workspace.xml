@@ -1,22 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="de8c9f9a-5e20-4826-8fed-2e02bd4d9615" name="Changes" comment="Добавил import + print">
-      <change afterPath="$PROJECT_DIR$/.idea/SmartTable.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/md/AI_FEATURES_ROADMAP.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/pysheets/dist/SmartTable-x86.exe" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/pysheets/dist/windows/SmartTable.exe" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pysheets/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/pysheets/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pysheets/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/pysheets/requirements.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pysheets/src/ui/main_window.py" beforeDir="false" afterPath="$PROJECT_DIR$/pysheets/src/ui/main_window.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pysheets/src/ui/theme/themes.py" beforeDir="false" afterPath="$PROJECT_DIR$/pysheets/src/ui/theme/themes.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pysheets/src/ui/toolbar/toolbar.py" beforeDir="false" afterPath="$PROJECT_DIR$/pysheets/src/ui/toolbar/toolbar.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pysheets/src/ui/widghet/ui_setup.py" beforeDir="false" afterPath="$PROJECT_DIR$/pysheets/src/ui/widghet/ui_setup.py" afterDir="false" />
+    <list default="true" id="de8c9f9a-5e20-4826-8fed-2e02bd4d9615" name="Changes" comment="delete py sheets">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/index.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/main.js" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/main.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/main.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/main.js.map" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/preload.js" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/preload.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/preload.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/preload.js.map" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/ai-agent.ts" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/core/ai/ai-agent.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/formulas-renderer.ts" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/widgets/formulabar/formulas-renderer.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/formulas.ts" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/core/formulas/formulas.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/index.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/main.ts" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/main.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/renderer.ts" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/widgets/renderer.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/ribbon.css" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/styles.css" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/tsconfig.json" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/tsconfig.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -226,14 +228,6 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1769702193728</updated>
-    </task>
-    <task id="LOCAL-00001" summary="Made a basic UI">
-      <option name="closed" value="true" />
-      <created>1769705794215</created>
-      <option name="number" value="00001" />
-      <option name="presentableId" value="LOCAL-00001" />
-      <option name="project" value="LOCAL" />
-      <updated>1769705794215</updated>
     </task>
     <task id="LOCAL-00002" summary="Improved the UI and added more features.">
       <option name="closed" value="true" />
@@ -619,7 +613,15 @@
       <option name="project" value="LOCAL" />
       <updated>1771233908650</updated>
     </task>
-    <option name="localTasksCounter" value="50" />
+    <task id="LOCAL-00050" summary="delete py sheets">
+      <option name="closed" value="true" />
+      <created>1771683392794</created>
+      <option name="number" value="00050" />
+      <option name="presentableId" value="LOCAL-00050" />
+      <option name="project" value="LOCAL" />
+      <updated>1771683392794</updated>
+    </task>
+    <option name="localTasksCounter" value="51" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -634,8 +636,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="new fils" />
-    <MESSAGE value="пофиксил темы и сделал рефакторинг" />
     <MESSAGE value="1.Исправили не работающие быстрые функции&#10;2.Создали возможность задавать формулу прямо в ячейке" />
     <MESSAGE value="Пофиксил работу сочитаний клавишь" />
     <MESSAGE value="Fix errors merge" />
@@ -659,6 +659,8 @@
     <MESSAGE value="Улучшил работу ии с таблицей" />
     <MESSAGE value="Создал SmartScript" />
     <MESSAGE value="Добавил import + print" />
-    <option name="LAST_COMMIT_MESSAGE" value="Добавил import + print" />
+    <MESSAGE value="Переход на электрон удаление всего лишнего с python части" />
+    <MESSAGE value="delete py sheets" />
+    <option name="LAST_COMMIT_MESSAGE" value="delete py sheets" />
   </component>
 </project>

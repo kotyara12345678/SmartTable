@@ -1,0 +1,58 @@
+<!-- Spreadsheet Component -->
+<main class="spreadsheet-container">
+  <div class="spreadsheet-wrapper">
+    <!-- Угловой элемент -->
+    <div class="corner-header"></div>
+
+    <!-- Заголовки столбцов -->
+    <div class="column-headers" id="columnHeaders"></div>
+
+    <!-- Заголовки строк -->
+    <div class="row-headers" id="rowHeaders"></div>
+
+    <!-- Основная область с ячейками -->
+    <div class="cell-grid-wrapper" id="cellGridWrapper">
+      <!-- Сетка ячеек -->
+      <div class="cell-grid" id="cellGrid"></div>
+    </div>
+  </div>
+</main>
+
+<!-- Вкладки листов -->
+<footer class="sheets-bar">
+  <div class="sheets-left">
+    <button class="btn-sheet-nav" title="Предыдущий лист" id="btnPrevSheet">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="15,18 9,12 15,6"/>
+      </svg>
+    </button>
+    <button class="btn-sheet-nav" title="Следующий лист" id="btnNextSheet">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="9,18 15,12 9,6"/>
+      </svg>
+    </button>
+    <div class="sheets-list" id="sheetsList">
+      <button class="sheet-tab active" data-sheet="1">
+        <span>Лист 1</span>
+      </button>
+    </div>
+    <button class="btn-add-sheet" id="btnAddSheet" title="Добавить лист">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+    </button>
+  </div>
+  <div class="sheets-right">
+    <span class="status-text" id="statusText">Готово</span>
+  </div>
+</footer>
+
+<!-- Fill handle -->
+<div class="fill-handle" id="fillHandle"></div>
+
+<!-- Автокомплит формул -->
+<div class="formula-autocomplete" id="formulaAutocomplete">
+  <div class="formula-autocomplete-header">Формулы</div>
+  <div class="formula-autocomplete-list" id="formulaList"></div>
+</div>

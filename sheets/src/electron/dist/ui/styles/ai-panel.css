@@ -1,0 +1,344 @@
+/* AI Panel Component Styles */
+.ai-panel {
+  position: fixed;
+  right: -380px;
+  top: 0;
+  width: 380px;
+  height: 100vh;
+  background: var(--surface-color);
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  transition: right 0.3s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-panel.open {
+  right: 0;
+}
+
+.ai-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.btn-close-ai {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.btn-close-ai:hover {
+  background: var(--hover-bg);
+}
+
+.btn-close-ai svg {
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
+}
+
+.ai-panel-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ai-chat {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ai-message {
+  max-width: 85%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  animation: messageSlideIn 0.3s ease-out;
+}
+
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ai-message.ai-status {
+  background: var(--primary-light);
+  border-left: 3px solid var(--primary-color);
+}
+
+.ai-message-assistant {
+  background: var(--bg-color);
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+}
+
+.ai-message-user {
+  background: var(--primary-color);
+  color: white;
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+}
+
+.ai-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ai-suggestion {
+  padding: 10px 14px;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+}
+
+.ai-suggestion:hover {
+  border-color: var(--primary-color);
+  background: var(--primary-light);
+}
+
+.ai-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  border-top: 1px solid var(--border-color);
+  gap: 8px;
+}
+
+.ai-quick-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.ai-quick-reply-btn {
+  padding: 6px 12px;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.ai-quick-reply-btn:hover {
+  background: var(--primary-light);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.ai-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-color);
+  border-radius: 20px;
+  align-self: flex-start;
+}
+
+.ai-mode-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.ai-mode-btn-toggle {
+  width: 28px;
+  height: 28px;
+  border: 2px solid transparent;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  color: var(--text-secondary);
+}
+
+.ai-mode-btn-toggle:hover {
+  background: var(--hover-bg);
+}
+
+.ai-mode-btn-toggle.active {
+  background: var(--primary-color);
+  color: white;
+}
+
+.ai-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.ai-input:focus {
+  border-color: var(--primary-color);
+}
+
+.btn-ai-send {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border: none;
+  background: var(--primary-color);
+  color: white;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.btn-ai-send:hover {
+  background: var(--primary-hover);
+  transform: scale(1.05);
+}
+
+.btn-ai-send svg {
+  width: 20px;
+  height: 20px;
+}
+
+.ai-mode-switcher {
+  padding: 12px;
+  background: var(--primary-light);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ai-mode-switcher-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.ai-mode-switcher-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.ai-mode-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ai-mode-btn-confirm {
+  background: var(--primary-color);
+  color: white;
+}
+
+.ai-mode-btn-confirm:hover {
+  background: var(--primary-hover);
+}
+
+.ai-mode-btn-cancel {
+  background: var(--bg-color);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.ai-mode-btn-cancel:hover {
+  background: var(--hover-bg);
+}
+
+/* Context Menu */
+.context-menu {
+  position: fixed;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  min-width: 220px;
+  z-index: 10000;
+  display: none;
+}
+
+.context-menu.visible {
+  display: block;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: background 0.15s;
+}
+
+.context-menu-item:hover {
+  background: var(--hover-bg);
+}
+
+.context-menu-item svg {
+  flex-shrink: 0;
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 6px 0;
+}
