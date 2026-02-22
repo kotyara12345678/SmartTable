@@ -12,7 +12,29 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let mainWindow: BrowserWindow | null = null;
+let splashWindow: BrowserWindow | null = null;
 let isAppClosing = false;
+
+/**
+ * Создать splash screen (заставку при загрузке)
+ */
+function createSplashScreen(): void {
+  splashWindow = new BrowserWindow({
+    width: 600,
+    height: 400,
+    frame: false,
+    alwaysOnTop: true,
+    transparent: true,
+    resizable: false,
+    skipTaskbar: true,
+  });
+
+  // Загружаем изображение заставки
+  splashWindow.loadFile(path.join(__dirname, '../SmartTableStartApp.png'));
+  
+  // Центрируем окно
+  splashWindow.center();
+}
 
 /**
  * Создать главное окно приложения
@@ -23,6 +45,7 @@ function createWindow(): void {
     height: 900,
     minWidth: 800,
     minHeight: 600,
+    icon: path.join(__dirname, 'SmartTable.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -30,144 +53,34 @@ function createWindow(): void {
     },
     backgroundColor: '#f8f9fa',
     titleBarStyle: 'default',
+    show: false, // Не показываем пока не загрузится
   });
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 
-  // Открыть DevTools по умолчанию
+  // Отключаем стандартное меню Electron — используем свой Top Bar
+  Menu.setApplicationMenu(null);
+
+  // Открываем DevTools для отладки
   mainWindow.webContents.openDevTools();
 
-  // Создаем кастомное меню
-  const template: Electron.MenuItemConstructorOptions[] = [
-    {
-      label: 'Файл',
-      submenu: [
-        { label: 'Новый', accelerator: 'CmdOrCtrl+N', click: () => console.log('Новый файл') },
-        { label: 'Открыть', accelerator: 'CmdOrCtrl+O', click: () => console.log('Открыть файл') },
-        { label: 'Сохранить', accelerator: 'CmdOrCtrl+S', click: () => console.log('Сохранить') },
-        { type: 'separator' },
-        { label: 'Экспорт', submenu: [
-          {
-            label: 'Excel (.xlsx)',
-            click: () => mainWindow?.webContents.send('export', 'xlsx')
-          },
-          {
-            label: 'CSV (.csv)',
-            click: () => mainWindow?.webContents.send('export', 'csv')
-          },
-          {
-            label: 'JSON (.json)',
-            click: () => mainWindow?.webContents.send('export', 'json')
-          },
-          {
-            label: 'HTML (.html)',
-            click: () => mainWindow?.webContents.send('export', 'html')
-          },
-          {
-            label: 'PNG (.png)',
-            click: () => mainWindow?.webContents.send('export', 'png')
-          },
-        ]},
-        { type: 'separator' },
-        { label: 'Выход', accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Alt+F4', click: () => app.quit() },
-      ],
-    },
-    {
-      label: 'Правка',
-      submenu: [
-        { label: 'Отменить', accelerator: 'CmdOrCtrl+Z', role: 'undo' },
-        { label: 'Повторить', accelerator: 'CmdOrCtrl+Y', role: 'redo' },
-        { type: 'separator' },
-        { label: 'Вырезать', accelerator: 'CmdOrCtrl+X', role: 'cut' },
-        { label: 'Копировать', accelerator: 'CmdOrCtrl+C', role: 'copy' },
-        { label: 'Вставить', accelerator: 'CmdOrCtrl+V', role: 'paste' },
-        { label: 'Удалить', accelerator: 'Delete', click: () => console.log('Удалить') },
-        { type: 'separator' },
-        { label: 'Выделить всё', accelerator: 'CmdOrCtrl+A', role: 'selectAll' },
-      ],
-    },
-    {
-      label: 'Вид',
-      submenu: [
-        { label: 'Масштаб', submenu: [
-          { label: 'Увеличить', accelerator: 'CmdOrCtrl+Plus', click: () => {
-            const win = BrowserWindow.getFocusedWindow();
-            if (win) {
-              const zoom = win.webContents.getZoomLevel();
-              win.webContents.setZoomLevel(zoom + 0.5);
-            }
-          }},
-          { label: 'Уменьшить', accelerator: 'CmdOrCtrl+-', click: () => {
-            const win = BrowserWindow.getFocusedWindow();
-            if (win) {
-              const zoom = win.webContents.getZoomLevel();
-              win.webContents.setZoomLevel(zoom - 0.5);
-            }
-          }},
-          { label: 'Сбросить (100%)', accelerator: 'CmdOrCtrl+0', click: () => {
-            const win = BrowserWindow.getFocusedWindow();
-            if (win) {
-              win.webContents.setZoomLevel(0);
-            }
-          }},
-        ]},
-        { type: 'separator' },
-        { label: 'На весь экран', accelerator: 'F11', role: 'togglefullscreen' },
-      ],
-    },
-    {
-      label: 'Вставка',
-      submenu: [
-        { label: 'Ячейки', click: () => console.log('Вставить ячейки') },
-        { label: 'Строки', click: () => console.log('Вставить строки') },
-        { label: 'Столбцы', click: () => console.log('Вставить столбцы') },
-        { type: 'separator' },
-        { label: 'Функцию', click: () => console.log('Вставить функцию') },
-        { label: 'Изображение', click: () => console.log('Вставить изображение') },
-      ],
-    },
-    {
-      label: 'Формат',
-      submenu: [
-        { label: 'Числа', submenu: [
-          { label: 'Числовой', click: () => console.log('Числовой формат') },
-          { label: 'Текстовый', click: () => console.log('Текстовый формат') },
-          { label: 'Дата', click: () => console.log('Формат даты') },
-          { label: 'Валюта', click: () => console.log('Валюта') },
-          { label: 'Процент', click: () => console.log('Процент') },
-        ]},
-        { type: 'separator' },
-        { label: 'Жирный', accelerator: 'CmdOrCtrl+B', click: () => console.log('Жирный') },
-        { label: 'Курсив', accelerator: 'CmdOrCtrl+I', click: () => console.log('Курсив') },
-        { label: 'Подчеркнутый', accelerator: 'CmdOrCtrl+U', click: () => console.log('Подчеркнутый') },
-      ],
-    },
-    {
-      label: 'Данные',
-      submenu: [
-        { label: 'Сортировать', click: () => console.log('Сортировать') },
-        { label: 'Фильтр', accelerator: 'CmdOrCtrl+Shift+L', click: () => console.log('Фильтр') },
-      ],
-    },
-    {
-      label: 'ИИ Помощник',
-      submenu: [
-        { label: 'Анализ данных', accelerator: 'CmdOrCtrl+K', click: () => console.log('ИИ Анализ') },
-        { label: 'Генерация формул', click: () => console.log('ИИ Формулы') },
-        { label: 'Очистка данных', click: () => console.log('ИИ Очистка') },
-      ],
-    },
-    {
-      label: 'Справка',
-      submenu: [
-        { label: 'О программе', click: () => console.log('О программе') },
-        { label: 'Документация', click: () => console.log('Документация') },
-      ],
-    },
-  ];
-
-  const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
+  // Когда окно загрузится - ждём 5 секунд и показываем приложение
+  mainWindow.once('ready-to-show', () => {
+    // Ждём 5 секунд пока показывается splash screen
+    setTimeout(() => {
+      if (mainWindow) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+      // Закрываем splash screen
+      setTimeout(() => {
+        if (splashWindow) {
+          splashWindow.close();
+          splashWindow = null;
+        }
+      }, 100);
+    }, 5000); // 5 секунд показываем splash
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -229,11 +142,14 @@ function registerFileSaveHandler(): void {
  * Инициализация приложения
  */
 app.whenReady().then(() => {
+  // Показываем splash screen
+  createSplashScreen();
+  
   // Регистрируем IPC обработчики
   registerIPCHandlers();
   registerFileSaveHandler();
 
-  // Создаем окно
+  // Создаем окно (оно пока скрыто)
   createWindow();
 
   app.on('activate', () => {

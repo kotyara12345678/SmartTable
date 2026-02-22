@@ -5,7 +5,7 @@
 import https from 'https';
 // AI API Keys
 export const OPENROUTER_KEYS = [
-    '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',
+    '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',
 ];
 // Системный промт для ИИ
 export const AI_SYSTEM_PROMPT = `You are SmartTable AI Assistant with TWO MODES.
@@ -125,7 +125,7 @@ export class AIService {
                 { role: 'system', content: AI_SYSTEM_PROMPT },
                 { role: 'user', content: prompt }
             ],
-            max_tokens: 3500,
+            max_tokens: 2000, // Уменьшили для экономии кредитов
             temperature: 0.8
         });
         for (let i = 0; i < OPENROUTER_KEYS.length; i++) {
@@ -139,6 +139,11 @@ export class AIService {
                     console.error('[AI] API Key invalid, switching to next key...');
                     this.currentKeyIndex = (keyIndex + 1) % OPENROUTER_KEYS.length;
                     continue;
+                }
+                if (response.statusCode === 402) {
+                    console.error('[AI] Insufficient credits. Please add credits to your OpenRouter account.');
+                    console.error('[AI] Error details:', response.body);
+                    return { success: false, error: 'Недостаточно кредитов на счету OpenRouter. Пожалуйста, пополните баланс.' };
                 }
                 if (response.statusCode === 429) {
                     console.error('[AI] Rate limit exceeded, switching to next key...');

@@ -1908,6 +1908,16 @@ function parseAICommands(content: string): any[] {
 
       if (parsed.commands && Array.isArray(parsed.commands)) {
         for (const cmd of parsed.commands) {
+          // Конвертируем cell в column и row если есть
+          if (cmd.params && cmd.params.cell && typeof cmd.params.cell === 'string') {
+            const cellMatch = cmd.params.cell.match(/^([A-Z])(\d+)$/i);
+            if (cellMatch) {
+              cmd.params.column = cellMatch[1].toUpperCase().charCodeAt(0) - 65;
+              cmd.params.row = parseInt(cellMatch[2]);
+              console.log('[DEBUG] parseAICommands converted cell', cmd.params.cell, 'to column:', cmd.params.column, 'row:', cmd.params.row);
+            }
+          }
+
           // Преобразуем все варианты команд форматирования в наши команды
           const action = cmd.action?.toLowerCase();
           
@@ -2083,12 +2093,55 @@ function applyCellStyle(cell: HTMLElement, row: number, col: number, params: any
 }
 
 async function executeSingleCommand(action: string, params: any): Promise<void> {
+  console.log('[DEBUG] executeSingleCommand called with:', { action, params });
+  
+  // Проверяем что params существует
+  if (!params) {
+    console.warn('[DEBUG] executeSingleCommand called without params:', action);
+    return;
+  }
+
+  // Если есть cell (например "E2"), конвертируем в column и row
+  if (params.cell && typeof params.cell === 'string') {
+    const cellMatch = params.cell.match(/^([A-Z])(\d+)$/i);
+    if (cellMatch) {
+      params.column = cellMatch[1].toUpperCase().charCodeAt(0) - 65;
+      params.row = parseInt(cellMatch[2]);
+      console.log('[DEBUG] Converted cell', params.cell, 'to column:', params.column, 'row:', params.row);
+    }
+  }
+
+  // Проверяем что column и row существуют для команд которые их требуют
+  const requiresColumnRow = ['set_cell', 'set_cell_color', 'set_formula', 'color_column', 'color_row'];
+  if (requiresColumnRow.includes(action)) {
+    if (params.column === undefined || params.column === null) {
+      console.error('[DEBUG] Command', action, 'requires column but got:', params);
+      throw new Error(`Command ${action} requires column parameter`);
+    }
+    if (params.row === undefined || params.row === null) {
+      console.error('[DEBUG] Command', action, 'requires row but got:', params);
+      throw new Error(`Command ${action} requires row parameter`);
+    }
+  }
+
   // Нормализуем цвета в параметрах
   if (params.bg_color) params.bg_color = normalizeColor(params.bg_color);
   if (params.text_color) params.text_color = normalizeColor(params.text_color);
 
   console.log('[DEBUG] Executing action:', action, 'params:', params);
   const data = getCurrentData();
+
+  // Конвертируем column из буквы в число если нужно (на случай если ещё не конвертировано)
+  if (params.column && typeof params.column === 'string') {
+    const colLetter = params.column.toUpperCase();
+    params.column = colLetter.charCodeAt(0) - 65;
+    console.log('[DEBUG] Converted column', colLetter, 'to', params.column);
+  }
+
+  // Конвертируем row в число если это строка
+  if (params.row && typeof params.row === 'string') {
+    params.row = parseInt(params.row);
+  }
 
   switch (action) {
     case 'set_data_validation':
@@ -2229,7 +2282,15 @@ async function executeSingleCommand(action: string, params: any): Promise<void> 
 
     case 'set_cell':
       {
-        const colIndex = params.column.toUpperCase().charCodeAt(0) - 65;
+        // Проверяем что column и row существуют
+        if (params.column === undefined || params.row === undefined) {
+          console.warn('[DEBUG] set_cell: missing column or row');
+          break;
+        }
+        
+        const colIndex = typeof params.column === 'string' 
+          ? params.column.toUpperCase().charCodeAt(0) - 65 
+          : params.column;
         const rowIndex = params.row - 1;
         const cell = getCellElement(rowIndex, colIndex);
         if (cell) {
@@ -2281,7 +2342,13 @@ async function executeSingleCommand(action: string, params: any): Promise<void> 
       
     case 'clear_cell':
       {
-        const colIndex = params.column.toUpperCase().charCodeAt(0) - 65;
+        if (params.column === undefined || params.row === undefined) {
+          console.warn('[DEBUG] clear_cell: missing column or row');
+          break;
+        }
+        const colIndex = typeof params.column === 'string' 
+          ? params.column.toUpperCase().charCodeAt(0) - 65 
+          : params.column;
         const rowIndex = params.row - 1;
         const cell = getCellElement(rowIndex, colIndex);
         if (cell) {
@@ -2292,10 +2359,16 @@ async function executeSingleCommand(action: string, params: any): Promise<void> 
         }
       }
       break;
-      
+
     case 'clear_column':
       {
-        const colIndex = params.column.toUpperCase().charCodeAt(0) - 65;
+        if (params.column === undefined) {
+          console.warn('[DEBUG] clear_column: missing column');
+          break;
+        }
+        const colIndex = typeof params.column === 'string' 
+          ? params.column.toUpperCase().charCodeAt(0) - 65 
+          : params.column;
         for (let r = 0; r < CONFIG.ROWS; r++) {
           const cell = getCellElement(r, colIndex);
           const key = getCellKey(r, colIndex);
@@ -2328,8 +2401,14 @@ async function executeSingleCommand(action: string, params: any): Promise<void> 
 
     case 'set_cell_color':
       {
+        if (params.column === undefined || params.row === undefined) {
+          console.warn('[DEBUG] set_cell_color: missing column or row');
+          break;
+        }
         console.log('[DEBUG] set_cell_color:', params);
-        const colIndex = params.column.toUpperCase().charCodeAt(0) - 65;
+        const colIndex = typeof params.column === 'string' 
+          ? params.column.toUpperCase().charCodeAt(0) - 65 
+          : params.column;
         const rowIndex = params.row - 1;
         console.log('[DEBUG] colIndex:', colIndex, 'rowIndex:', rowIndex);
         const cell = getCellElement(rowIndex, colIndex);
@@ -2353,9 +2432,15 @@ async function executeSingleCommand(action: string, params: any): Promise<void> 
 
     case 'color_column':
       {
+        if (params.column === undefined) {
+          console.warn('[DEBUG] color_column: missing column');
+          break;
+        }
         console.log('[DEBUG] color_column:', params);
-        const colIndex = params.column.toUpperCase().charCodeAt(0) - 65;
-        
+        const colIndex = typeof params.column === 'string' 
+          ? params.column.toUpperCase().charCodeAt(0) - 65 
+          : params.column;
+
         // ИИ может отправлять 'color' или 'bg_color'
         const bgColor = params.bg_color || params.color;
         console.log('[DEBUG] colIndex:', colIndex, 'bg_color:', bgColor);
@@ -2383,7 +2468,11 @@ async function executeSingleCommand(action: string, params: any): Promise<void> 
 
     case 'color_row':
       {
-        const rowIndex = params.row - 1;
+        if (params.row === undefined) {
+          console.warn('[DEBUG] color_row: missing row');
+          break;
+        }
+        const rowIndex = typeof params.row === 'string' ? parseInt(params.row) - 1 : params.row - 1;
         for (let c = 0; c < CONFIG.COLS; c++) {
           const cell = getCellElement(rowIndex, c);
           if (cell) {
@@ -2441,7 +2530,16 @@ async function executeSingleCommand(action: string, params: any): Promise<void> 
 
     case 'set_formula':
       {
-        const colIndex = params.column.toUpperCase().charCodeAt(0) - 65;
+        // Проверяем что column и row существуют
+        if (params.column === undefined || params.row === undefined) {
+          console.warn('[DEBUG] set_formula: missing column or row');
+          break;
+        }
+        
+        // Конвертируем column из буквы в число если это строка
+        const colIndex = typeof params.column === 'string' 
+          ? params.column.toUpperCase().charCodeAt(0) - 65 
+          : params.column;
         const rowIndex = params.row - 1;
         const cell = getCellElement(rowIndex, colIndex);
         if (cell) {
@@ -2451,7 +2549,7 @@ async function executeSingleCommand(action: string, params: any): Promise<void> 
             const key = getCellKey(rowIndex, colIndex);
             data.set(key, { value: formula } as { value: string; style?: any });
             updateAIDataCache();
-            
+
             // Вычисляем формулу через глобальную функцию
             const result = (window as any).calculateCellFormula(
               formula,

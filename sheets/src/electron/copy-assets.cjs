@@ -86,6 +86,30 @@ if (fs.existsSync(themesSrc)) {
   console.log('Copied: themes-gallery.json');
 }
 
+// Копируем иконку если есть
+const iconSrc = path.join(srcDir, '..', 'SmartTable.png');
+const iconDest = path.join(distDir, 'SmartTable.png');
+if (fs.existsSync(iconSrc)) {
+  fs.copyFileSync(iconSrc, iconDest);
+  console.log('Copied: SmartTable.png');
+}
+
+// Копируем splash screen изображение если есть
+const splashSrc = path.join(srcDir, '..', 'SmartTableStartApp.png');
+const splashDest = path.join(distDir, 'SmartTableStartApp.png');
+if (fs.existsSync(splashSrc)) {
+  fs.copyFileSync(splashSrc, splashDest);
+  console.log('Copied: SmartTableStartApp.png');
+}
+
+// Копируем SmartTable.png для top bar если есть (в dist/ui для templates)
+const smartTableSrc = path.join(srcDir, '..', 'SmartTable.png');
+const smartTableDest = path.join(distDir, 'SmartTable.png');
+if (fs.existsSync(smartTableSrc)) {
+  fs.copyFileSync(smartTableSrc, smartTableDest);
+  console.log('Copied: SmartTable.png (for top bar)');
+}
+
 // Копируем index.html
 fs.copyFileSync(path.join(srcDir, 'index.html'), path.join(distDir, 'index.html'));
 console.log('Copied: index.html');

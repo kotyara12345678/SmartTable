@@ -1,25 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="de8c9f9a-5e20-4826-8fed-2e02bd4d9615" name="Changes" comment="feat: контекстное меню, сохранение в Документы и очистка валидаций&#10;&#10;- Восстановлено контекстное меню (ПКМ) с функционалом:&#10;  - Копировать/Вырезать/Вставить&#10;  - Очистить содержимое&#10;  - Изменить фон ячейки&#10;  - Вставить/удалить строки и столбцы&#10;- Добавлен диалог сохранения при выходе (папка Документы по умолчанию)&#10;- Принудительная очистка dataValidations при загрузке&#10;- Удалён текст setDataValidation из A1&#10;- Добавлено логирование для AI API ошибок">
+    <list default="true" id="de8c9f9a-5e20-4826-8fed-2e02bd4d9615" name="Changes" comment="git add -A&#10;git commit -m &quot;feat(ui): модальная система настроек с галереей тем&#10;&#10;- 28 уникальных тем (14 светлых + 14 тёмных)&#10;- Боковая панель настроек с подвкладками&#10;- Переключатель анимации выделения&#10;- Выбор акцентного цвета&#10;- Редактор пользовательских тем&#10;- Desktop-style модальное окно&quot;">
+      <change afterPath="$PROJECT_DIR$/sheets/src/electron/SmartTable.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/sheets/src/electron/dist/SmartTable.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/sheets/src/electron/src/SmartTable.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.env" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/sheets/src/electron/copy-assets.cjs" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/copy-assets.cjs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/app.js" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/app.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/app.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/app.js.map" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/index.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/components/TopBarComponent.js" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/components/TopBarComponent.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/components/TopBarComponent.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/components/TopBarComponent.js.map" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/main.js" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/main.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/main.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/main.js.map" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/core/ai/ai-service.js" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/core/ai/ai-service.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/styles/spreadsheet.css" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/styles/spreadsheet.css" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/core/ai/ai-service.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/core/ai/ai-service.js.map" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/templates/settings-panel.html" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/templates/settings-panel.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/templates/top-bar.html" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/templates/top-bar.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/widgets/renderer.js" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/widgets/renderer.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/widgets/renderer.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/widgets/renderer.js.map" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/app.ts" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/app.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/image.png" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/index.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/ui/components/TopBarComponent.ts" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/components/TopBarComponent.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/main.ts" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/main.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/ui/core/ai/ai-service.ts" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/core/ai/ai-service.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/ui/styles/spreadsheet.css" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/styles/spreadsheet.css" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/ui/templates/settings-panel.html" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/templates/settings-panel.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/ui/templates/top-bar.html" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/templates/top-bar.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/ui/widgets/renderer.ts" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/widgets/renderer.ts" afterDir="false" />
     </list>
@@ -231,14 +233,6 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1769702193728</updated>
-    </task>
-    <task id="LOCAL-00008" summary="Added the ability to create diagrams">
-      <option name="closed" value="true" />
-      <created>1769957586033</created>
-      <option name="number" value="00008" />
-      <option name="presentableId" value="LOCAL-00008" />
-      <option name="project" value="LOCAL" />
-      <updated>1769957586033</updated>
     </task>
     <task id="LOCAL-00009" summary="Create templates">
       <option name="closed" value="true" />
@@ -624,7 +618,15 @@
       <option name="project" value="LOCAL" />
       <updated>1771765615545</updated>
     </task>
-    <option name="localTasksCounter" value="57" />
+    <task id="LOCAL-00057" summary="git add -A&#10;git commit -m &quot;feat(ui): модальная система настроек с галереей тем&#10;&#10;- 28 уникальных тем (14 светлых + 14 тёмных)&#10;- Боковая панель настроек с подвкладками&#10;- Переключатель анимации выделения&#10;- Выбор акцентного цвета&#10;- Редактор пользовательских тем&#10;- Desktop-style модальное окно&quot;">
+      <option name="closed" value="true" />
+      <created>1771774244318</created>
+      <option name="number" value="00057" />
+      <option name="presentableId" value="LOCAL-00057" />
+      <option name="project" value="LOCAL" />
+      <updated>1771774244318</updated>
+    </task>
+    <option name="localTasksCounter" value="58" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -639,7 +641,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="Сделал создания окна по центру" />
     <MESSAGE value="Добавил возможность очистки столбоц в с помощью ии" />
     <MESSAGE value="Добавил возможность ии удалять конкретные колонки" />
     <MESSAGE value="Добавил ии формулы, обновил архитектуру" />
@@ -664,6 +665,7 @@
     <MESSAGE value="Fix error and new doc" />
     <MESSAGE value="Обновил сохранение таблиц" />
     <MESSAGE value="feat: контекстное меню, сохранение в Документы и очистка валидаций&#10;&#10;- Восстановлено контекстное меню (ПКМ) с функционалом:&#10;  - Копировать/Вырезать/Вставить&#10;  - Очистить содержимое&#10;  - Изменить фон ячейки&#10;  - Вставить/удалить строки и столбцы&#10;- Добавлен диалог сохранения при выходе (папка Документы по умолчанию)&#10;- Принудительная очистка dataValidations при загрузке&#10;- Удалён текст setDataValidation из A1&#10;- Добавлено логирование для AI API ошибок" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat: контекстное меню, сохранение в Документы и очистка валидаций&#10;&#10;- Восстановлено контекстное меню (ПКМ) с функционалом:&#10;  - Копировать/Вырезать/Вставить&#10;  - Очистить содержимое&#10;  - Изменить фон ячейки&#10;  - Вставить/удалить строки и столбцы&#10;- Добавлен диалог сохранения при выходе (папка Документы по умолчанию)&#10;- Принудительная очистка dataValidations при загрузке&#10;- Удалён текст setDataValidation из A1&#10;- Добавлено логирование для AI API ошибок" />
+    <MESSAGE value="git add -A&#10;git commit -m &quot;feat(ui): модальная система настроек с галереей тем&#10;&#10;- 28 уникальных тем (14 светлых + 14 тёмных)&#10;- Боковая панель настроек с подвкладками&#10;- Переключатель анимации выделения&#10;- Выбор акцентного цвета&#10;- Редактор пользовательских тем&#10;- Desktop-style модальное окно&quot;" />
+    <option name="LAST_COMMIT_MESSAGE" value="git add -A&#10;git commit -m &quot;feat(ui): модальная система настроек с галереей тем&#10;&#10;- 28 уникальных тем (14 светлых + 14 тёмных)&#10;- Боковая панель настроек с подвкладками&#10;- Переключатель анимации выделения&#10;- Выбор акцентного цвета&#10;- Редактор пользовательских тем&#10;- Desktop-style модальное окно&quot;" />
   </component>
 </project>
