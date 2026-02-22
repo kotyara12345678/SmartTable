@@ -310,8 +310,6 @@ function getCurrentData() {
 // === ИНИЦИАЛИЗАЦИЯ ===
 async function init() {
     console.log('[Renderer] init() called');
-    // Автозагрузка сохранённых данных
-    autoLoad();
     // Рендерим формулу бар в контейнер
     const formulaBarContainer = document.getElementById('formula-bar-container');
     if (formulaBarContainer) {
@@ -352,6 +350,12 @@ async function init() {
     // Инициализируем DOM элементы (после загрузки шаблонов)
     initElements();
     console.log('[Renderer] initElements() done');
+    // Рендерим таблицу
+    renderColumnHeaders();
+    renderRowHeaders();
+    renderCells();
+    // Автозагрузка сохранённых данных (после рендеринга!)
+    autoLoad();
     try {
         // Получаем ipcRenderer через contextBridge
         const electronAPI = window.electronAPI;
@@ -369,12 +373,6 @@ async function init() {
     catch (e) {
         console.error('[Renderer] Error:', e.message);
     }
-    console.log('[Renderer] Starting renderColumnHeaders');
-    renderColumnHeaders();
-    console.log('[Renderer] Starting renderRowHeaders');
-    renderRowHeaders();
-    console.log('[Renderer] Starting renderCells');
-    renderCells();
     console.log('[Renderer] Starting setupEventListeners');
     setupEventListeners();
     console.log('[Renderer] Starting updateCellReference');

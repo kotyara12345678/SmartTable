@@ -391,9 +391,6 @@ function getCurrentData(): Map<string, { value: string; style?: any }> {
 async function init(): Promise<void> {
   console.log('[Renderer] init() called');
 
-  // Автозагрузка сохранённых данных
-  autoLoad();
-
   // Рендерим формулу бар в контейнер
   const formulaBarContainer = document.getElementById('formula-bar-container');
   if (formulaBarContainer) {
@@ -435,6 +432,14 @@ async function init(): Promise<void> {
   initElements();
   console.log('[Renderer] initElements() done');
 
+  // Рендерим таблицу
+  renderColumnHeaders();
+  renderRowHeaders();
+  renderCells();
+
+  // Автозагрузка сохранённых данных (после рендеринга!)
+  autoLoad();
+
   try {
     // Получаем ipcRenderer через contextBridge
     const electronAPI = (window as any).electronAPI;
@@ -452,12 +457,6 @@ async function init(): Promise<void> {
     console.error('[Renderer] Error:', e.message);
   }
 
-  console.log('[Renderer] Starting renderColumnHeaders');
-  renderColumnHeaders();
-  console.log('[Renderer] Starting renderRowHeaders');
-  renderRowHeaders();
-  console.log('[Renderer] Starting renderCells');
-  renderCells();
   console.log('[Renderer] Starting setupEventListeners');
   setupEventListeners();
   console.log('[Renderer] Starting updateCellReference');
