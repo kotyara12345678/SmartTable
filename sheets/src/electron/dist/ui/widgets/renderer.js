@@ -190,6 +190,7 @@ function autoSave() {
             sheetsData: dataToSave,
             currentSheet: state.currentSheet,
             timestamp: Date.now()
+            // dataValidations НЕ сохраняем чтобы избежать проблем
         }));
         console.log('[AutoSave] Data saved to localStorage');
     }
@@ -200,24 +201,60 @@ function autoSave() {
 function autoLoad() {
     try {
         const saved = localStorage.getItem('smarttable-autosave');
+        // Загружаем данные
+        const currentData = getCurrentData();
+        currentData.clear();
         if (saved) {
             const data = JSON.parse(saved);
             console.log('[AutoLoad] Found autosave from:', new Date(data.timestamp).toLocaleString());
-            // Загружаем данные
-            const currentData = getCurrentData();
-            currentData.clear();
             Object.keys(data.sheetsData).forEach(key => {
                 currentData.set(key, data.sheetsData[key]);
             });
             state.currentSheet = data.currentSheet || 1;
-            renderCells();
-            updateAIDataCache();
+            // НЕ загружаем dataValidations из старых сохранений!
+            // state.dataValidations остаётся пустым
             console.log('[AutoLoad] Data loaded successfully');
         }
+        // ПРИНУДИТЕЛЬНО очищаем dataValidations при каждой загрузке!
+        // Это удалит злощастный текст из A1
+        state.dataValidations.clear();
+        console.log('[AutoLoad] Force cleared dataValidations');
+        // Проверяем и очищаем ячейку A1 если там текст setDataValidation
+        const a1Key = getCellKey(0, 0); // A1 = row 0, col 0
+        const a1Data = currentData.get(a1Key);
+        if (a1Data && a1Data.value && a1Data.value.includes('setDataValidation')) {
+            currentData.delete(a1Key);
+            console.log('[AutoLoad] Removed setDataValidation text from A1');
+        }
+        renderCells();
+        updateAIDataCache();
+        console.log('[AutoLoad] Completed successfully');
     }
     catch (e) {
         console.error('[AutoLoad] Error:', e);
     }
+}
+// Очистить всё состояние и localStorage
+function clearAllState() {
+    localStorage.removeItem('smarttable-autosave');
+    localStorage.removeItem('smarttable-data-validations');
+    state.sheetsData.clear();
+    state.sheetsData.set(1, new Map());
+    state.dataValidations.clear();
+    state.currentSheet = 1;
+    state.selectedCell = { row: 0, col: 0 };
+    state.undoStack = [];
+    state.redoStack = [];
+    state.aiDataCache = [];
+    renderCells();
+    updateAIDataCache();
+    console.log('[ClearState] All state cleared');
+}
+// Очистить только dataValidations
+function clearAllDataValidations() {
+    state.dataValidations.clear();
+    renderCells();
+    console.log('[ClearValidation] All data validations cleared');
 }
 console.log('[Renderer] Config and State initialized!');
 // Глобальный ipcRenderer
@@ -372,6 +409,41 @@ async function init() {
     }
     catch (e) {
         console.error('[Renderer] Error:', e.message);
+    }
+    // Регистрируем обработчик закрытия приложения ПОСЛЕ инициализации ipcRenderer
+    if (ipcRenderer) {
+        console.log('[Renderer] Registering close-app handler');
+        ipcRenderer.on('close-app', async () => {
+            console.log('[Renderer] Received close-app event');
+            try {
+                const shouldSave = await showSaveDialog();
+                console.log('[Renderer] User chose to save:', shouldSave);
+                if (shouldSave) {
+                    await exportToXLSXWithDialog();
+                    console.log('[Renderer] File saved, closing app');
+                    // Отправляем ответ main процессу что можно закрывать
+                    ipcRenderer.send('close-app-response');
+                }
+                else {
+                    console.log('[Renderer] User chose not to save, clearing state and closing');
+                    clearAllState();
+                    // Отправляем ответ main процессу что можно закрывать
+                    ipcRenderer.send('close-app-response');
+                }
+            }
+            catch (error) {
+                console.error('[Renderer] Error during close:', error);
+                // В случае ошибки всё равно закрываем
+                ipcRenderer.send('close-app-response');
+            }
+        });
+        // Обработчик экспорта из главного меню
+        ipcRenderer.on('export', (event, format) => {
+            exportData(format);
+        });
+    }
+    else {
+        console.warn('[Renderer] ipcRenderer not initialized, close-app handler not registered');
     }
     console.log('[Renderer] Starting setupEventListeners');
     setupEventListeners();
@@ -990,6 +1062,18 @@ function setupEventListeners() {
         clearChatHistory();
         elements.aiChat.innerHTML = '<div class="ai-message ai-message-assistant">История чата очищена. Чем могу помочь?</div>';
     });
+    // Кнопка очистки валидаций
+    const btnClearValidations = document.getElementById('btnClearValidations');
+    if (btnClearValidations) {
+        btnClearValidations.addEventListener('click', () => {
+            clearAllDataValidations();
+            const msg = document.createElement('div');
+            msg.className = 'ai-message ai-message-assistant';
+            msg.textContent = '✅ Все валидации данных очищены!';
+            elements.aiChat.appendChild(msg);
+            elements.aiChat.scrollTop = elements.aiChat.scrollHeight;
+        });
+    }
     elements.btnAiSend.addEventListener('click', sendAiMessage);
     elements.aiInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -1250,11 +1334,75 @@ function switchSheet(sheetId) {
     // Обновить формулу бар
     updateFormulaBar();
 }
-// Обработчик экспорта из главного меню
-if (ipcRenderer) {
-    ipcRenderer.on('export', (event, format) => {
-        exportData(format);
+// Показать диалог сохранения при выходе
+async function showSaveDialog() {
+    console.log('[ShowSaveDialog] Showing confirm dialog...');
+    return new Promise((resolve) => {
+        const result = confirm('Сохранить таблицу перед закрытием?\n\nOK - Сохранить в XLSX\nОтмена - Закрыть без сохранения');
+        console.log('[ShowSaveDialog] User selected:', result);
+        resolve(result);
     });
+}
+// Экспорт в XLSX с диалогом выбора файла
+async function exportToXLSXWithDialog() {
+    const data = [];
+    // Собрать данные из таблицы
+    for (let row = 0; row < CONFIG.ROWS; row++) {
+        const rowData = [];
+        for (let col = 0; col < CONFIG.COLS; col++) {
+            const key = getCellKey(row, col);
+            const tableData = getCurrentData();
+            const cellData = tableData.get(key);
+            rowData.push(cellData?.value || '');
+        }
+        data.push(rowData);
+    }
+    // Создаём XML Spreadsheet (Excel compatible)
+    const content = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet">
+  <Worksheet ss:Name="Sheet1">
+    <Table>
+${data.map(row => `      <Row>
+${row.map(cell => `        <Cell><Data ss:Type="String">${escapeXml(cell)}</Data></Cell>`).join('\n')}
+      </Row>`).join('\n')}
+    </Table>
+  </Worksheet>
+</Workbook>`;
+    // Сохраняем через IPC
+    if (ipcRenderer) {
+        console.log('[Export] Calling save-file IPC handler...');
+        try {
+            const result = await ipcRenderer.invoke('save-file', {
+                content,
+                mimeType: 'application/vnd.ms-excel',
+                extension: 'xls',
+                defaultName: `SmartTable_${new Date().toISOString().slice(0, 10)}`
+            });
+            console.log('[Export] Save result:', result);
+            if (result.success) {
+                console.log('[Export] File saved successfully:', result.filePath);
+            }
+            else {
+                console.log('[Export] Save cancelled by user');
+            }
+        }
+        catch (error) {
+            console.error('[Export] Error saving file:', error);
+        }
+    }
+    else {
+        console.error('[Export] ipcRenderer not available!');
+    }
+}
+// Экранирование XML символов
+function escapeXml(str) {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
 }
 async function sendAiMessage() {
     const input = elements.aiInput;
@@ -2527,11 +2675,14 @@ window.toggleFilter = toggleFilter;
 // Data validation
 window.setDataValidation = setDataValidation;
 window.removeDataValidation = removeDataValidation;
+window.clearAllDataValidations = clearAllDataValidations;
 // Conditional formatting
 window.addConditionalFormat = addConditionalFormat;
 window.clearConditionalFormats = clearConditionalFormats;
 // Find and Replace
 window.findAndReplace = findAndReplace;
+// Clear state
+window.clearAllState = clearAllState;
 // ==========================================
 // === FIND AND REPLACE ===
 // ==========================================
