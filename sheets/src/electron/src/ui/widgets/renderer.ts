@@ -924,13 +924,13 @@ function setupContextMenu(): void {
   // ПКМ на ячейке
   elements.cellGrid.addEventListener('contextmenu', (e: MouseEvent) => {
     e.preventDefault();
-    
+
     const cell = (e.target as HTMLElement).closest('.cell') as HTMLElement;
     if (!cell) return;
-    
+
     const row = parseInt(cell.dataset.row || '0');
     const col = parseInt(cell.dataset.col || '0');
-    
+
     // Не сбрасывать выделение если уже выделено несколько ячеек
     if (!state.isSelecting && (!state.selectionStart || (state.selectionStart.row === row && state.selectionStart.col === col))) {
       state.contextMenuCell = { row, col };
@@ -939,27 +939,35 @@ function setupContextMenu(): void {
       // Сохранить текущее выделение
       state.contextMenuCell = state.selectedCell;
     }
-    
+
     // Показать меню
-    const menu = elements.contextMenu;
-    menu.style.left = `${e.pageX}px`;
-    menu.style.top = `${e.pageY}px`;
-    menu.classList.add('visible');
+    const menu = document.getElementById('contextMenu');
+    if (menu) {
+      menu.style.display = 'block';
+      menu.style.left = `${e.pageX}px`;
+      menu.style.top = `${e.pageY}px`;
+    }
   });
-  
+
   // Скрыть меню при клике
   document.addEventListener('click', () => {
-    elements.contextMenu.classList.remove('visible');
+    const menu = document.getElementById('contextMenu');
+    if (menu) {
+      menu.style.display = 'none';
+    }
   });
-  
+
   // Обработка действий меню
-  elements.contextMenu.addEventListener('click', (e: MouseEvent) => {
+  document.addEventListener('click', (e: MouseEvent) => {
     const item = (e.target as HTMLElement).closest('.context-menu-item') as HTMLElement;
     if (!item) return;
-    
+
     const action = item.dataset.action;
     handleContextMenuAction(action!);
-    elements.contextMenu.classList.remove('visible');
+    const menu = document.getElementById('contextMenu');
+    if (menu) {
+      menu.style.display = 'none';
+    }
   });
 }
 
@@ -968,7 +976,7 @@ function handleContextMenuAction(action: string): void {
   const row = cellRef.row;
   const col = cellRef.col;
   const data = getCurrentData();
-  
+
   switch (action) {
     case 'cut':
     case 'copy':
@@ -982,7 +990,7 @@ function handleContextMenuAction(action: string): void {
         }
       }
       break;
-      
+
     case 'paste':
       navigator.clipboard.readText().then(text => {
         const cell = getCellElement(row, col);
@@ -992,7 +1000,7 @@ function handleContextMenuAction(action: string): void {
         }
       });
       break;
-      
+
     case 'clear':
       {
         const cell = getCellElement(row, col);
@@ -1002,16 +1010,119 @@ function handleContextMenuAction(action: string): void {
         }
       }
       break;
-      
+
+    case 'bg-color':
+      {
+        const color = prompt('Введите цвет фона (hex, например #FFEBEE):', '#FFEBEE');
+        if (color) {
+          const cell = getCellElement(row, col);
+          if (cell) {
+            cell.style.backgroundColor = color;
+          }
+        }
+      }
+      break;
+
     case 'insert-row-above':
+      insertRowAboveAt(row);
+      break;
+
     case 'insert-row-below':
+      insertRowBelowAt(row);
+      break;
+
     case 'delete-row':
+      deleteRowAt(row);
+      break;
+
     case 'insert-col-left':
+      insertColumnLeftAt(col);
+      break;
+
     case 'insert-col-right':
+      insertColumnRightAt(col);
+      break;
+
     case 'delete-col':
-      console.log(`Action: ${action} (to be implemented)`);
+      deleteColumnAt(col);
       break;
   }
+
+  renderCells();
+  updateAIDataCache();
+}
+
+// Вспомогательные функции для контекстного меню
+function insertRowAboveAt(row: number): void {
+  const data = getCurrentData();
+  const rowsToMove: Array<{ oldKey: string; newKey: string; value: any }> = [];
+  data.forEach((cellData, key) => {
+    const [cellRow, cellCol] = key.split('-').map(Number);
+    if (cellRow >= row) {
+      const newKey = `${cellRow + 1}-${cellCol}`;
+      rowsToMove.push({ oldKey: key, newKey, value: cellData });
+    }
+  });
+  rowsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
+}
+
+function insertRowBelowAt(row: number): void {
+  insertRowAboveAt(row + 1);
+}
+
+function deleteRowAt(row: number): void {
+  const data = getCurrentData();
+  const keysToDelete: string[] = [];
+  data.forEach((_, key) => {
+    const [cellRow] = key.split('-').map(Number);
+    if (cellRow === row) keysToDelete.push(key);
+  });
+  keysToDelete.forEach(key => data.delete(key));
+  const rowsToMove: Array<{ oldKey: string; newKey: string; value: any }> = [];
+  data.forEach((cellData, key) => {
+    const [cellRow, cellCol] = key.split('-').map(Number);
+    if (cellRow > row) {
+      const newKey = `${cellRow - 1}-${cellCol}`;
+      rowsToMove.push({ oldKey: key, newKey, value: cellData });
+    }
+  });
+  rowsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
+}
+
+function insertColumnLeftAt(col: number): void {
+  const data = getCurrentData();
+  const colsToMove: Array<{ oldKey: string; newKey: string; value: any }> = [];
+  data.forEach((cellData, key) => {
+    const [row, cellCol] = key.split('-').map(Number);
+    if (cellCol >= col) {
+      const newKey = `${row}-${cellCol + 1}`;
+      colsToMove.push({ oldKey: key, newKey, value: cellData });
+    }
+  });
+  colsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
+}
+
+function insertColumnRightAt(col: number): void {
+  insertColumnLeftAt(col + 1);
+}
+
+function deleteColumnAt(col: number): void {
+  const data = getCurrentData();
+  const keysToDelete: string[] = [];
+  data.forEach((_, key) => {
+    const [row, cellCol] = key.split('-').map(Number);
+    if (cellCol === col) keysToDelete.push(key);
+  });
+  keysToDelete.forEach(key => data.delete(key));
+  const colsToMove: Array<{ oldKey: string; newKey: string; value: any }> = [];
+  data.forEach((cellData, key) => {
+    const [row, cellCol] = key.split('-').map(Number);
+    if (cellCol > col) {
+      const newKey = `${row}-${cellCol - 1}`;
+      colsToMove.push({ oldKey: key, newKey, value: cellData });
+    }
+  });
+  colsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
 }
 
 function setupEventListeners(): void {

@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="ui/styles/spreadsheet.css">
   <link rel="stylesheet" href="ui/styles/ai-panel.css">
   <link rel="stylesheet" href="ui/styles/charts.css">
+  <link rel="stylesheet" href="ui/styles/context-menu.css">
   <style>
     body {
       margin: 0;
@@ -87,12 +88,7 @@
   </div>
 
   <!-- Context Menu -->
-  <div class="context-menu" id="contextMenu">
-    <div class="context-menu-item" data-action="cut">Вырезать</div>
-    <div class="context-menu-item" data-action="copy">Копировать</div>
-    <div class="context-menu-item" data-action="paste">Вставить</div>
-    <div class="context-menu-item" data-action="clear">Очистить</div>
-  </div>
+  <div id="context-menu-container"></div>
 
   <!-- Charts Widget -->
   <div id="charts-container"></div>

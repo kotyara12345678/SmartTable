@@ -1,15 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="de8c9f9a-5e20-4826-8fed-2e02bd4d9615" name="Changes" comment="Fix error and new doc">
+    <list default="true" id="de8c9f9a-5e20-4826-8fed-2e02bd4d9615" name="Changes" comment="Обновил сохранение таблиц">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/main.js" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/main.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/main.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/main.js.map" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/templates/ai-panel.html" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/templates/ai-panel.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/index.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/core/ai/ai-agent.js" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/core/ai/ai-agent.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/core/ai/ai-agent.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/core/ai/ai-agent.js.map" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/core/ai/ai-service.js" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/core/ai/ai-service.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/core/ai/ai-service.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/core/ai/ai-service.js.map" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/templates/context-menu.html" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/templates/context-menu.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/widgets/renderer.js" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/widgets/renderer.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/widgets/renderer.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/widgets/renderer.js.map" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/main.ts" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/main.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/ui/templates/ai-panel.html" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/templates/ai-panel.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/index.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/ui/core/ai/ai-agent.ts" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/core/ai/ai-agent.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/ui/core/ai/ai-service.ts" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/core/ai/ai-service.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/ui/templates/context-menu.html" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/templates/context-menu.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/ui/widgets/renderer.ts" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/widgets/renderer.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -220,14 +225,6 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1769702193728</updated>
-    </task>
-    <task id="LOCAL-00006" summary="Improved compatibility with Excel.">
-      <option name="closed" value="true" />
-      <created>1769952275526</created>
-      <option name="number" value="00006" />
-      <option name="presentableId" value="LOCAL-00006" />
-      <option name="project" value="LOCAL" />
-      <updated>1769952275526</updated>
     </task>
     <task id="LOCAL-00007" summary="Fixed exports to various formats">
       <option name="closed" value="true" />
@@ -613,7 +610,15 @@
       <option name="project" value="LOCAL" />
       <updated>1771754987399</updated>
     </task>
-    <option name="localTasksCounter" value="55" />
+    <task id="LOCAL-00055" summary="Обновил сохранение таблиц">
+      <option name="closed" value="true" />
+      <created>1771757169857</created>
+      <option name="number" value="00055" />
+      <option name="presentableId" value="LOCAL-00055" />
+      <option name="project" value="LOCAL" />
+      <updated>1771757169857</updated>
+    </task>
+    <option name="localTasksCounter" value="56" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -628,7 +633,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="Выравнял таблицы, начал переробатывать дизайн" />
     <MESSAGE value="Изменил архитектуру , а также дизайн" />
     <MESSAGE value="Сделал создания окна по центру" />
     <MESSAGE value="Добавил возможность очистки столбоц в с помощью ии" />
@@ -653,6 +657,7 @@
     <MESSAGE value="feat: Добавлен расширенный функционал таблиц и интеграция диаграмм с ИИ&#10;&#10;- Расширенное форматирование ячеек (жирный, курсив, цвет текста/фона)&#10;- Вставка/удаление строк и столбцов&#10;- Объединение ячеек (merge cells)&#10;- Сортировка и фильтрация данных&#10;- Интеграция ИИ для создания диаграмм по данным таблицы&#10;- Собственный виджет диаграмм (ChartsWidget) с 4 типами: столбчатая, линейная, круговая, площадей&#10;- Экспорт диаграмм в PNG&#10;- Быстрые ответы и предложения переключиться в режим агента&#10;- Исправлено окрашивание столбцов через ИИ команды&#10;- Добавлена глобальная регистрация ChartsWidget для доступа из renderer" />
     <MESSAGE value=" Варианты названия коммита:&#10; Развёрнутый (рекомендую):&#10;feat: Масштабное обновление таблиц — Formula Bar, Undo/Redo, формулы, dropdown, условное форматирование, поиск&#10;&#10;✨ Критические исправления:&#10;- Formula Bar теперь виден всегда и на всю ширину экрана&#10;- Реализована история действий Undo/Redo (Ctrl+Z/Ctrl+Y)&#10;- Добавлено автосохранение в localStorage после каждого изменения&#10;&#10; Продвинутые формулы:&#10;- VLOOKUP — вертикальный поиск значений&#10;- HLOOKUP — горизонтальный поиск значений&#10;- INDEX — получение значения по индексу&#10;- MATCH — поиск позиции значения в диапазоне&#10;&#10; Data Validation:&#10;- Выпадающие списки (dropdown) для ячеек&#10;- Визуальный индикатор dropdown (стрелка ▼)&#10;- Поддержка через ИИ-команды (set_data_validation)&#10;&#10; Условное форматирование:&#10;- Автоматическое окрашивание ячеек по правилам&#10;- Поддержка операторов: &gt;, &lt;, =, contains&#10;- Настройка цвета фона, текста, жирности&#10;- Интеграция с ИИ (set_conditional_format)&#10;&#10; Поиск и замена:&#10;- Функция findAndReplace() с опциями&#10;- Учёт регистра (matchCase)&#10;- Поиск по точному совпадению (entireCell)&#10;- Массовая замена значений&#10;&#10; Глобальные функции для доступа из консоли:&#10;- setDataValidation(), removeDataValidation()&#10;- addConditionalFormat(), clearConditionalFormats()&#10;- findAndReplace()&#10;- undo(), redo()&#10;&#10; Исправления:&#10;- Исправлен CSS Formula Bar (display: flex вместо none)&#10;- Устранены ошибки TypeScript в формулах&#10;- Оптимизирована работа с данными ячеек&#10;&#10;Breaking changes: None&#10;Dependencies: None added&#10; Эмодзи-стиль:&#10; feat: SmartTable 2.0 — Formula Bar + Undo/Redo + 4 формулы + Dropdown + Conditional Formatting&#10;&#10; Критичные фиксы:&#10;✅ Formula Bar виден всегда (на всю ширину)&#10;✅ Undo/Redo работают (Ctrl+Z/Ctrl+Y)&#10;✅ Автосохранение в localStorage&#10;&#10; Новые формулы (4):&#10;✅ VLOOKUP — вертикальный поиск&#10;✅ HLOOKUP — горизонтальный поиск&#10;✅ INDEX — значение по индексу&#10;✅ MATCH — позиция значения&#10;&#10; Data Validation:&#10;✅ Dropdown списки для ячеек&#10;✅ Визуальная стрелка ▼&#10;✅ ИИ-команда: set_data_validation&#10;&#10; Conditional Formatting:&#10;✅ Окрашивание по правилам (&gt;, &lt;, =, contains)&#10;✅ Настройка цветов и шрифтов&#10;✅ ИИ-команда: set_conditional_format&#10;&#10; Find &amp; Replace:&#10;✅ Поиск с учётом регистра&#10;✅ Замена по точному совпадению&#10;✅ Массовая обработка&#10;&#10; Консольные команды:&#10;→ setDataValidation('A1', ['Да','Нет'])&#10;→ addConditionalFormat('B1:B10', '&gt;50', {bg_color:'#ffeb3b'})&#10;→ findAndReplace('старый', 'новый')&#10;&#10;#SmartTable #Spreadsheet #Productivity&#10; Профессиональный (Conventional Commits):&#10;feat(ui): major spreadsheet functionality enhancement with advanced formulas and data validation&#10;&#10;Critical fixes:&#10;- Formula Bar now visible by default with full-width layout&#10;- Implemented Undo/Redo functionality (Ctrl+Z/Ctrl+Y)&#10;- Added auto-save to localStorage after each change&#10;&#10;Advanced formulas (4 new):&#10;- VLOOKUP: vertical lookup in table ranges&#10;- HLOOKUP: horizontal lookup in table ranges  &#10;- INDEX: retrieve value by row/column index&#10;- MATCH: find position of value in range&#10;&#10;Data Validation:&#10;- Dropdown lists for cells with visual indicator&#10;- Click to show dropdown selection menu&#10;- AI command support: set_data_validation&#10;&#10;Conditional Formatting:&#10;- Rule-based cell styling (&gt;, &lt;, =, contains operators)&#10;- Configurable background color, text color, font weight&#10;- AI command support: set_conditional_format&#10;&#10;Find and Replace:&#10;- Global findAndReplace() function&#10;- Options: matchCase, entireCell&#10;- Batch replacement with count reporting&#10;&#10;Global API functions exposed:&#10;- setDataValidation(), removeDataValidation()&#10;- addConditionalFormat(), clearConditionalFormats()&#10;- findAndReplace(), undo(), redo()&#10;&#10;Technical changes:&#10;- Fixed formula-bar.css display property&#10;- Fixed TypeScript errors in formulas.ts&#10;- Optimized cell data handling&#10;- Added state tracking for validations and formats&#10;&#10;Performance: No impact&#10;Breaking changes: None&#10;Dependencies: None added&#10;Tests: Manual testing completed" />
     <MESSAGE value="Fix error and new doc" />
-    <option name="LAST_COMMIT_MESSAGE" value="Fix error and new doc" />
+    <MESSAGE value="Обновил сохранение таблиц" />
+    <option name="LAST_COMMIT_MESSAGE" value="Обновил сохранение таблиц" />
   </component>
 </project>

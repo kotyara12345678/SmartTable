@@ -4,8 +4,7 @@
  */
 
 const OPENROUTER_KEYS = [
-  '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',
-  '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',
+  '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',
 ];
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';

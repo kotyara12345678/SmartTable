@@ -806,23 +806,31 @@ function setupContextMenu() {
             state.contextMenuCell = state.selectedCell;
         }
         // Показать меню
-        const menu = elements.contextMenu;
-        menu.style.left = `${e.pageX}px`;
-        menu.style.top = `${e.pageY}px`;
-        menu.classList.add('visible');
+        const menu = document.getElementById('contextMenu');
+        if (menu) {
+            menu.style.display = 'block';
+            menu.style.left = `${e.pageX}px`;
+            menu.style.top = `${e.pageY}px`;
+        }
     });
     // Скрыть меню при клике
     document.addEventListener('click', () => {
-        elements.contextMenu.classList.remove('visible');
+        const menu = document.getElementById('contextMenu');
+        if (menu) {
+            menu.style.display = 'none';
+        }
     });
     // Обработка действий меню
-    elements.contextMenu.addEventListener('click', (e) => {
+    document.addEventListener('click', (e) => {
         const item = e.target.closest('.context-menu-item');
         if (!item)
             return;
         const action = item.dataset.action;
         handleContextMenuAction(action);
-        elements.contextMenu.classList.remove('visible');
+        const menu = document.getElementById('contextMenu');
+        if (menu) {
+            menu.style.display = 'none';
+        }
     });
 }
 function handleContextMenuAction(action) {
@@ -861,15 +869,107 @@ function handleContextMenuAction(action) {
                 }
             }
             break;
+        case 'bg-color':
+            {
+                const color = prompt('Введите цвет фона (hex, например #FFEBEE):', '#FFEBEE');
+                if (color) {
+                    const cell = getCellElement(row, col);
+                    if (cell) {
+                        cell.style.backgroundColor = color;
+                    }
+                }
+            }
+            break;
         case 'insert-row-above':
+            insertRowAboveAt(row);
+            break;
         case 'insert-row-below':
+            insertRowBelowAt(row);
+            break;
         case 'delete-row':
+            deleteRowAt(row);
+            break;
         case 'insert-col-left':
+            insertColumnLeftAt(col);
+            break;
         case 'insert-col-right':
+            insertColumnRightAt(col);
+            break;
         case 'delete-col':
-            console.log(`Action: ${action} (to be implemented)`);
+            deleteColumnAt(col);
             break;
     }
+    renderCells();
+    updateAIDataCache();
+}
+// Вспомогательные функции для контекстного меню
+function insertRowAboveAt(row) {
+    const data = getCurrentData();
+    const rowsToMove = [];
+    data.forEach((cellData, key) => {
+        const [cellRow, cellCol] = key.split('-').map(Number);
+        if (cellRow >= row) {
+            const newKey = `${cellRow + 1}-${cellCol}`;
+            rowsToMove.push({ oldKey: key, newKey, value: cellData });
+        }
+    });
+    rowsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
+}
+function insertRowBelowAt(row) {
+    insertRowAboveAt(row + 1);
+}
+function deleteRowAt(row) {
+    const data = getCurrentData();
+    const keysToDelete = [];
+    data.forEach((_, key) => {
+        const [cellRow] = key.split('-').map(Number);
+        if (cellRow === row)
+            keysToDelete.push(key);
+    });
+    keysToDelete.forEach(key => data.delete(key));
+    const rowsToMove = [];
+    data.forEach((cellData, key) => {
+        const [cellRow, cellCol] = key.split('-').map(Number);
+        if (cellRow > row) {
+            const newKey = `${cellRow - 1}-${cellCol}`;
+            rowsToMove.push({ oldKey: key, newKey, value: cellData });
+        }
+    });
+    rowsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
+}
+function insertColumnLeftAt(col) {
+    const data = getCurrentData();
+    const colsToMove = [];
+    data.forEach((cellData, key) => {
+        const [row, cellCol] = key.split('-').map(Number);
+        if (cellCol >= col) {
+            const newKey = `${row}-${cellCol + 1}`;
+            colsToMove.push({ oldKey: key, newKey, value: cellData });
+        }
+    });
+    colsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
+}
+function insertColumnRightAt(col) {
+    insertColumnLeftAt(col + 1);
+}
+function deleteColumnAt(col) {
+    const data = getCurrentData();
+    const keysToDelete = [];
+    data.forEach((_, key) => {
+        const [row, cellCol] = key.split('-').map(Number);
+        if (cellCol === col)
+            keysToDelete.push(key);
+    });
+    keysToDelete.forEach(key => data.delete(key));
+    const colsToMove = [];
+    data.forEach((cellData, key) => {
+        const [row, cellCol] = key.split('-').map(Number);
+        if (cellCol > col) {
+            const newKey = `${row}-${cellCol - 1}`;
+            colsToMove.push({ oldKey: key, newKey, value: cellData });
+        }
+    });
+    colsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
 }
 function setupEventListeners() {
     // Переключение вкладок меню

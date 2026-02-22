@@ -7,8 +7,7 @@ import https from 'https';
 
 // AI API Keys
 export const OPENROUTER_KEYS = [
-  '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',
-  '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',
+  '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',
 ];
 
 // Системный промт для ИИ
@@ -165,12 +164,24 @@ export class AIService {
       try {
         const response = await this.makeRequest('https://openrouter.ai/api/v1/chat/completions', requestBody, apiKey);
 
+        console.log('[AI] Response status:', response.statusCode);
+        console.log('[AI] Response body preview:', response.body?.substring(0, 200));
+
         if (response.statusCode === 401) {
+          console.error('[AI] API Key invalid, switching to next key...');
+          this.currentKeyIndex = (keyIndex + 1) % OPENROUTER_KEYS.length;
+          continue;
+        }
+
+        if (response.statusCode === 429) {
+          console.error('[AI] Rate limit exceeded, switching to next key...');
           this.currentKeyIndex = (keyIndex + 1) % OPENROUTER_KEYS.length;
           continue;
         }
 
         if (response.statusCode !== 200) {
+          console.error('[AI] Unexpected status code:', response.statusCode);
+          console.error('[AI] Response body:', response.body);
           throw new Error(`HTTP ${response.statusCode}`);
         }
 
