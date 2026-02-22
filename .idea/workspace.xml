@@ -1,16 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="de8c9f9a-5e20-4826-8fed-2e02bd4d9615" name="Changes" comment="Новая архитектура">
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/app.js" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/app.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/app.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/app.js.map" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/components/RibbonComponent.js" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/components/RibbonComponent.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/components/RibbonComponent.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/components/RibbonComponent.js.map" afterDir="false" />
+    <list default="true" id="de8c9f9a-5e20-4826-8fed-2e02bd4d9615" name="Changes" comment="feat: Добавлен расширенный функционал таблиц и интеграция диаграмм с ИИ&#10;&#10;- Расширенное форматирование ячеек (жирный, курсив, цвет текста/фона)&#10;- Вставка/удаление строк и столбцов&#10;- Объединение ячеек (merge cells)&#10;- Сортировка и фильтрация данных&#10;- Интеграция ИИ для создания диаграмм по данным таблицы&#10;- Собственный виджет диаграмм (ChartsWidget) с 4 типами: столбчатая, линейная, круговая, площадей&#10;- Экспорт диаграмм в PNG&#10;- Быстрые ответы и предложения переключиться в режим агента&#10;- Исправлено окрашивание столбцов через ИИ команды&#10;- Добавлена глобальная регистрация ChartsWidget для доступа из renderer">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/index.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/core/formulas/formulas.js" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/core/formulas/formulas.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/core/formulas/formulas.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/core/formulas/formulas.js.map" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/styles/formula-bar.css" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/styles/formula-bar.css" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/widgets/renderer.js" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/widgets/renderer.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/sheets/src/electron/dist/ui/widgets/renderer.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/dist/ui/widgets/renderer.js.map" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/app.ts" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/app.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/index.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/ui/components/RibbonComponent.ts" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/components/RibbonComponent.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/ui/core/formulas/formulas.ts" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/core/formulas/formulas.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/ui/styles/formula-bar.css" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/styles/formula-bar.css" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/sheets/src/electron/src/ui/widgets/renderer.ts" beforeDir="false" afterPath="$PROJECT_DIR$/sheets/src/electron/src/ui/widgets/renderer.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -221,14 +222,6 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1769702193728</updated>
-    </task>
-    <task id="LOCAL-00003" summary="Fixed UI styles and functionality and added chat with AI">
-      <option name="closed" value="true" />
-      <created>1769796511400</created>
-      <option name="number" value="00003" />
-      <option name="presentableId" value="LOCAL-00003" />
-      <option name="project" value="LOCAL" />
-      <updated>1769796511400</updated>
     </task>
     <task id="LOCAL-00004" summary="Fixed bugs with the theme and design">
       <option name="closed" value="true" />
@@ -614,7 +607,15 @@
       <option name="project" value="LOCAL" />
       <updated>1771685594168</updated>
     </task>
-    <option name="localTasksCounter" value="52" />
+    <task id="LOCAL-00052" summary="feat: Добавлен расширенный функционал таблиц и интеграция диаграмм с ИИ&#10;&#10;- Расширенное форматирование ячеек (жирный, курсив, цвет текста/фона)&#10;- Вставка/удаление строк и столбцов&#10;- Объединение ячеек (merge cells)&#10;- Сортировка и фильтрация данных&#10;- Интеграция ИИ для создания диаграмм по данным таблицы&#10;- Собственный виджет диаграмм (ChartsWidget) с 4 типами: столбчатая, линейная, круговая, площадей&#10;- Экспорт диаграмм в PNG&#10;- Быстрые ответы и предложения переключиться в режим агента&#10;- Исправлено окрашивание столбцов через ИИ команды&#10;- Добавлена глобальная регистрация ChartsWidget для доступа из renderer">
+      <option name="closed" value="true" />
+      <created>1771746797395</created>
+      <option name="number" value="00052" />
+      <option name="presentableId" value="LOCAL-00052" />
+      <option name="project" value="LOCAL" />
+      <updated>1771746797396</updated>
+    </task>
+    <option name="localTasksCounter" value="53" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -629,7 +630,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="Пофиксил работу сочитаний клавишь" />
     <MESSAGE value="Fix errors merge" />
     <MESSAGE value="Fix error" />
     <MESSAGE value="Выравнял таблицы, начал переробатывать дизайн" />
@@ -654,6 +654,7 @@
     <MESSAGE value="Переход на электрон удаление всего лишнего с python части" />
     <MESSAGE value="delete py sheets" />
     <MESSAGE value="Новая архитектура" />
-    <option name="LAST_COMMIT_MESSAGE" value="Новая архитектура" />
+    <MESSAGE value="feat: Добавлен расширенный функционал таблиц и интеграция диаграмм с ИИ&#10;&#10;- Расширенное форматирование ячеек (жирный, курсив, цвет текста/фона)&#10;- Вставка/удаление строк и столбцов&#10;- Объединение ячеек (merge cells)&#10;- Сортировка и фильтрация данных&#10;- Интеграция ИИ для создания диаграмм по данным таблицы&#10;- Собственный виджет диаграмм (ChartsWidget) с 4 типами: столбчатая, линейная, круговая, площадей&#10;- Экспорт диаграмм в PNG&#10;- Быстрые ответы и предложения переключиться в режим агента&#10;- Исправлено окрашивание столбцов через ИИ команды&#10;- Добавлена глобальная регистрация ChartsWidget для доступа из renderer" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat: Добавлен расширенный функционал таблиц и интеграция диаграмм с ИИ&#10;&#10;- Расширенное форматирование ячеек (жирный, курсив, цвет текста/фона)&#10;- Вставка/удаление строк и столбцов&#10;- Объединение ячеек (merge cells)&#10;- Сортировка и фильтрация данных&#10;- Интеграция ИИ для создания диаграмм по данным таблицы&#10;- Собственный виджет диаграмм (ChartsWidget) с 4 типами: столбчатая, линейная, круговая, площадей&#10;- Экспорт диаграмм в PNG&#10;- Быстрые ответы и предложения переключиться в режим агента&#10;- Исправлено окрашивание столбцов через ИИ команды&#10;- Добавлена глобальная регистрация ChartsWidget для доступа из renderer" />
   </component>
 </project>

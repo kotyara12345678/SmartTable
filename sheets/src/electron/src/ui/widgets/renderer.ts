@@ -23,10 +23,232 @@ const state = {
   isSelecting: false,
   contextMenuCell: null as { row: number, col: number } | null,
   aiDataCache: [] as Array<{ row: number; col: number; value: string }>,
+  // Undo/Redo история
+  undoStack: [] as Array<{ key: string; oldValue: any; newValue: any }>,
+  redoStack: [] as Array<{ key: string; oldValue: any; newValue: any }>,
+  // Валидация данных (dropdown списки)
+  dataValidations: new Map<string, { type: string; values: string[] }>(),
+  // Условное форматирование
+  conditionalFormats: [] as Array<{ range: string; rule: string; style: any }>,
 };
 
 // Инициализировать данные для первого листа
 state.sheetsData.set(1, new Map());
+
+// ==========================================
+// === UNDO/REDO ФУНКЦИИ ===
+// ==========================================
+function pushUndo(key: string, oldValue: any): void {
+  const MAX_UNDO = 50;
+  state.undoStack.push({ key, oldValue, newValue: state.sheetsData.get(state.currentSheet)?.get(key) });
+  if (state.undoStack.length > MAX_UNDO) {
+    state.undoStack.shift();
+  }
+  state.redoStack = []; // Очищаем redo при новом действии
+  console.log('[Undo] Pushed to undo stack, size:', state.undoStack.length);
+  
+  // Автосохранение после каждого изменения
+  autoSave();
+}
+
+function undo(): void {
+  if (state.undoStack.length === 0) {
+    console.log('[Undo] Nothing to undo');
+    return;
+  }
+  
+  const action = state.undoStack.pop()!;
+  const data = getCurrentData();
+  const currentValue = data.get(action.key);
+  
+  // Сохраняем текущее значение для redo
+  state.redoStack.push({ key: action.key, oldValue: currentValue, newValue: action.oldValue });
+  
+  // Восстанавливаем старое значение
+  if (action.oldValue) {
+    data.set(action.key, action.oldValue);
+  } else {
+    data.delete(action.key);
+  }
+  
+  console.log('[Undo] Undone:', action.key);
+  renderCells();
+  updateAIDataCache();
+  updateFormulaBar();
+  autoSave();
+}
+
+function redo(): void {
+  if (state.redoStack.length === 0) {
+    console.log('[Redo] Nothing to redo');
+    return;
+  }
+  
+  const action = state.redoStack.pop()!;
+  const data = getCurrentData();
+  
+  // Сохраняем текущее значение для undo
+  state.undoStack.push({ key: action.key, oldValue: data.get(action.key), newValue: action.newValue });
+  
+  // Восстанавливаем значение
+  if (action.newValue) {
+    data.set(action.key, action.newValue);
+  } else {
+    data.delete(action.key);
+  }
+  
+  console.log('[Redo] Redone:', action.key);
+  renderCells();
+  updateAIDataCache();
+  updateFormulaBar();
+  autoSave();
+}
+
+// ==========================================
+// === DATA VALIDATION (DROPDOWN) ===
+// ==========================================
+function setDataValidation(cellRef: string, values: string[]): void {
+  const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
+  if (!match) return;
+  
+  const col = match[1].toUpperCase().charCodeAt(0) - 65;
+  const row = parseInt(match[2]) - 1;
+  const key = getCellKey(row, col);
+  
+  state.dataValidations.set(key, { type: 'list', values });
+  console.log('[DataValidation] Set for', cellRef, ':', values);
+}
+
+function getDataValidation(row: number, col: number): { type: string; values: string[] } | null {
+  const key = getCellKey(row, col);
+  return state.dataValidations.get(key) || null;
+}
+
+function removeDataValidation(cellRef: string): void {
+  const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
+  if (!match) return;
+  
+  const col = match[1].toUpperCase().charCodeAt(0) - 65;
+  const row = parseInt(match[2]) - 1;
+  const key = getCellKey(row, col);
+  
+  state.dataValidations.delete(key);
+}
+
+// Рендеринг dropdown для ячейки
+function renderCellDropdown(cell: HTMLElement, row: number, col: number): void {
+  const validation = getDataValidation(row, col);
+  if (!validation || validation.type !== 'list') return;
+  
+  // Добавляем индикатор dropdown
+  cell.style.position = 'relative';
+  
+  const arrow = document.createElement('span');
+  arrow.innerHTML = '▼';
+  arrow.style.cssText = 'position:absolute;right:2px;top:50%;transform:translateY(-50%);font-size:10px;color:#666;pointer-events:none;';
+  cell.appendChild(arrow);
+}
+
+// Показ dropdown списка
+function showDropdownList(event: MouseEvent, cell: HTMLElement, row: number, col: number, values: string[]): void {
+  event.stopPropagation();
+  
+  // Удаляем предыдущий dropdown если есть
+  const existing = document.getElementById('cell-dropdown-list');
+  if (existing) existing.remove();
+  
+  // Создаём dropdown
+  const dropdown = document.createElement('div');
+  dropdown.id = 'cell-dropdown-list';
+  dropdown.style.cssText = `
+    position:fixed;
+    z-index:10000;
+    background:white;
+    border:1px solid #ddd;
+    border-radius:4px;
+    box-shadow:0 2px 8px rgba(0,0,0,0.15);
+    max-height:200px;
+    overflow-y:auto;
+    min-width:150px;
+  `;
+  
+  const rect = cell.getBoundingClientRect();
+  dropdown.style.left = rect.left + 'px';
+  dropdown.style.top = rect.bottom + 'px';
+  
+  values.forEach(value => {
+    const item = document.createElement('div');
+    item.textContent = value;
+    item.style.cssText = 'padding:8px 12px;cursor:pointer;font-size:13px;';
+    item.onmouseover = () => item.style.background = '#f0f0f0';
+    item.onmouseout = () => item.style.background = 'white';
+    item.onclick = () => {
+      const key = getCellKey(row, col);
+      const data = getCurrentData();
+      data.set(key, { value });
+      cell.textContent = value;
+      updateAIDataCache();
+      updateFormulaBar();
+      dropdown.remove();
+      autoSave();
+    };
+    dropdown.appendChild(item);
+  });
+  
+  document.body.appendChild(dropdown);
+  
+  // Закрыть при клике вне
+  setTimeout(() => {
+    document.addEventListener('click', function closeDropdown() {
+      dropdown.remove();
+      document.removeEventListener('click', closeDropdown);
+    });
+  }, 100);
+}
+function autoSave(): void {
+  try {
+    const dataToSave: any = {};
+    const currentData = getCurrentData();
+    currentData.forEach((value, key) => {
+      dataToSave[key] = value;
+    });
+    
+    localStorage.setItem('smarttable-autosave', JSON.stringify({
+      sheetsData: dataToSave,
+      currentSheet: state.currentSheet,
+      timestamp: Date.now()
+    }));
+    console.log('[AutoSave] Data saved to localStorage');
+  } catch (e) {
+    console.error('[AutoSave] Error:', e);
+  }
+}
+
+function autoLoad(): void {
+  try {
+    const saved = localStorage.getItem('smarttable-autosave');
+    if (saved) {
+      const data = JSON.parse(saved);
+      console.log('[AutoLoad] Found autosave from:', new Date(data.timestamp).toLocaleString());
+      
+      // Загружаем данные
+      const currentData = getCurrentData();
+      currentData.clear();
+      
+      Object.keys(data.sheetsData).forEach(key => {
+        currentData.set(key, data.sheetsData[key]);
+      });
+      
+      state.currentSheet = data.currentSheet || 1;
+      
+      renderCells();
+      updateAIDataCache();
+      console.log('[AutoLoad] Data loaded successfully');
+    }
+  } catch (e) {
+    console.error('[AutoLoad] Error:', e);
+  }
+}
 
 console.log('[Renderer] Config and State initialized!');
 
@@ -169,6 +391,9 @@ function getCurrentData(): Map<string, { value: string; style?: any }> {
 async function init(): Promise<void> {
   console.log('[Renderer] init() called');
 
+  // Автозагрузка сохранённых данных
+  autoLoad();
+
   // Рендерим формулу бар в контейнер
   const formulaBarContainer = document.getElementById('formula-bar-container');
   if (formulaBarContainer) {
@@ -292,8 +517,20 @@ function renderCells(): void {
         cell.textContent = cellData.value;
       }
 
-      // События
-      cell.addEventListener('click', () => selectCell(row, col));
+      // Проверка data validation
+      const validation = getDataValidation(row, col);
+      if (validation && validation.type === 'list') {
+        cell.style.cursor = 'pointer';
+        renderCellDropdown(cell, row, col);
+        
+        // Клик для показа dropdown
+        cell.addEventListener('click', (e) => {
+          showDropdownList(e, cell, row, col, validation.values);
+        });
+      } else {
+        cell.addEventListener('click', () => selectCell(row, col));
+      }
+
       cell.addEventListener('dblclick', () => editCell(row, col));
       cell.addEventListener('keydown', handleCellKeyDown);
       cell.addEventListener('input', handleCellInput);
@@ -408,13 +645,17 @@ function finishEditing(): void {
   const key = getCellKey(state.selectedCell.row, state.selectedCell.col);
   const value = cell.textContent || '';
   const data = getCurrentData();
+  const oldValue = data.get(key);
 
   if (value) {
     data.set(key, { value });
   } else {
     data.delete(key);
   }
-  
+
+  // Сохраняем в undo историю
+  pushUndo(key, oldValue);
+
   // Обновить кэш для ИИ
   updateAIDataCache();
 
@@ -960,7 +1201,7 @@ function setupEventListeners(): void {
 }
 
 function handleGlobalKeyDown(e: KeyboardEvent): void {
-  // Ctrl+B, Ctrl+I, Ctrl+U
+  // Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+Z, Ctrl+Y
   if (e.ctrlKey || e.metaKey) {
     switch (e.key.toLowerCase()) {
       case 'b':
@@ -974,6 +1215,14 @@ function handleGlobalKeyDown(e: KeyboardEvent): void {
       case 'u':
         e.preventDefault();
         toggleFormatting('underline');
+        break;
+      case 'z':
+        e.preventDefault();
+        undo();
+        break;
+      case 'y':
+        e.preventDefault();
+        redo();
         break;
       case 'k':
         e.preventDefault();
@@ -1566,6 +1815,31 @@ async function executeSingleCommand(action: string, params: any): Promise<void> 
   const data = getCurrentData();
 
   switch (action) {
+    case 'set_data_validation':
+      {
+        // Установка dropdown списка
+        console.log('[DEBUG] Setting data validation:', params);
+        const { cell, values } = params;
+        if (cell && Array.isArray(values)) {
+          setDataValidation(cell, values);
+          renderCells(); // Перерисовать для показа dropdown
+          console.log('[DEBUG] Data validation set for', cell, ':', values);
+        }
+      }
+      break;
+
+    case 'set_conditional_format':
+      {
+        // Установка условного форматирования
+        console.log('[DEBUG] Setting conditional format:', params);
+        const { range, rule, style } = params;
+        if (range && rule) {
+          addConditionalFormat(range, rule, style || {});
+          console.log('[DEBUG] Conditional format set for', range, ':', rule);
+        }
+      }
+      break;
+
     case 'create_chart':
       {
         // Создание диаграммы через ChartsWidget
@@ -2542,6 +2816,127 @@ function toggleFilter(): void {
 (window as any).deleteColumn = deleteColumn;
 (window as any).sortData = sortData;
 (window as any).toggleFilter = toggleFilter;
+// Data validation
+(window as any).setDataValidation = setDataValidation;
+(window as any).removeDataValidation = removeDataValidation;
+// Conditional formatting
+(window as any).addConditionalFormat = addConditionalFormat;
+(window as any).clearConditionalFormats = clearConditionalFormats;
+// Find and Replace
+(window as any).findAndReplace = findAndReplace;
+
+// ==========================================
+// === FIND AND REPLACE ===
+// ==========================================
+function findAndReplace(findText: string, replaceText: string, options: { matchCase?: boolean; entireCell?: boolean } = {}): { found: number; replaced: number } {
+  const data = getCurrentData();
+  let found = 0;
+  let replaced = 0;
+  
+  data.forEach((cellData, key) => {
+    const value = cellData.value || '';
+    let searchValue = value;
+    let searchFind = findText;
+    
+    if (!options.matchCase) {
+      searchValue = value.toLowerCase();
+      searchFind = findText.toLowerCase();
+    }
+    
+    const isMatch = options.entireCell ? searchValue === searchFind : searchValue.includes(searchFind);
+    
+    if (isMatch) {
+      found++;
+      const newValue = value.replace(new RegExp(findText, options.matchCase ? 'g' : 'gi'), replaceText);
+      if (newValue !== value) {
+        data.set(key, { ...cellData, value: newValue });
+        replaced++;
+      }
+    }
+  });
+  
+  if (replaced > 0) {
+    renderCells();
+    updateAIDataCache();
+  }
+  
+  console.log('[FindReplace] Found:', found, 'Replaced:', replaced);
+  return { found, replaced };
+}
+
+// ==========================================
+// === CONDITIONAL FORMATTING ===
+// ==========================================
+function addConditionalFormat(range: string, rule: string, style: any): void {
+  state.conditionalFormats.push({ range, rule, style });
+  applyConditionalFormatting();
+  console.log('[ConditionalFormat] Added:', { range, rule, style });
+}
+
+function clearConditionalFormats(): void {
+  state.conditionalFormats = [];
+  renderCells();
+  console.log('[ConditionalFormat] Cleared all formats');
+}
+
+function applyConditionalFormatting(): void {
+  const data = getCurrentData();
+  
+  state.conditionalFormats.forEach(format => {
+    const [startRef, endRef] = format.range.split(':');
+    if (!startRef) return;
+    
+    const startMatch = startRef.match(/^([A-Z]+)(\d+)$/i);
+    if (!startMatch) return;
+    
+    const startCol = startMatch[1].toUpperCase().charCodeAt(0) - 65;
+    const startRow = parseInt(startMatch[2]) - 1;
+    
+    let endCol = startCol;
+    let endRow = startRow;
+    
+    if (endRef) {
+      const endMatch = endRef.match(/^([A-Z]+)(\d+)$/i);
+      if (endMatch) {
+        endCol = endMatch[1].toUpperCase().charCodeAt(0) - 65;
+        endRow = parseInt(endMatch[2]) - 1;
+      }
+    }
+    
+    for (let row = startRow; row <= endRow; row++) {
+      for (let col = startCol; col <= endCol; col++) {
+        const key = getCellKey(row, col);
+        const cellData = data.get(key);
+        const value = cellData?.value;
+        const cell = getCellElement(row, col);
+        
+        if (!cell || !value) continue;
+        
+        // Проверяем правило
+        let shouldApply = false;
+        const numValue = parseFloat(value);
+        
+        if (format.rule.startsWith('>')) {
+          const threshold = parseFloat(format.rule.slice(1));
+          shouldApply = numValue > threshold;
+        } else if (format.rule.startsWith('<')) {
+          const threshold = parseFloat(format.rule.slice(1));
+          shouldApply = numValue < threshold;
+        } else if (format.rule.startsWith('=')) {
+          shouldApply = value === format.rule.slice(1);
+        } else if (format.rule.startsWith('contains:')) {
+          shouldApply = value.includes(format.rule.slice(9));
+        }
+        
+        if (shouldApply && cell) {
+          if (format.style.bg_color) cell.style.backgroundColor = format.style.bg_color;
+          if (format.style.color) cell.style.color = format.style.color;
+          if (format.style.fontWeight) cell.style.fontWeight = format.style.fontWeight;
+        }
+      }
+    }
+  });
+}
 
 // ==========================================
 // === ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ DOM ===

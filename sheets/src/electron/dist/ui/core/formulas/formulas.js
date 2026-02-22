@@ -131,6 +131,19 @@ export function evaluateFormula(formula, getData) {
             case 'AI':
                 // ИИ формула - будет реализована через IPC
                 return { value: '#AI_PROCESSING...', error: 'AI request pending' };
+            // Поиск и ссылки
+            case 'VLOOKUP':
+                // VLOOKUP(значение, таблица, номер_столбца, точное_совпадение)
+                return { value: vlookup(args, getData) };
+            case 'HLOOKUP':
+                // HLOOKUP(значение, таблица, номер_строки, точное_совпадение)
+                return { value: hlookup(args, getData) };
+            case 'INDEX':
+                // INDEX(диапазон, номер_строки, номер_столбца)
+                return { value: index(args) };
+            case 'MATCH':
+                // MATCH(значение, диапазон, тип_совпадения)
+                return { value: matchFunc(args, getData) };
             default:
                 return { value: '#NAME?', error: `Unknown function: ${funcName}` };
         }
@@ -231,5 +244,144 @@ function average(args) {
     if (numbers.length === 0)
         return 0;
     return sum(numbers) / numbers.length;
+}
+/**
+ * VLOOKUP - вертикальный поиск
+ * vlookup(значение, таблица, номер_столбца, точное_совпадение)
+ */
+function vlookup(args, getData) {
+    const [lookupValue, tableArray, colIndex, rangeLookup] = args;
+    // Парсим диапазон таблицы (например, "A1:C10")
+    if (typeof tableArray !== 'string' || !tableArray.includes(':')) {
+        return '#ERROR!';
+    }
+    const rangeMatch = tableArray.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/i);
+    if (!rangeMatch)
+        return '#ERROR!';
+    const [, startCol, startRow, endCol, endRow] = rangeMatch;
+    const startColCode = startCol.toUpperCase().charCodeAt(0) - 65;
+    const endColCode = endCol.toUpperCase().charCodeAt(0) - 65;
+    const startRowNum = parseInt(startRow) - 1;
+    const endRowNum = parseInt(endRow) - 1;
+    // Ищем значение в первом столбце диапазона
+    for (let row = startRowNum; row <= endRowNum; row++) {
+        const cellRef = String.fromCharCode(65 + startColCode) + (row + 1);
+        const cellValue = getData(cellRef);
+        if (rangeLookup === false || rangeLookup === 0) {
+            // Точное совпадение
+            if (cellValue === String(lookupValue)) {
+                const resultColCode = startColCode + colIndex - 1;
+                const resultRef = String.fromCharCode(65 + resultColCode) + (row + 1);
+                return getData(resultRef) || 0;
+            }
+        }
+        else {
+            // Приблизительное совпадение (первое значение <= lookupValue)
+            if (parseFloat(cellValue) <= lookupValue) {
+                const resultColCode = startColCode + colIndex - 1;
+                const resultRef = String.fromCharCode(65 + resultColCode) + (row + 1);
+                return getData(resultRef) || 0;
+            }
+        }
+    }
+    return '#N/A';
+}
+/**
+ * HLOOKUP - горизонтальный поиск
+ */
+function hlookup(args, getData) {
+    const [lookupValue, tableArray, rowIndex, rangeLookup] = args;
+    if (typeof tableArray !== 'string' || !tableArray.includes(':')) {
+        return '#ERROR!';
+    }
+    const rangeMatch = tableArray.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/i);
+    if (!rangeMatch)
+        return '#ERROR!';
+    const [, startCol, startRow, endCol, endRow] = rangeMatch;
+    const startColCode = startCol.toUpperCase().charCodeAt(0) - 65;
+    const endColCode = endCol.toUpperCase().charCodeAt(0) - 65;
+    const startRowNum = parseInt(startRow) - 1;
+    // Ищем значение в первой строке диапазона
+    for (let col = startColCode; col <= endColCode; col++) {
+        const cellRef = String.fromCharCode(65 + col) + (startRowNum + 1);
+        const cellValue = getData(cellRef);
+        if (rangeLookup === false || rangeLookup === 0) {
+            if (cellValue === String(lookupValue)) {
+                const resultRowNum = startRowNum + rowIndex - 1;
+                const resultRef = String.fromCharCode(65 + col) + (resultRowNum + 1);
+                return getData(resultRef) || 0;
+            }
+        }
+    }
+    return '#N/A';
+}
+/**
+ * INDEX - значение по индексу
+ * INDEX(диапазон, номер_строки, номер_столбца)
+ */
+function index(args) {
+    const [array, rowNum, colNum] = args;
+    if (typeof array !== 'string' || !array.includes(':')) {
+        return '#ERROR!';
+    }
+    const rangeMatch = array.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/i);
+    if (!rangeMatch)
+        return '#ERROR!';
+    const [, startCol, startRow, endCol, endRow] = rangeMatch;
+    const startColCode = startCol.toUpperCase().charCodeAt(0) - 65;
+    const startRowNum = parseInt(startRow) - 1;
+    const resultColCode = startColCode + colNum - 1;
+    const resultRowNum = startRowNum + rowNum - 1;
+    const resultRef = String.fromCharCode(65 + resultColCode) + (resultRowNum + 1);
+    return resultRef; // Возвращаем ссылку, значение получит evaluateFormula
+}
+/**
+ * MATCH - позиция значения в диапазоне
+ * MATCH(значение, диапазон, тип_совпадения)
+ */
+function matchFunc(args, getData) {
+    const [lookupValue, array, matchType] = args;
+    if (typeof array !== 'string' || !array.includes(':')) {
+        return '#ERROR!';
+    }
+    const rangeMatch = array.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/i);
+    if (!rangeMatch)
+        return '#ERROR!';
+    const startCol = rangeMatch[1];
+    const startRow = rangeMatch[2];
+    const endCol = rangeMatch[3];
+    const endRow = rangeMatch[4];
+    const startColCode = startCol.toUpperCase().charCodeAt(0) - 65;
+    const endColCode = endCol.toUpperCase().charCodeAt(0) - 65;
+    const startRowNum = parseInt(startRow) - 1;
+    const endRowNum = parseInt(endRow) - 1;
+    // Определяем направление поиска (строка или столбец)
+    const isVertical = startColCode === endColCode;
+    if (isVertical) {
+        // Поиск в столбце
+        for (let row = startRowNum; row <= endRowNum; row++) {
+            const cellRef = String.fromCharCode(65 + startColCode) + (row + 1);
+            const cellValue = getData(cellRef);
+            if (matchType === 0) {
+                // Точное совпадение
+                if (cellValue === String(lookupValue)) {
+                    return row - startRowNum + 1;
+                }
+            }
+        }
+    }
+    else {
+        // Поиск в строке
+        for (let col = startColCode; col <= endColCode; col++) {
+            const cellRef = String.fromCharCode(65 + col) + (startRowNum + 1);
+            const cellValue = getData(cellRef);
+            if (matchType === 0) {
+                if (cellValue === String(lookupValue)) {
+                    return col - startColCode + 1;
+                }
+            }
+        }
+    }
+    return '#N/A';
 }
 //# sourceMappingURL=formulas.js.map

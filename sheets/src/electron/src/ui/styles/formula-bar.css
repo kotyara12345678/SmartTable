@@ -1,19 +1,22 @@
 /* Formula Bar Styles */
 .formula-bar {
-  display: none;
+  display: flex;
   align-items: center;
   padding: 6px 12px;
   background: var(--surface-color);
   border-bottom: 1px solid var(--border-color);
   gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.formula-bar.visible {
-  display: flex;
+.formula-bar.hidden {
+  display: none;
 }
 
 .cell-reference {
   min-width: 60px;
+  max-width: 80px;
   padding: 5px 10px;
   background: var(--bg-color);
   border: 1px solid var(--border-color);
@@ -22,12 +25,14 @@
   font-weight: 500;
   text-align: center;
   color: var(--text-primary);
+  flex-shrink: 0;
 }
 
 .formula-divider {
   width: 1px;
   height: 24px;
   background: var(--border-color);
+  flex-shrink: 0;
 }
 
 .btn-formula {
@@ -41,6 +46,7 @@
   align-items: center;
   justify-content: center;
   transition: background 0.15s;
+  flex-shrink: 0;
 }
 
 .btn-formula:hover {
@@ -62,6 +68,7 @@
   padding: 0 10px;
   background: var(--surface-color);
   transition: border-color 0.2s;
+  min-width: 0;
 }
 
 .formula-input-wrapper:focus-within {
@@ -74,6 +81,7 @@
   color: var(--text-muted);
   font-style: italic;
   margin-right: 8px;
+  flex-shrink: 0;
 }
 
 .formula-input {
@@ -83,4 +91,6 @@
   font-size: 13px;
   padding: 5px 0;
   background: transparent;
+  width: 100%;
+  min-width: 0;
 }
