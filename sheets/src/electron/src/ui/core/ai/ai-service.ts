@@ -7,7 +7,7 @@ import https from 'https';
 
 // AI API Keys
 export const OPENROUTER_KEYS = [
-  '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',
+  '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',
 ];
 
 // Системный промт для ИИ

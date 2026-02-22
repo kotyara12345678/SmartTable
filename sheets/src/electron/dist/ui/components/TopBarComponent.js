@@ -9,53 +9,12 @@ export class TopBarComponent extends BaseComponent {
         this.fileStatus = null;
         this.menuItems = null;
         this.btnAI = null;
+        this.btnSettings = null;
     }
     init() {
-        this.render();
+        // HTML уже есть в index.html, просто инициализируем элементы
         this.initElements();
         this.bindEvents();
-    }
-    /**
-     * Рендеринг HTML
-     */
-    render() {
-        this.container.innerHTML = `
-      <header class="top-bar">
-        <div class="top-bar-left">
-          <div class="app-icon">
-            <svg viewBox="0 0 24 24" fill="none">
-              <rect x="3" y="3" width="18" height="18" rx="3" fill="#10b981"/>
-              <path d="M7 8h10M7 12h10M7 16h6" stroke="white" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-          </div>
-          <div class="file-info">
-            <span class="file-name" id="fileName">Без названия 1</span>
-            <span class="file-status" id="fileStatus">Сохранено</span>
-          </div>
-        </div>
-
-        <nav class="main-menu">
-          <button class="menu-item active" data-tab="home">Главная</button>
-          <button class="menu-item" data-tab="insert">Вставка</button>
-          <button class="menu-item" data-tab="formulas">Формулы</button>
-          <button class="menu-item" data-tab="data">Данные</button>
-          <button class="menu-item" data-tab="view">Вид</button>
-          <button class="menu-item" data-tab="help">Справка</button>
-        </nav>
-
-        <div class="top-bar-right">
-          <button class="btn-ai-top" id="btnAI">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M12 2a10 10 0 1010 10A10 10 0 0012 2z"/>
-            </svg>
-            ИИ Помощник
-          </button>
-          <button class="btn-share">Поделиться</button>
-          <div class="user-avatar" id="userAvatar">U</div>
-        </div>
-      </header>
-    `;
     }
     /**
      * Инициализация элементов
@@ -65,6 +24,7 @@ export class TopBarComponent extends BaseComponent {
         this.fileStatus = this.querySelector('#fileStatus');
         this.menuItems = this.querySelectorAll('.menu-item');
         this.btnAI = this.querySelector('#btnAI');
+        this.btnSettings = this.querySelector('#btnSettings');
     }
     /**
      * Привязка событий
@@ -76,6 +36,8 @@ export class TopBarComponent extends BaseComponent {
         });
         // Кнопка ИИ
         this.bindEvent(this.btnAI, 'click', (e) => this.handleAIClick(e));
+        // Кнопка настроек
+        this.bindEvent(this.btnSettings, 'click', (e) => this.handleSettingsClick(e));
     }
     /**
      * Обработчик клика по меню
@@ -99,23 +61,24 @@ export class TopBarComponent extends BaseComponent {
         document.dispatchEvent(new CustomEvent('ai-panel-open'));
     }
     /**
+     * Обработчик клика по кнопке настроек
+     */
+    handleSettingsClick(event) {
+        event.stopPropagation();
+        // Эмитим событие для открытия панели настроек
+        document.dispatchEvent(new CustomEvent('settings-panel-open'));
+    }
+    /**
      * Событие смены вкладки
      */
     onTabChange(tab) {
         console.log('[TopBar] Tab changed:', tab);
-        // Переопределяется в наследниках или через события
     }
-    /**
-     * Установить имя файла
-     */
     setFileName(name) {
         if (this.fileName) {
             this.fileName.textContent = name;
         }
     }
-    /**
-     * Установить статус файла
-     */
     setFileStatus(status) {
         if (this.fileStatus) {
             this.fileStatus.textContent = status;

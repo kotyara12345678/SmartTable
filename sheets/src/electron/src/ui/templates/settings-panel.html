@@ -1,0 +1,75 @@
+<!-- Settings Panel Component -->
+<div class="settings-panel" id="settingsPanel">
+  <div class="settings-header">
+    <div class="settings-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+      Настройки
+    </div>
+    <button class="btn-close-settings" id="btnCloseSettings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="settings-tabs">
+    <button class="settings-tab active" data-tab="themes">🎨 Темы</button>
+    <button class="settings-tab" data-tab="accent">🌈 Акцент</button>
+    <button class="settings-tab" data-tab="custom">✏️ Создать тему</button>
+  </div>
+
+  <div class="settings-content">
+    <!-- Вкладка: Галерея тем -->
+    <div class="settings-pane active" id="themesPane">
+      <div class="theme-gallery" id="themeGallery"></div>
+    </div>
+
+    <!-- Вкладка: Выбор акцентного цвета -->
+    <div class="settings-pane" id="accentPane">
+      <div class="accent-color-section">
+        <div class="accent-color-title">Выберите акцентный цвет</div>
+        <div class="accent-colors-grid" id="accentColorsGrid"></div>
+      </div>
+    </div>
+
+    <!-- Вкладка: Создание пользовательской темы -->
+    <div class="settings-pane" id="customPane">
+      <div class="theme-editor">
+        <div class="editor-field">
+          <label class="editor-label">Название темы</label>
+          <input type="text" class="editor-input" id="customThemeName" placeholder="Например: Летний вечер">
+        </div>
+        <div class="editor-field">
+          <label class="editor-label">Описание</label>
+          <input type="text" class="editor-input" id="customThemeDesc" placeholder="Короткое описание темы">
+        </div>
+        <div class="editor-field">
+          <label class="editor-label">Категория</label>
+          <select class="editor-input" id="customThemeCategory">
+            <option value="light">Светлая</option>
+            <option value="dark">Тёмная</option>
+          </select>
+        </div>
+        <div class="editor-field">
+          <label class="editor-label">Основной цвет</label>
+          <div class="color-picker-wrapper">
+            <input type="color" class="editor-input color-preview" id="customPrimaryColor" value="#10b981">
+            <input type="text" class="editor-input" id="customPrimaryColorText" value="#10b981" style="flex:1;">
+          </div>
+        </div>
+        <div class="editor-field">
+          <label class="editor-label">Цвет фона</label>
+          <div class="color-picker-wrapper">
+            <input type="color" class="editor-input color-preview" id="customBgColor" value="#f8f9fa">
+            <input type="text" class="editor-input" id="customBgColorText" value="#f8f9fa" style="flex:1;">
+          </div>
+        </div>
+        <button class="btn-save-theme" id="btnSaveCustomTheme">Сохранить тему</button>
+      </div>
+    </div>
+  </div>
+</div>

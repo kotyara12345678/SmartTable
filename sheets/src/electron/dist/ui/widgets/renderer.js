@@ -371,17 +371,23 @@ async function init() {
     const aiPanelContainer = document.getElementById('ai-panel-container');
     if (aiPanelContainer) {
         try {
-            const response = await fetch('ui/templates/ai-panel.html');
+            // Используем абсолютный путь для Electron
+            const basePath = window.location.href.includes('index.html')
+                ? window.location.href.substring(0, window.location.href.lastIndexOf('/')) + '/'
+                : './';
+            const response = await fetch(basePath + 'ui/templates/ai-panel.html');
             if (response.ok) {
                 aiPanelContainer.innerHTML = await response.text();
                 console.log('[Renderer] AI panel template loaded');
             }
             else {
-                console.error('[Renderer] Failed to load AI panel template');
+                console.log('[Renderer] AI panel template not found, using inline');
+                // Fallback - использовать inline HTML
+                aiPanelContainer.innerHTML = `<div class="ai-panel">...</div>`;
             }
         }
         catch (e) {
-            console.error('[Renderer] Error loading AI panel template:', e);
+            console.log('[Renderer] Error loading AI panel template, using defaults');
         }
     }
     // Инициализируем DOM элементы (после загрузки шаблонов)

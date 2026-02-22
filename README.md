@@ -5,9 +5,7 @@
 ![SmartTable](https://img.shields.io/badge/version-2.0.0-green.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue.svg)
 ![Electron](https://img.shields.io/badge/Electron-35.2-purple.svg)
-![License](https://img.shields.io/badge/license-ISC-blue.svg)
-
----
+![Python](https://img.shields.io/badge/Python-3.14-yellow.svg)
 
 ## 📖 Оглавление
 
@@ -312,29 +310,3 @@ SmartTable/
 - **Node.js** — серверная логика
 - **OpenRouter API** — интеграция с ИИ (DeepSeek)
 - **Canvas API** — отрисовка диаграмм
-
----
-
-## 📝 Лицензия
-
-ISC License
-
----
-
-## 👥 Авторы
-
-Pavel x Sava
-
----
-
-## 📮 Контакты
-
-- GitHub: [@kotyara12345678](https://github.com/kotyara12345678/SmartTable)
-
----
-
-<div align="center">
-
-**SmartTable** © 2025
-
-</div>

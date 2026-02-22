@@ -5,6 +5,8 @@
 import { TopBarComponent } from './ui/components/TopBarComponent.js';
 import { RibbonComponent } from './ui/components/RibbonComponent.js';
 import { ChartsWidget } from './ui/widgets/charts/ChartsWidget.js';
+import { SettingsPanelComponent } from './ui/components/SettingsPanelComponent.js';
+import { themeManager } from './ui/core/theme-manager.js';
 const state = {
     zoom: 100,
     currentFile: null,
@@ -14,6 +16,7 @@ const state = {
 let topBar = null;
 let ribbon = null;
 let chartsWidget = null;
+let settingsPanel = null;
 /**
  * Инициализация приложения
  */
@@ -25,6 +28,9 @@ function initApp() {
     logs.push('[App] ribbon-container: ' + !!document.getElementById('ribbon-container'));
     logs.push('[App] spreadsheet-container: ' + !!document.getElementById('spreadsheet-container'));
     try {
+        // Инициализация менеджера тем
+        logs.push('[App] Initializing ThemeManager...');
+        themeManager.initTheme();
         // Инициализация компонентов
         logs.push('[App] Creating TopBarComponent...');
         topBar = new TopBarComponent();
@@ -44,6 +50,12 @@ function initApp() {
             window.chartsWidget = chartsWidget;
             logs.push('[App] ChartsWidget initialized');
         }
+        // Инициализация панели настроек
+        logs.push('[App] Creating SettingsPanelComponent...');
+        settingsPanel = new SettingsPanelComponent();
+        settingsPanel.init();
+        window.settingsPanel = settingsPanel;
+        logs.push('[App] SettingsPanelComponent initialized');
         // Глобальные обработчики событий
         setupGlobalEventListeners();
         // Загрузка сохраненных настроек
@@ -75,6 +87,10 @@ function setupGlobalEventListeners() {
     // Событие открытия AI панели
     document.addEventListener('ai-panel-open', () => {
         openAIPanel();
+    });
+    // Событие открытия панели настроек
+    document.addEventListener('settings-panel-open', () => {
+        openSettingsPanel();
     });
     // Событие действий от Ribbon (диаграммы, сортировка и т.д.)
     document.addEventListener('ribbon-action', ((event) => {
@@ -125,6 +141,14 @@ function openAIPanel() {
     const aiPanel = document.getElementById('ai-panel-container');
     if (aiPanel) {
         aiPanel.classList.add('open');
+    }
+}
+/**
+ * Открытие панели настроек
+ */
+function openSettingsPanel() {
+    if (settingsPanel) {
+        settingsPanel.open();
     }
 }
 /**

@@ -6,6 +6,8 @@
 import { TopBarComponent } from './ui/components/TopBarComponent.js';
 import { RibbonComponent } from './ui/components/RibbonComponent.js';
 import { ChartsWidget } from './ui/widgets/charts/ChartsWidget.js';
+import { SettingsPanelComponent } from './ui/components/SettingsPanelComponent.js';
+import { themeManager } from './ui/core/theme-manager.js';
 
 // Глобальное состояние приложения
 interface AppState {
@@ -24,6 +26,7 @@ const state: AppState = {
 let topBar: TopBarComponent | null = null;
 let ribbon: RibbonComponent | null = null;
 let chartsWidget: ChartsWidget | null = null;
+let settingsPanel: SettingsPanelComponent | null = null;
 
 /**
  * Инициализация приложения
@@ -37,6 +40,10 @@ function initApp(): void {
   logs.push('[App] spreadsheet-container: ' + !!document.getElementById('spreadsheet-container'));
 
   try {
+    // Инициализация менеджера тем
+    logs.push('[App] Initializing ThemeManager...');
+    themeManager.initTheme();
+
     // Инициализация компонентов
     logs.push('[App] Creating TopBarComponent...');
     topBar = new TopBarComponent();
@@ -59,6 +66,13 @@ function initApp(): void {
       logs.push('[App] ChartsWidget initialized');
     }
 
+    // Инициализация панели настроек
+    logs.push('[App] Creating SettingsPanelComponent...');
+    settingsPanel = new SettingsPanelComponent();
+    settingsPanel.init();
+    (window as any).settingsPanel = settingsPanel;
+    logs.push('[App] SettingsPanelComponent initialized');
+
     // Глобальные обработчики событий
     setupGlobalEventListeners();
 
@@ -66,7 +80,7 @@ function initApp(): void {
     loadSettings();
 
     logs.push('[App] Initialization completed successfully');
-    
+
     // Убираем alert - теперь он мешает
     // alert(logs.join('\n'));
     console.log(logs.join('\n'));
@@ -95,6 +109,11 @@ function setupGlobalEventListeners(): void {
   // Событие открытия AI панели
   document.addEventListener('ai-panel-open', () => {
     openAIPanel();
+  });
+
+  // Событие открытия панели настроек
+  document.addEventListener('settings-panel-open', () => {
+    openSettingsPanel();
   });
 
   // Событие действий от Ribbon (диаграммы, сортировка и т.д.)
@@ -155,6 +174,15 @@ function openAIPanel(): void {
   const aiPanel = document.getElementById('ai-panel-container');
   if (aiPanel) {
     aiPanel.classList.add('open');
+  }
+}
+
+/**
+ * Открытие панели настроек
+ */
+function openSettingsPanel(): void {
+  if (settingsPanel) {
+    settingsPanel.open();
   }
 }
 
