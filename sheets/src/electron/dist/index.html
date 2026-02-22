@@ -11,6 +11,28 @@
   <link rel="stylesheet" href="ui/styles/formula-bar.css">
   <link rel="stylesheet" href="ui/styles/spreadsheet.css">
   <link rel="stylesheet" href="ui/styles/ai-panel.css">
+  <link rel="stylesheet" href="ui/styles/charts.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    #top-bar-container { flex-shrink: 0; }
+    #ribbon-container { flex-shrink: 0; }
+    #formula-bar-container { flex-shrink: 0; display: none; }
+    #formula-bar-container.visible { display: flex; }
+    #spreadsheet-container { flex: 1; overflow: hidden; position: relative; }
+    #ai-panel-container { position: fixed; top: 60px; right: 0; bottom: 0; width: 400px; z-index: 1000; transform: translateX(100%); transition: transform 0.3s; background: white; box-shadow: -2px 0 10px rgba(0,0,0,0.2); }
+    #ai-panel-container.open { transform: translateX(0); }
+    #context-menu-container { position: fixed; z-index: 10000; }
+    #charts-container { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; pointer-events: none; }
+    #charts-container > * { pointer-events: auto; }
+  </style>
 </head>
 <body>
   <!-- Top Bar -->
@@ -23,18 +45,82 @@
   <div id="formula-bar-container"></div>
 
   <!-- Spreadsheet -->
-  <div id="spreadsheet-container"></div>
+  <div id="spreadsheet-container">
+    <main class="spreadsheet-container" style="height:100%;overflow:auto;">
+      <div class="spreadsheet-wrapper">
+        <div class="corner-header"></div>
+        <div class="column-headers" id="columnHeaders"></div>
+        <div class="row-headers" id="rowHeaders"></div>
+        <div class="cell-grid-wrapper" id="cellGridWrapper">
+          <div class="cell-grid" id="cellGrid"></div>
+        </div>
+      </div>
+    </main>
+    <!-- Sheets Bar - абсолютно внизу -->
+    <footer class="sheets-bar" style="position:absolute;bottom:0;left:0;right:0;z-index:100;">
+      <div class="sheets-left">
+        <button class="btn-sheet-nav" id="btnPrevSheet">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,18 9,12 15,6"/></svg>
+        </button>
+        <button class="btn-sheet-nav" id="btnNextSheet">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9,18 15,12 9,6"/></svg>
+        </button>
+        <div class="sheets-list" id="sheetsList"></div>
+        <button class="btn-add-sheet" id="btnAddSheet">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div>
+      <div class="sheets-right">
+        <span class="status-text" id="statusText">Готово</span>
+      </div>
+    </footer>
+    <div class="fill-handle" id="fillHandle"></div>
+    <div class="formula-autocomplete" id="formulaAutocomplete">
+      <div class="formula-autocomplete-header">Формулы</div>
+      <div class="formula-autocomplete-list" id="formulaList"></div>
+    </div>
+  </div>
 
   <!-- AI Panel -->
-  <div id="ai-panel-container"></div>
+  <div id="ai-panel-container">
+    <!-- AI Panel Template loaded via JavaScript -->
+  </div>
 
   <!-- Context Menu -->
-  <div id="context-menu-container"></div>
+  <div class="context-menu" id="contextMenu">
+    <div class="context-menu-item" data-action="cut">Вырезать</div>
+    <div class="context-menu-item" data-action="copy">Копировать</div>
+    <div class="context-menu-item" data-action="paste">Вставить</div>
+    <div class="context-menu-item" data-action="clear">Очистить</div>
+  </div>
+
+  <!-- Charts Widget -->
+  <div id="charts-container"></div>
+
+  <!-- Скрытые элементы для Ribbon -->
+  <div style="display:none;">
+    <input type="color" id="textColor" value="#000000">
+    <input type="color" id="fillColor" value="#ffffff">
+    <select id="fontFamily"><option value="Arial">Arial</option></select>
+    <select id="fontSize"><option value="11">11</option></select>
+    <select id="numberFormat"><option value="general">Общий</option></select>
+    <button id="btnBold"></button>
+    <button id="btnItalic"></button>
+    <button id="btnUnderline"></button>
+    <button id="btnStrike"></button>
+    <button id="btnToggleFormulaBar"></button>
+    <button id="btnZoomIn"></button>
+    <button id="btnZoomOut"></button>
+    <span id="zoomLabel">100%</span>
+    <button id="btnAI"></button>
+  </div>
 
   <!-- Скрипты приложения -->
-  <script src="ui/core/component.js"></script>
-  <script src="ui/components/TopBarComponent.js"></script>
-  <script src="ui/components/RibbonComponent.js"></script>
-  <script src="app.js"></script>
+  <script src="ui/core/component.js" type="module"></script>
+  <script src="ui/components/TopBarComponent.js" type="module"></script>
+  <script src="ui/components/RibbonComponent.js" type="module"></script>
+  <script src="ui/widgets/charts/ChartsWidget.js" type="module"></script>
+  <script src="ui/widgets/renderer.js" type="module"></script>
+  <script src="app.js" type="module"></script>
 </body>
 </html>

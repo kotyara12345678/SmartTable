@@ -4,7 +4,7 @@
  */
 
 import { ipcMain } from 'electron';
-import { aiService, AIRequest, AIResponse } from './ai/ai-service';
+import { aiService, AIRequest, AIResponse } from './ai/ai-service.js';
 
 /**
  * Зарегистрировать все IPC обработчики

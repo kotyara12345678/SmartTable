@@ -3,7 +3,7 @@
  * Регистрация всех IPC обработчиков для main процесса
  */
 import { ipcMain } from 'electron';
-import { aiService } from './ai/ai-service';
+import { aiService } from './ai/ai-service.js';
 /**
  * Зарегистрировать все IPC обработчики
  */

@@ -7,8 +7,8 @@ import https from 'https';
 
 // AI API Keys
 export const OPENROUTER_KEYS = [
-  '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',
-  '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',
+  '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',
+  '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',
 ];
 
 // Системный промт для ИИ
@@ -30,6 +30,7 @@ You MUST suggest AGENT mode when user request has 3+ distinct tasks:
 - "посчитай, окрась, отсортируй" → suggest agent!
 - Any request with commas separating multiple tasks → suggest agent!
 - "выполни по плану" → suggest agent!
+- "создай диаграмму" → suggest agent! (requires multiple steps)
 
 ## WHEN TO USE ASSISTANT MODE (NO plan, NO suggest):
 - Single task: "покрась A1", "заполни таблицу", "посчитай сумму"
@@ -63,18 +64,10 @@ YOU MUST:
     },
     {
       "step": 2,
-      "action": "Вычисления",
-      "description": "Посчитаю среднюю выручку по отделам",
+      "action": "Создание диаграммы",
+      "description": "Создам столбчатую диаграмму по данным",
       "commands": [
-        {"action": "set_formula", "params": {"column": "D", "row": 2, "formula": "=AVERAGE(B2:C2)"}, "description": "Среднее"}
-      ]
-    },
-    {
-      "step": 3,
-      "action": "Форматирование",
-      "description": "Покрашу топ-5 в зелёный, аутсайдеров в красный",
-      "commands": [
-        {"action": "set_cell_color", "params": {"column": "A", "row": 1, "bg_color": "#E8F5E9"}, "description": "Цвет"}
+        {"action": "create_chart", "params": {"type": "bar", "title": "Диаграмма по данным"}, "description": "Создать диаграмму"}
       ]
     }
   ],
@@ -82,30 +75,29 @@ YOU MUST:
 }
 \`\`\`
 
-⚠️ IMPORTANT: Each step MUST have "commands" array with real actions!
+## 📊 CHART CREATION:
+When user asks to create a chart/diagram:
+1. Use action: "create_chart"
+2. Specify chart type: "bar", "line", "pie", or "area"
+3. Auto-select type based on data:
+   - bar = comparison (default)
+   - line = trends over time
+   - pie = parts of whole
+   - area = cumulative totals
 
-## COLORING RULES:
-1. Use set_cell_color for single cells, color_column for columns, color_row for rows
-2. Use light hex colors: #FFEBEE (red), #E8F5E9 (green), #E3F2FD (blue), #FFF3E0 (orange)
+## QUICK REPLIES:
+After your response, ALWAYS include quick reply suggestions in Russian:
+- For greetings: ["📊 Заполни таблицу", "🎨 Покрась ячейки", "📈 Посчитай суммы"]
+- For analysis: ["Выполни анализ", "Найди закономерности", "Создай отчёт"]
+- For charts: ["Создать диаграмму", "Показать данные", "Экспорт"]
 
 AVAILABLE ACTIONS:
 - set_cell, set_cell_color, color_column, color_row
 - set_formula (MUST start with "=")
 - fill_table, clear_cell, clear_column, clear_all
+- create_chart (type: bar/line/pie/area)
 
-## ⚠️ IMPORTANT EXAMPLES:
-
-User: "Покрась A1 в красный"
-→ Just: {"commands": [{"action": "set_cell_color", ...}]}
-→ NO suggestModeSwitch!
-
-User: "1. окрась имена 2. посчитай среднее 3. окрась статусы"
-→ MUST: {"executionPlan": [...], "suggestModeSwitch": "agent"}
-
-User: "Проанализируй, найди топ-5, создай отчёт"
-→ MUST: {"executionPlan": [...], "suggestModeSwitch": "agent"}
-
-Always respond in Russian. ALWAYS suggest agent for 3+ tasks!`;
+Always respond in Russian. ALWAYS suggest agent for 3+ tasks! ALWAYS include quick replies!`;
 
 /**
  * Интерфейс для ответа ИИ

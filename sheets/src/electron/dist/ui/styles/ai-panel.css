@@ -1,20 +1,34 @@
+/* AI Panel Container */
+#ai-panel-container {
+  position: fixed;
+  top: 60px;
+  right: 0;
+  bottom: 0;
+  width: 380px;
+  z-index: 1000;
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+}
+
+#ai-panel-container.open {
+  transform: translateX(0);
+}
+
 /* AI Panel Component Styles */
 .ai-panel {
-  position: fixed;
-  right: -380px;
-  top: 0;
-  width: 380px;
-  height: 100vh;
-  background: var(--surface-color);
-  box-shadow: var(--shadow-lg);
-  z-index: 1000;
-  transition: right 0.3s ease;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  background: var(--surface-color);
+  box-shadow: var(--shadow-lg);
+}
+
+#ai-panel-container.open {
+  transform: translateX(0);
 }
 
 .ai-panel.open {
-  right: 0;
+  /* This is now handled by container */
 }
 
 .ai-panel-header {

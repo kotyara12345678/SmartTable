@@ -2,8 +2,9 @@
  * SmartTable App - главный файл приложения
  * Модульная архитектура на основе компонентов
  */
-import { TopBarComponent } from './ui/components/TopBarComponent';
-import { RibbonComponent } from './ui/components/RibbonComponent';
+import { TopBarComponent } from './ui/components/TopBarComponent.js';
+import { RibbonComponent } from './ui/components/RibbonComponent.js';
+import { ChartsWidget } from './ui/widgets/charts/ChartsWidget.js';
 const state = {
     zoom: 100,
     currentFile: null,
@@ -12,25 +13,49 @@ const state = {
 // Компоненты приложения
 let topBar = null;
 let ribbon = null;
+let chartsWidget = null;
 /**
  * Инициализация приложения
  */
 function initApp() {
-    console.log('[App] Initializing SmartTable...');
+    const logs = [];
+    logs.push('[App] Initializing SmartTable...');
+    logs.push('[App] DOM ready: ' + document.readyState);
+    logs.push('[App] top-bar-container: ' + !!document.getElementById('top-bar-container'));
+    logs.push('[App] ribbon-container: ' + !!document.getElementById('ribbon-container'));
+    logs.push('[App] spreadsheet-container: ' + !!document.getElementById('spreadsheet-container'));
     try {
         // Инициализация компонентов
+        logs.push('[App] Creating TopBarComponent...');
         topBar = new TopBarComponent();
         topBar.init();
+        logs.push('[App] TopBarComponent initialized');
+        logs.push('[App] Creating RibbonComponent...');
         ribbon = new RibbonComponent();
         ribbon.init();
+        logs.push('[App] RibbonComponent initialized');
+        // Инициализация виджета диаграмм
+        const chartsContainer = document.getElementById('charts-container');
+        if (chartsContainer) {
+            logs.push('[App] Creating ChartsWidget...');
+            chartsWidget = new ChartsWidget(chartsContainer);
+            chartsWidget.init();
+            // Добавляем в глобальную область для доступа из renderer
+            window.chartsWidget = chartsWidget;
+            logs.push('[App] ChartsWidget initialized');
+        }
         // Глобальные обработчики событий
         setupGlobalEventListeners();
         // Загрузка сохраненных настроек
         loadSettings();
-        console.log('[App] Initialization completed successfully');
+        logs.push('[App] Initialization completed successfully');
+        // Убираем alert - теперь он мешает
+        // alert(logs.join('\n'));
+        console.log(logs.join('\n'));
     }
     catch (error) {
-        console.error('[App] Initialization error:', error);
+        logs.push('[App] Initialization error: ' + error.message);
+        alert(logs.join('\n'));
     }
 }
 /**
@@ -51,6 +76,11 @@ function setupGlobalEventListeners() {
     document.addEventListener('ai-panel-open', () => {
         openAIPanel();
     });
+    // Событие действий от Ribbon (диаграммы, сортировка и т.д.)
+    document.addEventListener('ribbon-action', ((event) => {
+        const { action } = event.detail;
+        handleRibbonAction(action);
+    }));
     // Горячие клавиши
     document.addEventListener('keydown', handleKeyDown);
 }
@@ -172,6 +202,127 @@ function saveSettings() {
     localStorage.setItem('smarttable-zoom', state.zoom.toString());
 }
 /**
+ * Обработка действий от Ribbon
+ */
+function handleRibbonAction(action) {
+    console.log('[App] Ribbon action:', action);
+    switch (action) {
+        case 'charts':
+            createChartFromSelection();
+            break;
+        case 'merge':
+            mergeCells();
+            break;
+        case 'insertRow':
+            insertRow();
+            break;
+        case 'deleteRow':
+            deleteRow();
+            break;
+        case 'insertCol':
+            insertColumn();
+            break;
+        case 'deleteCol':
+            deleteColumn();
+            break;
+        case 'sort':
+            sortData();
+            break;
+        case 'filter':
+            toggleFilter();
+            break;
+    }
+}
+/**
+ * Создать диаграмму из выделенного диапазона
+ */
+function createChartFromSelection() {
+    console.log('[App] Creating chart from selection...');
+    // Получаем данные из renderer (глобальная функция)
+    const getSelectedRangeData = window.getSelectedRangeData;
+    if (typeof getSelectedRangeData === 'function') {
+        const rangeData = getSelectedRangeData();
+        if (rangeData && rangeData.labels && rangeData.labels.length > 0) {
+            if (chartsWidget) {
+                chartsWidget.createChartFromRange(rangeData, 'bar', 'Диаграмма по данным таблицы');
+            }
+        }
+        else {
+            alert('Сначала выделите диапазон ячеек с данными для создания диаграммы');
+        }
+    }
+}
+/**
+ * Объединить ячейки
+ */
+function mergeCells() {
+    console.log('[App] Merge cells...');
+    const mergeCellsFunc = window.mergeCells;
+    if (typeof mergeCellsFunc === 'function') {
+        mergeCellsFunc();
+    }
+}
+/**
+ * Вставить строку
+ */
+function insertRow() {
+    console.log('[App] Insert row...');
+    const insertRowFunc = window.insertRow;
+    if (typeof insertRowFunc === 'function') {
+        insertRowFunc();
+    }
+}
+/**
+ * Удалить строку
+ */
+function deleteRow() {
+    console.log('[App] Delete row...');
+    const deleteRowFunc = window.deleteRow;
+    if (typeof deleteRowFunc === 'function') {
+        deleteRowFunc();
+    }
+}
+/**
+ * Вставить столбец
+ */
+function insertColumn() {
+    console.log('[App] Insert column...');
+    const insertColFunc = window.insertColumn;
+    if (typeof insertColFunc === 'function') {
+        insertColFunc();
+    }
+}
+/**
+ * Удалить столбец
+ */
+function deleteColumn() {
+    console.log('[App] Delete column...');
+    const deleteColFunc = window.deleteColumn;
+    if (typeof deleteColFunc === 'function') {
+        deleteColFunc();
+    }
+}
+/**
+ * Сортировать данные
+ */
+function sortData() {
+    console.log('[App] Sort data...');
+    const sortFunc = window.sortData;
+    if (typeof sortFunc === 'function') {
+        sortFunc();
+    }
+}
+/**
+ * Переключить фильтр
+ */
+function toggleFilter() {
+    console.log('[App] Toggle filter...');
+    const filterFunc = window.toggleFilter;
+    if (typeof filterFunc === 'function') {
+        filterFunc();
+    }
+}
+/**
  * Очистка при закрытии
  */
 function cleanup() {
@@ -180,6 +331,10 @@ function cleanup() {
     }
     if (ribbon) {
         ribbon.destroy();
+    }
+    if (chartsWidget) {
+        chartsWidget.close();
+        chartsWidget.destroy();
     }
 }
 // Инициализация при загрузке DOM

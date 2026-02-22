@@ -1,3 +1,6 @@
+// Проверка загрузки скрипта
+console.log('[Renderer] Script loaded!');
+
 // === КОНФИГУРАЦИЯ ===
 const CONFIG = {
   ROWS: 100,
@@ -8,27 +11,26 @@ const CONFIG = {
   HEADER_HEIGHT: 32,
 };
 
-type AIMode = 'assistant' | 'agent';
-
 // === СОСТОЯНИЕ ===
 const state = {
   selectedCell: { row: 0, col: 0 },
-  sheetsData: new Map<number, Map<string, { value: string; style?: any }>>(),
+  sheetsData: new Map(),
   sheets: [{ id: 1, name: 'Лист 1' }],
   currentSheet: 1,
   isEditing: false,
-  // Для выделения диапазона
   selectionStart: null as { row: number, col: number } | null,
   selectionEnd: null as { row: number, col: number } | null,
   isSelecting: false,
-  // Для контекстного меню
   contextMenuCell: null as { row: number, col: number } | null,
-  // Кэш данных для ИИ (обновляется автоматически)
   aiDataCache: [] as Array<{ row: number; col: number; value: string }>,
 };
 
 // Инициализировать данные для первого листа
 state.sheetsData.set(1, new Map());
+
+console.log('[Renderer] Config and State initialized!');
+
+type AIMode = 'assistant' | 'agent';
 
 // Глобальный ipcRenderer
 let ipcRenderer: any;
@@ -164,22 +166,65 @@ function getCurrentData(): Map<string, { value: string; style?: any }> {
 }
 
 // === ИНИЦИАЛИЗАЦИЯ ===
-function init(): void {
+async function init(): Promise<void> {
   console.log('[Renderer] init() called');
 
-  // Инициализируем DOM элементы
+  // Рендерим формулу бар в контейнер
+  const formulaBarContainer = document.getElementById('formula-bar-container');
+  if (formulaBarContainer) {
+    formulaBarContainer.innerHTML = `
+      <div class="formula-bar" id="formulaBar">
+        <div class="cell-reference" id="cellReference">A1</div>
+        <div class="formula-divider"></div>
+        <button class="btn-formula" id="btnFormula">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 6h16M4 12h16M4 18h16"/>
+          </svg>
+        </button>
+        <div class="formula-input-wrapper">
+          <span class="formula-icon">fx</span>
+          <input type="text" class="formula-input" id="formulaInput" placeholder="">
+        </div>
+      </div>
+    `;
+    console.log('[Renderer] Formula bar HTML rendered');
+  }
+
+  // Загружаем AI панель из шаблона
+  const aiPanelContainer = document.getElementById('ai-panel-container');
+  if (aiPanelContainer) {
+    try {
+      const response = await fetch('ui/templates/ai-panel.html');
+      if (response.ok) {
+        aiPanelContainer.innerHTML = await response.text();
+        console.log('[Renderer] AI panel template loaded');
+      } else {
+        console.error('[Renderer] Failed to load AI panel template');
+      }
+    } catch (e) {
+      console.error('[Renderer] Error loading AI panel template:', e);
+    }
+  }
+
+  // Инициализируем DOM элементы (после загрузки шаблонов)
   initElements();
+  console.log('[Renderer] initElements() done');
 
   try {
     // Получаем ipcRenderer через contextBridge
-    ipcRenderer = (window as any).electronAPI?.ipcRenderer;
-    if (!ipcRenderer) {
+    const electronAPI = (window as any).electronAPI;
+    
+    if (electronAPI?.ipcRenderer) {
+      ipcRenderer = electronAPI.ipcRenderer;
+    } else if ((window as any).require) {
       // Fallback для прямой загрузки
-      ipcRenderer = (window as any).require?.('electron')?.ipcRenderer;
+      const electron = (window as any).require('electron');
+      if (electron?.ipcRenderer) {
+        ipcRenderer = electron.ipcRenderer;
+      }
     }
-    console.log('[Renderer] ipcRenderer initialized:', !!ipcRenderer);
-  } catch (e) {
-    console.error('[Renderer] Failed to get ipcRenderer:', e);
+  } catch (e: any) {
+    console.error('[Renderer] Error:', e.message);
   }
 
   console.log('[Renderer] Starting renderColumnHeaders');
@@ -192,10 +237,10 @@ function init(): void {
   setupEventListeners();
   console.log('[Renderer] Starting updateCellReference');
   updateCellReference();
-  
+
   // Инициализируем UI режима ИИ
   updateModeUI();
-  
+
   console.log('[Renderer] init() completed');
 }
 
@@ -779,19 +824,23 @@ function setupEventListeners(): void {
   
   // Переключение вкладок меню
   let currentMenuTab = 'home';
-  document.querySelectorAll('.menu-item').forEach(item => {
+  const menuItems = document.querySelectorAll('.menu-item');
+  console.log('[Renderer] Menu items found:', menuItems.length);
+  
+  menuItems.forEach(item => {
     item.addEventListener('click', () => {
-      document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+      console.log('[Renderer] Menu item clicked:', (item as HTMLElement).dataset.tab);
+      menuItems.forEach(m => m.classList.remove('active'));
       item.classList.add('active');
       currentMenuTab = (item as HTMLElement).dataset.tab || 'home';
       
       // Скрыть/показать формула-бар в зависимости от вкладки
-      const formulaBar = document.querySelector('.formula-bar') as HTMLElement;
-      if (formulaBar) {
+      const formulaBarContainer = document.getElementById('formula-bar-container');
+      if (formulaBarContainer) {
         if (currentMenuTab === 'formulas') {
-          formulaBar.style.display = 'flex';
+          formulaBarContainer.classList.add('visible');
         } else {
-          formulaBar.style.display = 'none';
+          formulaBarContainer.classList.remove('visible');
         }
       }
     });
@@ -836,16 +885,32 @@ function setupEventListeners(): void {
   });
 
   // Навигация по листам
-  elements.btnAddSheet.addEventListener('click', addSheet);
+  console.log('[Renderer] Setting up addSheet listener, btnAddSheet:', !!elements.btnAddSheet);
+  if (elements.btnAddSheet) {
+    elements.btnAddSheet.addEventListener('click', () => {
+      console.log('[Renderer] Add sheet clicked');
+      addSheet();
+    });
+  }
   
-  // ИИ панель
-  elements.btnAI.addEventListener('click', () => {
-    elements.aiPanel.classList.add('open');
-  });
+  // ИИ панель - открываем по кнопке в топ-баре
+  const aiPanelContainer = document.getElementById('ai-panel-container');
+  console.log('[Renderer] AI panel container:', !!aiPanelContainer);
+  console.log('[Renderer] btnAI element:', !!elements.btnAI);
   
-  elements.btnCloseAI.addEventListener('click', () => {
-    elements.aiPanel.classList.remove('open');
-  });
+  if (elements.btnAI && aiPanelContainer) {
+    elements.btnAI.addEventListener('click', () => {
+      console.log('[Renderer] AI button clicked');
+      aiPanelContainer.classList.add('open');
+    });
+  }
+
+  if (elements.btnCloseAI && aiPanelContainer) {
+    elements.btnCloseAI.addEventListener('click', () => {
+      console.log('[Renderer] Close AI button clicked');
+      aiPanelContainer.classList.remove('open');
+    });
+  }
   
   elements.btnClearChat.addEventListener('click', () => {
     clearChatHistory();
@@ -868,9 +933,9 @@ function setupEventListeners(): void {
 
   // Переключение видимости formula bar
   elements.btnToggleFormulaBar.addEventListener('click', () => {
-    const formulaBar = document.querySelector('.formula-bar') as HTMLElement;
-    if (formulaBar) {
-      formulaBar.classList.toggle('visible');
+    const formulaBarContainer = document.getElementById('formula-bar-container');
+    if (formulaBarContainer) {
+      formulaBarContainer.classList.toggle('visible');
     }
   });
 
@@ -1107,6 +1172,7 @@ function addSheet(): void {
 }
 
 function renderSheets(): void {
+  console.log('[Renderer] renderSheets called, sheets:', state.sheets.length);
   elements.sheetsList.innerHTML = '';
   state.sheets.forEach(sheet => {
     const tab = document.createElement('button');
@@ -1116,6 +1182,7 @@ function renderSheets(): void {
     tab.addEventListener('click', () => switchSheet(sheet.id));
     elements.sheetsList.appendChild(tab);
   });
+  console.log('[Renderer] Sheets rendered:', elements.sheetsList.children.length);
 }
 
 function switchSheet(sheetId: number): void {
@@ -1153,6 +1220,22 @@ async function sendAiMessage(): Promise<void> {
   chatHistory.push({role: 'user', content: message});
   input.value = '';
 
+  // Получить контекст таблицы
+  const tableContext = getTableContext();
+
+  // Проверяем доступность ipcRenderer
+  if (!ipcRenderer) {
+    console.warn('[Renderer] ipcRenderer not available');
+    console.warn('[Renderer] window.electronAPI:', (window as any).electronAPI);
+    
+    // Показываем сообщение об ошибке
+    const loading = document.getElementById('ai-loading');
+    if (loading) loading.remove();
+    
+    addAiMessage('Извините, ИИ функции недоступны. Проверьте консоль для подробностей.', 'assistant');
+    return;
+  }
+
   // Показать индикатор загрузки
   const loadingMsg = document.createElement('div');
   loadingMsg.className = 'ai-message ai-message-assistant';
@@ -1161,14 +1244,7 @@ async function sendAiMessage(): Promise<void> {
   elements.aiChat.appendChild(loadingMsg);
   elements.aiChat.scrollTop = elements.aiChat.scrollHeight;
 
-  // Получить контекст таблицы
-  const tableContext = getTableContext();
-
   try {
-    if (!ipcRenderer) {
-      throw new Error('ipcRenderer not initialized');
-    }
-    
     // Отправляем текущий режим и историю
     const response = await ipcRenderer.invoke('ai-chat', { 
       message, 
@@ -1389,10 +1465,10 @@ async function executeAICommands(commands: any[]): Promise<void> {
 // Конвертер названий цветов в HEX
 function normalizeColor(color: string): string {
   if (!color) return '';
-  
+
   // Если уже HEX формат, возвращаем как есть
   if (color.startsWith('#')) return color;
-  
+
   const colorMap: Record<string, string> = {
     // Основные цвета
     'red': '#FF5252',
@@ -1411,7 +1487,7 @@ function normalizeColor(color: string): string {
     'gray': '#9E9E9E',
     'white': '#FFFFFF',
     'black': '#000000',
-    
+
     // Светлые оттенки (для фона)
     'light red': '#FFEBEE',
     'light green': '#E8F5E9',
@@ -1427,7 +1503,7 @@ function normalizeColor(color: string): string {
     'light brown': '#EFEBE9',
     'light grey': '#F5F5F5',
     'light gray': '#F5F5F5',
-    
+
     // Тёмные оттенки (для текста)
     'dark red': '#C62828',
     'dark green': '#2E7D32',
@@ -1444,9 +1520,11 @@ function normalizeColor(color: string): string {
     'dark grey': '#424242',
     'dark gray': '#424242'
   };
-  
+
   const normalized = color.toLowerCase().trim();
-  return colorMap[normalized] || color;
+  const result = colorMap[normalized] || color;
+  console.log('[DEBUG] normalizeColor:', color, '->', result);
+  return result;
 }
 
 // Применение стиля к ячейке
@@ -1488,6 +1566,54 @@ async function executeSingleCommand(action: string, params: any): Promise<void> 
   const data = getCurrentData();
 
   switch (action) {
+    case 'create_chart':
+      {
+        // Создание диаграммы через ChartsWidget
+        console.log('[DEBUG] Creating chart:', params);
+        const chartData = getSelectedRangeData();
+        
+        // Если нет выделения, используем все данные из таблицы
+        if (chartData.labels.length === 0) {
+          // Берём данные из первых двух столбцов
+          const labels: string[] = [];
+          const values: number[] = [];
+          
+          for (let row = 0; row < 20; row++) {
+            const keyA = `${row}-0`;
+            const keyB = `${row}-1`;
+            const cellA = data.get(keyA);
+            const cellB = data.get(keyB);
+            
+            if (cellA?.value) {
+              labels.push(cellA.value);
+              if (cellB?.value) {
+                const numValue = parseFloat(cellB.value);
+                values.push(isNaN(numValue) ? 0 : numValue);
+              }
+            }
+          }
+          
+          if (labels.length > 0) {
+            chartData.labels = labels;
+            chartData.datasets = [{ label: 'Данные', data: values }];
+          }
+        }
+        
+        // Создаём диаграмму
+        const chartType = params?.type || 'bar';
+        const chartTitle = params?.title || 'Диаграмма по данным';
+        
+        // Ищем ChartsWidget в глобальной области
+        const chartsWidget = (window as any).chartsWidget;
+        if (chartsWidget && chartData.labels.length > 0) {
+          chartsWidget.createChartFromRange(chartData, chartType, chartTitle);
+          console.log('[DEBUG] Chart created:', chartType, chartTitle);
+        } else {
+          console.warn('[DEBUG] ChartsWidget not found or no data');
+        }
+      }
+      break;
+
     case 'format_cells':
     case 'style_cells':
     case 'format_cell':
@@ -1679,13 +1805,17 @@ async function executeSingleCommand(action: string, params: any): Promise<void> 
       {
         console.log('[DEBUG] color_column:', params);
         const colIndex = params.column.toUpperCase().charCodeAt(0) - 65;
-        console.log('[DEBUG] colIndex:', colIndex, 'bg_color:', params.bg_color);
+        
+        // ИИ может отправлять 'color' или 'bg_color'
+        const bgColor = params.bg_color || params.color;
+        console.log('[DEBUG] colIndex:', colIndex, 'bg_color:', bgColor);
+        
         let coloredCount = 0;
         for (let r = 0; r < CONFIG.ROWS; r++) {
           const cell = getCellElement(r, colIndex);
           if (cell) {
-            if (params.bg_color) {
-              cell.style.backgroundColor = params.bg_color;
+            if (bgColor) {
+              cell.style.backgroundColor = bgColor;
             }
             if (params.text_color) {
               cell.style.color = params.text_color;
@@ -1693,7 +1823,7 @@ async function executeSingleCommand(action: string, params: any): Promise<void> 
             coloredCount++;
             const key = getCellKey(r, colIndex);
             const cellData = data.get(key) || { value: cell.textContent };
-            data.set(key, { ...cellData, style: { ...cellData.style, backgroundColor: params.bg_color, color: params.text_color } });
+            data.set(key, { ...cellData, style: { ...cellData.style, backgroundColor: bgColor, color: params.text_color } });
           }
         }
         console.log('[DEBUG] Colored cells:', coloredCount);
@@ -2190,6 +2320,250 @@ function generateAiResponse(message: string): string {
   return 'Я понял ваш запрос! Вот что я могу сделать:\n\n📝 **Создать формулу** - помогу с функциями\n📊 **Анализировать** - найду закономерности\n🧹 **Очистить данные** - уберу лишнее\n📈 **Визуализировать** - предложу графики\n\nЧт�� бы вы хотели сделать?';
 }
 
-// === ЗАПУСК ===
-init();
-renderSheets();
+// ==========================================
+// === НОВЫЕ ФУНКЦИИ ДЛЯ TABLE FUNCTIONALITY ===
+// ==========================================
+
+function getSelectedRangeData(): { labels: string[]; datasets: { label: string; data: number[] }[] } {
+  const selectedCells = elements.cellGrid.querySelectorAll('.cell.selected');
+  console.log('[Renderer] getSelectedRangeData called, selected cells:', selectedCells.length);
+  
+  if (selectedCells.length === 0) {
+    console.log('[Renderer] No cells selected, checking for data in current sheet');
+    // Если нет выделенных ячеек, попробуем получить данные из текущего листа
+    const data = getCurrentData();
+    if (data.size > 0) {
+      console.log('[Renderer] Using data from current sheet, size:', data.size);
+      // Используем данные из всех строк - первая колонка = метки, остальные = значения
+      const labels: string[] = [];
+      const dataValues: number[] = [];
+      
+      // Собираем данные построчно
+      const rows = new Map<number, Map<number, string>>();
+      data.forEach((cellData, key) => {
+        const [row, col] = key.split('-').map(Number);
+        if (!rows.has(row)) rows.set(row, new Map());
+        rows.get(row)!.set(col, cellData.value);
+      });
+      
+      // Первая строка - заголовки (метки)
+      const firstRow = rows.get(0);
+      if (firstRow) {
+        firstRow.forEach((value, col) => {
+          if (col > 0) labels.push(value || `Колонка ${col}`);
+        });
+      }
+      
+      // Остальные строки - данные
+      rows.forEach((rowData, row) => {
+        if (row > 0) {
+          rowData.forEach((value, col) => {
+            if (col > 0) {
+              const num = parseFloat(value);
+              if (!isNaN(num)) {
+                dataValues.push(num);
+              }
+            }
+          });
+        }
+      });
+      
+      console.log('[Renderer] Labels:', labels, 'Data:', dataValues);
+      
+      if (labels.length > 0 && dataValues.length > 0) {
+        return { labels, datasets: [{ label: 'Данные', data: dataValues }] };
+      }
+    }
+    return { labels: [], datasets: [] };
+  }
+  
+  const labels: string[] = [];
+  const dataValues: number[] = [];
+  const cellsByRow = new Map<number, Map<number, string>>();
+  
+  Array.from(selectedCells).sort((a, b) => {
+    const rowA = parseInt((a as HTMLElement).dataset.row || '0');
+    const colA = parseInt((a as HTMLElement).dataset.col || '0');
+    const rowB = parseInt((b as HTMLElement).dataset.row || '0');
+    const colB = parseInt((b as HTMLElement).dataset.col || '0');
+    if (rowA !== rowB) return rowA - rowB;
+    return colA - colB;
+  }).forEach(cell => {
+    const row = parseInt((cell as HTMLElement).dataset.row || '0');
+    const col = parseInt((cell as HTMLElement).dataset.col || '0');
+    const value = cell.textContent || '';
+    if (!cellsByRow.has(row)) cellsByRow.set(row, new Map());
+    cellsByRow.get(row)!.set(col, value);
+  });
+  
+  cellsByRow.forEach(rowData => {
+    const firstCol = rowData.get(0);
+    const secondCol = rowData.get(1);
+    if (firstCol !== undefined) labels.push(firstCol);
+    if (secondCol !== undefined) dataValues.push(parseFloat(secondCol) || 0);
+  });
+  
+  return { labels, datasets: [{ label: 'Данные', data: dataValues }] };
+}
+
+function mergeCells(): void {
+  const selectedCells = elements.cellGrid.querySelectorAll('.cell.selected');
+  if (selectedCells.length <= 1) { alert('Выделите несколько ячеек для объединения'); return; }
+  
+  let mergedValue = '';
+  const cellsToMerge: { row: number; col: number; cell: Element }[] = [];
+  selectedCells.forEach(cell => {
+    const row = parseInt((cell as HTMLElement).dataset.row || '0');
+    const col = parseInt((cell as HTMLElement).dataset.col || '0');
+    const value = cell.textContent || '';
+    if (value) mergedValue += (mergedValue ? ' ' : '') + value;
+    cellsToMerge.push({ row, col, cell });
+  });
+  
+  const data = getCurrentData();
+  cellsToMerge.forEach((item, index) => {
+    const key = getCellKey(item.row, item.col);
+    if (index === 0) { data.set(key, { value: mergedValue }); (item.cell as HTMLElement).textContent = mergedValue; }
+    else { data.delete(key); (item.cell as HTMLElement).textContent = ''; }
+  });
+  updateAIDataCache();
+  updateFormulaBar();
+}
+
+function insertRow(): void {
+  const { row } = state.selectedCell;
+  const data = getCurrentData();
+  const rowsToMove: Array<{ oldKey: string; newKey: string; value: any }> = [];
+  data.forEach((cellData, key) => {
+    const [cellRow, col] = key.split('-').map(Number);
+    if (cellRow >= row) { const newKey = `${cellRow + 1}-${col}`; rowsToMove.push({ oldKey: key, newKey, value: cellData }); }
+  });
+  rowsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
+  renderCells();
+  updateAIDataCache();
+}
+
+function deleteRow(): void {
+  const { row } = state.selectedCell;
+  const data = getCurrentData();
+  const keysToDelete: string[] = [];
+  data.forEach((_, key) => { const [cellRow] = key.split('-').map(Number); if (cellRow === row) keysToDelete.push(key); });
+  keysToDelete.forEach(key => data.delete(key));
+  const rowsToMove: Array<{ oldKey: string; newKey: string; value: any }> = [];
+  data.forEach((cellData, key) => {
+    const [cellRow, col] = key.split('-').map(Number);
+    if (cellRow > row) { const newKey = `${cellRow - 1}-${col}`; rowsToMove.push({ oldKey: key, newKey, value: cellData }); }
+  });
+  rowsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
+  renderCells();
+  updateAIDataCache();
+  updateFormulaBar();
+}
+
+function insertColumn(): void {
+  const { col } = state.selectedCell;
+  const data = getCurrentData();
+  const colsToMove: Array<{ oldKey: string; newKey: string; value: any }> = [];
+  data.forEach((cellData, key) => {
+    const [row, cellCol] = key.split('-').map(Number);
+    if (cellCol >= col) { const newKey = `${row}-${cellCol + 1}`; colsToMove.push({ oldKey: key, newKey, value: cellData }); }
+  });
+  colsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
+  renderCells();
+  updateAIDataCache();
+}
+
+function deleteColumn(): void {
+  const { col } = state.selectedCell;
+  const data = getCurrentData();
+  const keysToDelete: string[] = [];
+  data.forEach((_, key) => { const [, cellCol] = key.split('-').map(Number); if (cellCol === col) keysToDelete.push(key); });
+  keysToDelete.forEach(key => data.delete(key));
+  const colsToMove: Array<{ oldKey: string; newKey: string; value: any }> = [];
+  data.forEach((cellData, key) => {
+    const [row, cellCol] = key.split('-').map(Number);
+    if (cellCol > col) { const newKey = `${row}-${cellCol - 1}`; colsToMove.push({ oldKey: key, newKey, value: cellData }); }
+  });
+  colsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
+  renderCells();
+  updateAIDataCache();
+  updateFormulaBar();
+}
+
+function sortData(): void {
+  const { col } = state.selectedCell;
+  const data = getCurrentData();
+  const rowsMap = new Map<number, Map<number, string>>();
+  data.forEach((cellData, key) => {
+    const [row, cellCol] = key.split('-').map(Number);
+    if (!rowsMap.has(row)) rowsMap.set(row, new Map());
+    rowsMap.get(row)!.set(cellCol, cellData.value);
+  });
+  const sortedRows = Array.from(rowsMap.entries()).sort((a, b) => {
+    const valA = a[1].get(col) || '';
+    const valB = b[1].get(col) || '';
+    const numA = parseFloat(valA);
+    const numB = parseFloat(valB);
+    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+    return valA.localeCompare(valB, 'ru');
+  });
+  const newData = new Map<string, { value: string; style?: any }>();
+  sortedRows.forEach(([, rowData], newRow) => {
+    rowData.forEach((value, oldCol) => { const newKey = `${newRow}-${oldCol}`; newData.set(newKey, { value }); });
+  });
+  data.clear();
+  newData.forEach((value, key) => data.set(key, value));
+  renderCells();
+  updateAIDataCache();
+}
+
+function toggleFilter(): void {
+  const { col } = state.selectedCell;
+  const cell = getCellElement(state.selectedCell.row, state.selectedCell.col);
+  const value = cell?.textContent || '';
+  if (!value) { alert('Введите значение для фильтрации в активной ячейке'); return; }
+  const data = getCurrentData();
+  data.forEach((cellData, key) => {
+    const [row, cellCol] = key.split('-').map(Number);
+    if (cellCol === col) {
+      const cellEl = getCellElement(row, col);
+      if (cellEl) cellEl.style.display = cellData.value === value ? '' : 'none';
+    }
+  });
+  updateAIDataCache();
+}
+
+// Экспорт глобальных функций
+(window as any).getSelectedRangeData = getSelectedRangeData;
+(window as any).mergeCells = mergeCells;
+(window as any).insertRow = insertRow;
+(window as any).deleteRow = deleteRow;
+(window as any).insertColumn = insertColumn;
+(window as any).deleteColumn = deleteColumn;
+(window as any).sortData = sortData;
+(window as any).toggleFilter = toggleFilter;
+
+// ==========================================
+// === ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ DOM ===
+// ==========================================
+console.log('[Renderer] Script loaded, readyState:', document.readyState);
+
+async function startApp(): Promise<void> {
+  console.log('[Renderer] Starting app...');
+  await init();
+  renderSheets();
+  console.log('[Renderer] App started successfully');
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log('[Renderer] DOMContentLoaded - calling init()');
+    startApp();
+  });
+} else {
+  console.log('[Renderer] DOM already ready - calling init()');
+  startApp();
+}
+
+// Экспорт для ES module
+export {};

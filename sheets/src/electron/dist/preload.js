@@ -1,4 +1,7 @@
-import { contextBridge, ipcRenderer } from 'electron';
+"use strict";
+// Preload script - CommonJS синтаксис для Electron
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const { contextBridge, ipcRenderer } = require('electron');
 // Открываем доступ к ipcRenderer из renderer процесса
 contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer: {
@@ -10,7 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     require: (module) => {
         if (module === 'electron') {
-            return { ipcRenderer };
+            return require('electron');
         }
     }
 });

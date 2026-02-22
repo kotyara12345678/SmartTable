@@ -1,7 +1,7 @@
 /**
  * TopBar Component - верхняя панель приложения
  */
-import { BaseComponent } from '../core/component';
+import { BaseComponent } from '../core/component.js';
 
 export class TopBarComponent extends BaseComponent {
   private fileName: HTMLElement | null = null;

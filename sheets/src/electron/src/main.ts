@@ -5,7 +5,11 @@
 
 import { app, BrowserWindow, Menu, ipcMain } from 'electron';
 import path from 'path';
-import { registerIPCHandlers, cleanupIPCHandlers } from './ui/core/ipc-handlers';
+import { fileURLToPath } from 'url';
+import { registerIPCHandlers, cleanupIPCHandlers } from './ui/core/ipc-handlers.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -28,6 +32,9 @@ function createWindow(): void {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
+
+  // Открыть DevTools по умолчанию
+  mainWindow.webContents.openDevTools();
 
   // Создаем кастомное меню
   const template: Electron.MenuItemConstructorOptions[] = [

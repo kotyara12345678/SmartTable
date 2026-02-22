@@ -1,7 +1,7 @@
 /**
  * Ribbon Component - панель инструментов
  */
-import { BaseComponent } from '../core/component';
+import { BaseComponent } from '../core/component.js';
 export class RibbonComponent extends BaseComponent {
     constructor() {
         super('ribbon-container');
@@ -11,6 +11,15 @@ export class RibbonComponent extends BaseComponent {
         this.btnBold = null;
         this.btnItalic = null;
         this.btnUnderline = null;
+        // Новые кнопки
+        this.btnMerge = null;
+        this.btnInsertRow = null;
+        this.btnDeleteRow = null;
+        this.btnInsertCol = null;
+        this.btnDeleteCol = null;
+        this.btnCharts = null;
+        this.btnSort = null;
+        this.btnFilter = null;
     }
     init() {
         this.render();
@@ -175,6 +184,42 @@ export class RibbonComponent extends BaseComponent {
               <path d="M12 3v18M3 12h18"/>
             </svg>
           </button>
+          <div class="ribbon-btn-col">
+            <button class="ribbon-btn-sm" title="Вставить строку" id="btnInsertRow">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+            </button>
+            <button class="ribbon-btn-sm" title="Удалить строку" id="btnDeleteRow">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+              </svg>
+            </button>
+          </div>
+          <div class="ribbon-btn-col">
+            <button class="ribbon-btn-sm" title="Вставить столбец" id="btnInsertCol">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+            </button>
+            <button class="ribbon-btn-sm" title="Удалить столбец" id="btnDeleteCol">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="ribbon-divider"></div>
+
+        <!-- Группа: Диаграммы -->
+        <div class="ribbon-group">
+          <button class="ribbon-btn-lg" id="btnCharts">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M18 20V10M12 20V4M6 20v-6"/>
+            </svg>
+            <span>Диаграммы</span>
+          </button>
         </div>
 
         <div class="ribbon-divider"></div>
@@ -247,6 +292,15 @@ export class RibbonComponent extends BaseComponent {
         this.btnBold = this.querySelector('#btnBold');
         this.btnItalic = this.querySelector('#btnItalic');
         this.btnUnderline = this.querySelector('#btnUnderline');
+        // Новые кнопки
+        this.btnMerge = this.querySelector('#btnMerge');
+        this.btnInsertRow = this.querySelector('#btnInsertRow');
+        this.btnDeleteRow = this.querySelector('#btnDeleteRow');
+        this.btnInsertCol = this.querySelector('#btnInsertCol');
+        this.btnDeleteCol = this.querySelector('#btnDeleteCol');
+        this.btnCharts = this.querySelector('#btnCharts');
+        this.btnSort = this.querySelector('#btnSort');
+        this.btnFilter = this.querySelector('#btnFilter');
     }
     bindEvents() {
         this.bindEvent(this.btnZoomIn, 'click', () => this.handleZoom(10));
@@ -254,6 +308,15 @@ export class RibbonComponent extends BaseComponent {
         this.bindEvent(this.btnBold, 'click', () => this.handleFormat('bold'));
         this.bindEvent(this.btnItalic, 'click', () => this.handleFormat('italic'));
         this.bindEvent(this.btnUnderline, 'click', () => this.handleFormat('underline'));
+        // Новые обработчики
+        this.bindEvent(this.btnMerge, 'click', () => this.handleAction('merge'));
+        this.bindEvent(this.btnInsertRow, 'click', () => this.handleAction('insertRow'));
+        this.bindEvent(this.btnDeleteRow, 'click', () => this.handleAction('deleteRow'));
+        this.bindEvent(this.btnInsertCol, 'click', () => this.handleAction('insertCol'));
+        this.bindEvent(this.btnDeleteCol, 'click', () => this.handleAction('deleteCol'));
+        this.bindEvent(this.btnCharts, 'click', () => this.handleAction('charts'));
+        this.bindEvent(this.btnSort, 'click', () => this.handleAction('sort'));
+        this.bindEvent(this.btnFilter, 'click', () => this.handleAction('filter'));
     }
     handleZoom(delta) {
         document.dispatchEvent(new CustomEvent('zoom-change', { detail: { delta } }));
@@ -265,6 +328,9 @@ export class RibbonComponent extends BaseComponent {
         if (this.zoomLabel) {
             this.zoomLabel.textContent = `${level}%`;
         }
+    }
+    handleAction(action) {
+        document.dispatchEvent(new CustomEvent('ribbon-action', { detail: { action } }));
     }
 }
 //# sourceMappingURL=RibbonComponent.js.map
