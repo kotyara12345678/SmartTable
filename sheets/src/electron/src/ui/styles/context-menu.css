@@ -29,6 +29,8 @@
 
 .context-menu-item svg {
   flex-shrink: 0;
+  width: 16px;
+  height: 16px;
 }
 
 .context-menu-divider {

@@ -10,7 +10,7 @@ export class RibbonComponent extends BaseComponent {
   private btnBold: HTMLElement | null = null;
   private btnItalic: HTMLElement | null = null;
   private btnUnderline: HTMLElement | null = null;
-  
+
   // Новые кнопки
   private btnMerge: HTMLElement | null = null;
   private btnInsertRow: HTMLElement | null = null;
@@ -20,6 +20,13 @@ export class RibbonComponent extends BaseComponent {
   private btnCharts: HTMLElement | null = null;
   private btnSort: HTMLElement | null = null;
   private btnFilter: HTMLElement | null = null;
+  private btnAutoSum: HTMLElement | null = null;
+  private btnInsertFunction: HTMLElement | null = null;
+  private btnAlignLeft: HTMLElement | null = null;
+  private btnAlignCenter: HTMLElement | null = null;
+  private btnAlignRight: HTMLElement | null = null;
+  private btnAutoFitColumn: HTMLElement | null = null;
+  private btnWrapText: HTMLElement | null = null;
   
   constructor() {
     super('ribbon-container');
@@ -298,7 +305,7 @@ export class RibbonComponent extends BaseComponent {
     this.btnBold = this.querySelector('#btnBold');
     this.btnItalic = this.querySelector('#btnItalic');
     this.btnUnderline = this.querySelector('#btnUnderline');
-    
+
     // Новые кнопки
     this.btnMerge = this.querySelector('#btnMerge');
     this.btnInsertRow = this.querySelector('#btnInsertRow');
@@ -308,6 +315,19 @@ export class RibbonComponent extends BaseComponent {
     this.btnCharts = this.querySelector('#btnCharts');
     this.btnSort = this.querySelector('#btnSort');
     this.btnFilter = this.querySelector('#btnFilter');
+    
+    // Автосумма и функции
+    this.btnAutoSum = this.querySelector('#btnAutoSum');
+    this.btnInsertFunction = this.querySelector('#btnInsertFunction');
+    
+    // Выравнивание
+    this.btnAlignLeft = this.querySelector('#btnAlignLeft');
+    this.btnAlignCenter = this.querySelector('#btnAlignCenter');
+    this.btnAlignRight = this.querySelector('#btnAlignRight');
+    
+    // Автоподбор и перенос
+    this.btnAutoFitColumn = this.querySelector('#btnAutoFitColumn');
+    this.btnWrapText = this.querySelector('#btnWrapText');
   }
 
   private bindEvents(): void {
@@ -316,7 +336,7 @@ export class RibbonComponent extends BaseComponent {
     this.bindEvent(this.btnBold, 'click', () => this.handleFormat('bold'));
     this.bindEvent(this.btnItalic, 'click', () => this.handleFormat('italic'));
     this.bindEvent(this.btnUnderline, 'click', () => this.handleFormat('underline'));
-    
+
     // Новые обработчики
     this.bindEvent(this.btnMerge, 'click', () => this.handleAction('merge'));
     this.bindEvent(this.btnInsertRow, 'click', () => this.handleAction('insertRow'));
@@ -326,6 +346,19 @@ export class RibbonComponent extends BaseComponent {
     this.bindEvent(this.btnCharts, 'click', () => this.handleAction('charts'));
     this.bindEvent(this.btnSort, 'click', () => this.handleAction('sort'));
     this.bindEvent(this.btnFilter, 'click', () => this.handleAction('filter'));
+    
+    // Автосумма
+    this.bindEvent(this.btnAutoSum, 'click', () => this.handleAutoSum());
+    this.bindEvent(this.btnInsertFunction, 'click', () => this.handleInsertFunction());
+    
+    // Выравнивание
+    this.bindEvent(this.btnAlignLeft, 'click', () => this.handleAlign('left'));
+    this.bindEvent(this.btnAlignCenter, 'click', () => this.handleAlign('center'));
+    this.bindEvent(this.btnAlignRight, 'click', () => this.handleAlign('right'));
+    
+    // Автоподбор и перенос
+    this.bindEvent(this.btnAutoFitColumn, 'click', () => this.handleAutoFitColumn());
+    this.bindEvent(this.btnWrapText, 'click', () => this.handleWrapText());
   }
   
   private handleZoom(delta: number): void {
@@ -344,5 +377,30 @@ export class RibbonComponent extends BaseComponent {
   
   private handleAction(action: string): void {
     document.dispatchEvent(new CustomEvent('ribbon-action', { detail: { action } }));
+  }
+
+  private handleAutoSum(): void {
+    // Отправляем событие в renderer для вставки формулы SUM
+    document.dispatchEvent(new CustomEvent('auto-sum'));
+  }
+
+  private handleInsertFunction(): void {
+    // Открываем мастер функций (будет реализовано)
+    document.dispatchEvent(new CustomEvent('insert-function'));
+  }
+
+  private handleAlign(align: string): void {
+    // Отправляем событие на выравнивание текста
+    document.dispatchEvent(new CustomEvent('align-change', { detail: { align } }));
+  }
+
+  private handleAutoFitColumn(): void {
+    // Отправляем событие на автоподбор ширины колонки
+    document.dispatchEvent(new CustomEvent('auto-fit-column'));
+  }
+
+  private handleWrapText(): void {
+    // Отправляем событие на перенос текста
+    document.dispatchEvent(new CustomEvent('wrap-text'));
   }
 }

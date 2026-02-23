@@ -20,6 +20,13 @@ export class RibbonComponent extends BaseComponent {
         this.btnCharts = null;
         this.btnSort = null;
         this.btnFilter = null;
+        this.btnAutoSum = null;
+        this.btnInsertFunction = null;
+        this.btnAlignLeft = null;
+        this.btnAlignCenter = null;
+        this.btnAlignRight = null;
+        this.btnAutoFitColumn = null;
+        this.btnWrapText = null;
     }
     init() {
         this.render();
@@ -301,6 +308,16 @@ export class RibbonComponent extends BaseComponent {
         this.btnCharts = this.querySelector('#btnCharts');
         this.btnSort = this.querySelector('#btnSort');
         this.btnFilter = this.querySelector('#btnFilter');
+        // Автосумма и функции
+        this.btnAutoSum = this.querySelector('#btnAutoSum');
+        this.btnInsertFunction = this.querySelector('#btnInsertFunction');
+        // Выравнивание
+        this.btnAlignLeft = this.querySelector('#btnAlignLeft');
+        this.btnAlignCenter = this.querySelector('#btnAlignCenter');
+        this.btnAlignRight = this.querySelector('#btnAlignRight');
+        // Автоподбор и перенос
+        this.btnAutoFitColumn = this.querySelector('#btnAutoFitColumn');
+        this.btnWrapText = this.querySelector('#btnWrapText');
     }
     bindEvents() {
         this.bindEvent(this.btnZoomIn, 'click', () => this.handleZoom(10));
@@ -317,6 +334,16 @@ export class RibbonComponent extends BaseComponent {
         this.bindEvent(this.btnCharts, 'click', () => this.handleAction('charts'));
         this.bindEvent(this.btnSort, 'click', () => this.handleAction('sort'));
         this.bindEvent(this.btnFilter, 'click', () => this.handleAction('filter'));
+        // Автосумма
+        this.bindEvent(this.btnAutoSum, 'click', () => this.handleAutoSum());
+        this.bindEvent(this.btnInsertFunction, 'click', () => this.handleInsertFunction());
+        // Выравнивание
+        this.bindEvent(this.btnAlignLeft, 'click', () => this.handleAlign('left'));
+        this.bindEvent(this.btnAlignCenter, 'click', () => this.handleAlign('center'));
+        this.bindEvent(this.btnAlignRight, 'click', () => this.handleAlign('right'));
+        // Автоподбор и перенос
+        this.bindEvent(this.btnAutoFitColumn, 'click', () => this.handleAutoFitColumn());
+        this.bindEvent(this.btnWrapText, 'click', () => this.handleWrapText());
     }
     handleZoom(delta) {
         document.dispatchEvent(new CustomEvent('zoom-change', { detail: { delta } }));
@@ -331,6 +358,26 @@ export class RibbonComponent extends BaseComponent {
     }
     handleAction(action) {
         document.dispatchEvent(new CustomEvent('ribbon-action', { detail: { action } }));
+    }
+    handleAutoSum() {
+        // Отправляем событие в renderer для вставки формулы SUM
+        document.dispatchEvent(new CustomEvent('auto-sum'));
+    }
+    handleInsertFunction() {
+        // Открываем мастер функций (будет реализовано)
+        document.dispatchEvent(new CustomEvent('insert-function'));
+    }
+    handleAlign(align) {
+        // Отправляем событие на выравнивание текста
+        document.dispatchEvent(new CustomEvent('align-change', { detail: { align } }));
+    }
+    handleAutoFitColumn() {
+        // Отправляем событие на автоподбор ширины колонки
+        document.dispatchEvent(new CustomEvent('auto-fit-column'));
+    }
+    handleWrapText() {
+        // Отправляем событие на перенос текста
+        document.dispatchEvent(new CustomEvent('wrap-text'));
     }
 }
 //# sourceMappingURL=RibbonComponent.js.map

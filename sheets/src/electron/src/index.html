@@ -134,6 +134,70 @@
 
   <!-- Context Menu -->
   <div id="context-menu-container"></div>
+  
+  <!-- Context Menu for Cells -->
+  <div class="context-menu" id="contextMenu" style="display:none;">
+    <div class="context-menu-item" data-action="cut">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="6" cy="6" r="3"/>
+        <circle cx="6" cy="18" r="3"/>
+        <line x1="20" y1="4" x2="8.12" y2="15.88"/>
+      </svg>
+      Вырезать
+    </div>
+    <div class="context-menu-item" data-action="copy">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="9" y="9" width="13" height="13" rx="2"/>
+        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+      </svg>
+      Копировать
+    </div>
+    <div class="context-menu-item" data-action="paste">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/>
+        <rect x="8" y="2" width="8" height="4" rx="1"/>
+      </svg>
+      Вставить
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item" data-action="clear">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="3,6 5,6 21,6"/>
+        <path d="M19,6v14a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6m3,0V4a2,2,0,0,1,2-2h4a2,2,0,0,1,2,2v2"/>
+      </svg>
+      Очистить содержимое
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item" data-action="insert-row-above">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      Вставить строку выше
+    </div>
+    <div class="context-menu-item" data-action="insert-row-below">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      Вставить строку ниже
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item" data-action="insert-col-left">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      Вставить столбец слева
+    </div>
+    <div class="context-menu-item" data-action="insert-col-right">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      Вставить столбец справа
+    </div>
+  </div>
 
   <!-- Charts Widget -->
   <div id="charts-container"></div>
@@ -167,5 +231,44 @@
   <script src="ui/components/DashboardComponent.js" type="module"></script>
   <script src="ui/components/AIChatComponent.js" type="module"></script>
   <script src="app.js" type="module"></script>
+
+  <!-- Context Menu for Sheets -->
+  <div class="context-menu" id="sheetContextMenu">
+    <div class="context-menu-item" data-action="rename-sheet">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+      Переименовать
+    </div>
+    <div class="context-menu-item" data-action="duplicate-sheet">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+        <rect x="9" y="9" width="13" height="13" rx="2"/>
+        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+      </svg>
+      Дублировать
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item" data-action="move-sheet-left">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+        <polyline points="15,18 9,12 15,6"/>
+      </svg>
+      Переместить влево
+    </div>
+    <div class="context-menu-item" data-action="move-sheet-right">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+        <polyline points="9,18 15,12 9,6"/>
+      </svg>
+      Переместить вправо
+    </div>
+    <div class="context-menu-divider"></div>
+    <div class="context-menu-item" data-action="delete-sheet" style="color: #e74c3c;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+        <polyline points="3,6 5,6 21,6"/>
+        <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+      </svg>
+      Удалить
+    </div>
+  </div>
 </body>
 </html>

@@ -93,6 +93,30 @@ export class SettingsPanelComponent {
                 </button>
               </div>
             </div>
+
+            <!-- Отдельная группа: Функциональность -->
+            <div class="settings-tab-group">
+              <div class="settings-tab-parent" data-parent="functionality" style="cursor:pointer;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="4" y="4" width="16" height="16" rx="2"/>
+                  <line x1="9" y1="9" x2="15" y2="9"/>
+                  <line x1="9" y1="12" x2="15" y2="12"/>
+                  <line x1="9" y1="15" x2="11" y2="15"/>
+                </svg>
+                <span>Функциональность</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-left:auto;">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </div>
+              <div class="settings-tab-children" id="functionalityChildren">
+                <button class="settings-tab-child active" data-tab="auto-fit">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 3v18M3 12h18M5 5l4 4-4 4M15 11l4 4-4 4"/>
+                  </svg>
+                  Автоподстраивание колонок
+                </button>
+              </div>
+            </div>
           </div>
 
           <div class="settings-content">
@@ -191,6 +215,31 @@ export class SettingsPanelComponent {
                 <button class="btn-save-theme" id="btnSaveCustomTheme">Сохранить тему</button>
               </div>
             </div>
+
+            <!-- Вкладка: Автоподстраивание колонок -->
+            <div class="settings-pane" id="autoFitPane">
+              <div class="pane-header">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;">
+                  <rect x="4" y="4" width="16" height="16" rx="2"/>
+                  <line x1="9" y1="9" x2="15" y2="9"/>
+                  <line x1="9" y1="12" x2="15" y2="12"/>
+                  <line x1="9" y1="15" x2="11" y2="15"/>
+                </svg>
+                <h2>Автоподстраивание колонок под ширину текста</h2>
+              </div>
+              <div class="settings-section">
+                <div class="setting-item">
+                  <div class="setting-item-info">
+                    <div class="setting-item-label">Автоматическое подстраивание колонок</div>
+                    <div class="setting-item-description">При вводе текста ширина колонки автоматически увеличивается чтобы текст был виден полностью</div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="toggleAutoFitColumns">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -213,7 +262,8 @@ export class SettingsPanelComponent {
         // Клик по родительской вкладке (сворачивание/разворачивание)
         document.querySelectorAll('.settings-tab-parent').forEach(parent => {
             parent.addEventListener('click', () => {
-                const children = document.getElementById('appearanceChildren');
+                const parentName = parent.dataset.parent;
+                const children = document.getElementById(parentName + 'Children');
                 if (children) {
                     children.classList.toggle('open');
                     parent.classList.toggle('active');
@@ -244,7 +294,21 @@ export class SettingsPanelComponent {
             toggleAnimation.addEventListener('change', (e) => {
                 const value = e.target.checked;
                 localStorage.setItem('smarttable-selection-animation', value.toString());
-                this.applySelectionAnimation(value);
+            });
+        }
+        // Обработчик автоподстраивания колонок
+        const toggleAutoFit = document.getElementById('toggleAutoFitColumns');
+        if (toggleAutoFit) {
+            // Загрузить сохранённое значение
+            const savedValue = localStorage.getItem('smarttable-auto-fit-columns');
+            if (savedValue !== null) {
+                toggleAutoFit.checked = savedValue === 'true';
+            }
+            toggleAutoFit.addEventListener('change', (e) => {
+                const value = e.target.checked;
+                localStorage.setItem('smarttable-auto-fit-columns', value.toString());
+                // Отправить событие на применение
+                document.dispatchEvent(new CustomEvent('auto-fit-setting-change', { detail: { enabled: value } }));
             });
         }
     }

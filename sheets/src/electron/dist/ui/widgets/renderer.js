@@ -610,11 +610,28 @@ function finishEditing() {
     cell.contentEditable = 'false';
     // Сохранить данные
     const key = getCellKey(state.selectedCell.row, state.selectedCell.col);
-    const value = cell.textContent || '';
+    const inputValue = cell.textContent || '';
     const data = getCurrentData();
     const oldValue = data.get(key);
-    if (value) {
-        data.set(key, { value });
+    // Вычислить формулу если есть
+    let finalValue = inputValue;
+    if (inputValue.startsWith('=')) {
+        // Функция для получения значения ячейки
+        const getCellValue = (cellRef) => {
+            const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
+            if (!match)
+                return '';
+            const c = match[1].toUpperCase().charCodeAt(0) - 65;
+            const r = parseInt(match[2]) - 1;
+            const cellKey = getCellKey(r, c);
+            const cellData = data.get(cellKey);
+            return cellData?.value || '';
+        };
+        const result = evaluateFormulaLocal(inputValue, getCellValue);
+        finalValue = String(result.value);
+    }
+    if (finalValue) {
+        data.set(key, { value: finalValue });
     }
     else {
         data.delete(key);
@@ -624,7 +641,52 @@ function finishEditing() {
     // Обновить кэш для ИИ
     updateAIDataCache();
     updateFormulaBar();
+    // Перерисовать ячейку
+    renderCells();
+    // Автоподбор ширины если включен
+    const autoFitEnabled = localStorage.getItem('smarttable-auto-fit-columns') === 'true';
+    if (autoFitEnabled && finalValue) {
+        autoFitColumn(state.selectedCell.col);
+    }
 }
+// Автоподбор ширины колонки
+function autoFitColumn(col) {
+    const data = getCurrentData();
+    let maxWidth = CONFIG.CELL_WIDTH;
+    // Найти максимальную ширину текста в колонке
+    for (let row = 0; row < CONFIG.ROWS; row++) {
+        const key = getCellKey(row, col);
+        const cellData = data.get(key);
+        if (cellData?.value) {
+            const textWidth = cellData.value.length * 7 + 16;
+            maxWidth = Math.max(maxWidth, textWidth);
+        }
+    }
+    maxWidth = Math.min(maxWidth, 500);
+    // Применить ширину
+    const columnHeader = elements.columnHeaders.children[col];
+    if (columnHeader) {
+        columnHeader.style.width = `${maxWidth}px`;
+        columnHeader.style.minWidth = `${maxWidth}px`;
+    }
+    for (let row = 0; row < CONFIG.ROWS; row++) {
+        const cell = getCellElement(row, col);
+        if (cell) {
+            cell.style.width = `${maxWidth}px`;
+            cell.style.minWidth = `${maxWidth}px`;
+            cell.style.maxWidth = `${maxWidth}px`;
+        }
+    }
+}
+// Завершить редактирование при клике вне ячейки
+document.addEventListener('mousedown', (e) => {
+    if (state.isEditing) {
+        const cell = e.target;
+        if (!cell.classList.contains('cell') && !cell.closest('.cell')) {
+            finishEditing();
+        }
+    }
+});
 function handleCellKeyDown(e) {
     if (state.isEditing) {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -2327,41 +2389,93 @@ function setupColumnResize() {
             const header = elements.columnHeaders.querySelector(`.column-header[data-col="${currentCol}"]`);
             startWidth = header?.offsetWidth || CONFIG.CELL_WIDTH;
             document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            document.body.style.webkitUserSelect = 'none';
             e.preventDefault();
+            e.stopPropagation();
         }
     });
     document.addEventListener('mousemove', (e) => {
         if (!isResizing || currentCol === -1)
             return;
+        e.preventDefault();
+        e.stopPropagation();
         const diff = e.pageX - startX;
         const newWidth = Math.max(30, startWidth + diff);
-        const header = elements.columnHeaders.querySelector(`.column-header[data-col="${currentCol}"]`);
-        if (header) {
-            header.style.width = `${newWidth}px`;
-            header.style.minWidth = `${newWidth}px`;
-        }
-        // Обновить все ячейки в этом столбце
-        const cells = elements.cellGrid.querySelectorAll(`.cell[data-col="${currentCol}"]`);
-        cells.forEach(cell => {
-            cell.style.width = `${newWidth}px`;
-            cell.style.minWidth = `${newWidth}px`;
-        });
+        // Обновляем ЗАГОЛОВОК и ЯЧЕЙКИ одновременно
+        updateColumnWidth(currentCol, newWidth);
     });
     document.addEventListener('mouseup', () => {
         if (isResizing) {
             isResizing = false;
             currentCol = -1;
             document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            document.body.style.webkitUserSelect = '';
         }
     });
     // Добавить resize handle к заголовкам столбцов
     const headers = elements.columnHeaders.querySelectorAll('.column-header');
     headers.forEach(header => {
+        // Удаляем старые handle если есть
+        const oldHandle = header.querySelector('.column-resize-handle');
+        if (oldHandle)
+            oldHandle.remove();
         const handle = document.createElement('div');
         handle.className = 'column-resize-handle';
         handle.dataset.col = header.dataset.col;
         header.appendChild(handle);
     });
+}
+// Функция обновления ширины колонки
+function updateColumnWidth(col, width) {
+    // Обновляем заголовок
+    const header = elements.columnHeaders.querySelector(`.column-header[data-col="${col}"]`);
+    if (header) {
+        header.style.width = `${width}px`;
+        header.style.minWidth = `${width}px`;
+        header.style.maxWidth = `${width}px`;
+    }
+    // Обновляем все ячейки в этом столбце
+    const cells = elements.cellGrid.querySelectorAll(`.cell[data-col="${col}"]`);
+    cells.forEach(cell => {
+        cell.style.width = `${width}px`;
+        cell.style.minWidth = `${width}px`;
+        cell.style.maxWidth = `${width}px`;
+    });
+    // Обновляем grid-template-columns для правильного позиционирования
+    const columnWidths = [];
+    for (let c = 0; c < CONFIG.COLS; c++) {
+        const colHeader = elements.columnHeaders.querySelector(`.column-header[data-col="${c}"]`);
+        const colWidth = colHeader?.style.width || `${CONFIG.CELL_WIDTH}px`;
+        columnWidths.push(colWidth);
+    }
+    elements.cellGrid.style.gridTemplateColumns = columnWidths.join(' ');
+}
+// Функция обновления высоты строки
+function updateRowHeight(row, height) {
+    // Обновляем заголовок
+    const header = elements.rowHeaders.querySelector(`.row-header[data-row="${row}"]`);
+    if (header) {
+        header.style.height = `${height}px`;
+        header.style.minHeight = `${height}px`;
+        header.style.maxHeight = `${height}px`;
+    }
+    // Обновляем все ячейки в этой строке
+    const cells = elements.cellGrid.querySelectorAll(`.cell[data-row="${row}"]`);
+    cells.forEach(cell => {
+        cell.style.height = `${height}px`;
+        cell.style.minHeight = `${height}px`;
+        cell.style.maxHeight = `${height}px`;
+    });
+    // Обновляем grid-template-rows для правильного позиционирования
+    const rowHeights = [];
+    for (let r = 0; r < CONFIG.ROWS; r++) {
+        const rowHeader = elements.rowHeaders.querySelector(`.row-header[data-row="${r}"]`);
+        const rowHeight = rowHeader?.style.height || `${CONFIG.CELL_HEIGHT}px`;
+        rowHeights.push(rowHeight);
+    }
+    elements.cellGrid.style.gridTemplateRows = rowHeights.join(' ');
 }
 // === ИЗМЕНЕНИЕ РАЗМЕРА СТРОК ===
 function setupRowResize() {
@@ -2395,12 +2509,14 @@ function setupRowResize() {
         cells.forEach(cell => {
             cell.style.height = `${newHeight}px`;
         });
+        updateRowHeight(currentRow, newHeight);
     });
     document.addEventListener('mouseup', () => {
         if (isResizing) {
             isResizing = false;
             currentRow = -1;
-            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            document.body.style.webkitUserSelect = '';
         }
     });
     // Добавить resize handle к заголовкам строк
@@ -2433,13 +2549,19 @@ function setupFillHandle() {
     // Обработчик нажатия на fill handle
     fillHandle.addEventListener('mousedown', (e) => {
         e.stopPropagation();
+        e.preventDefault();
         isDragging = true;
         startCell = { ...state.selectedCell };
         fillHandle.classList.add('dragging');
+        // Убрать выделение текста
+        document.body.style.userSelect = 'none';
+        document.body.style.webkitUserSelect = 'none';
     });
     document.addEventListener('mousemove', (e) => {
         if (!isDragging || !startCell)
             return;
+        e.preventDefault();
+        e.stopPropagation();
         // Найти ячейку под курсором
         const element = document.elementFromPoint(e.clientX, e.clientY);
         const cell = element?.closest('.cell');
@@ -2484,6 +2606,9 @@ function setupFillHandle() {
             isDragging = false;
             startCell = null;
             fillHandle.classList.remove('dragging');
+            // Вернуть выделение текста
+            document.body.style.userSelect = '';
+            document.body.style.webkitUserSelect = '';
         }
     });
     // Скры��ь при скр��лле

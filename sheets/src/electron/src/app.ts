@@ -190,13 +190,45 @@ function applyZoomToSpreadsheet(): void {
   const scale = state.zoom / 100;
   const BASE_CELL_WIDTH = 100;
   const BASE_CELL_HEIGHT = 32;
-  
+  const BASE_HEADER_WIDTH = 50;
+  const BASE_HEADER_HEIGHT = 32;
+
+  // Обновляем сетку ячеек
   const cellGrid = document.getElementById('cellGrid');
   if (cellGrid) {
-    (cellGrid as HTMLElement).style.gridTemplateColumns = 
+    (cellGrid as HTMLElement).style.gridTemplateColumns =
       `repeat(26, ${BASE_CELL_WIDTH * scale}px)`;
+    (cellGrid as HTMLElement).style.gridTemplateRows =
+      `repeat(100, ${BASE_CELL_HEIGHT * scale}px)`;
   }
-  
+
+  // Обновляем заголовки столбцов
+  const columnHeaders = document.getElementById('columnHeaders');
+  if (columnHeaders) {
+    const headerCells = columnHeaders.querySelectorAll('.column-header');
+    headerCells.forEach((cell) => {
+      (cell as HTMLElement).style.minWidth = `${BASE_CELL_WIDTH * scale}px`;
+      (cell as HTMLElement).style.height = `${BASE_HEADER_HEIGHT * scale}px`;
+    });
+  }
+
+  // Обновляем заголовки строк
+  const rowHeaders = document.getElementById('rowHeaders');
+  if (rowHeaders) {
+    const headerCells = rowHeaders.querySelectorAll('.row-header');
+    headerCells.forEach((cell) => {
+      (cell as HTMLElement).style.width = `${BASE_HEADER_WIDTH * scale}px`;
+      (cell as HTMLElement).style.height = `${BASE_CELL_HEIGHT * scale}px`;
+    });
+  }
+
+  // Обновляем угловой заголовок
+  const cornerHeader = document.querySelector('.corner-header');
+  if (cornerHeader) {
+    (cornerHeader as HTMLElement).style.width = `${BASE_HEADER_WIDTH * scale}px`;
+    (cornerHeader as HTMLElement).style.height = `${BASE_HEADER_HEIGHT * scale}px`;
+  }
+
   // Сохраняем в localStorage
   localStorage.setItem('smarttable-zoom', state.zoom.toString());
 }
