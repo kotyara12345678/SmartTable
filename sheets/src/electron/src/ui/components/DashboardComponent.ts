@@ -8,6 +8,7 @@ export class DashboardComponent {
   private container: HTMLElement | null = null;
   private currentTheme: 'light' | 'dark' = 'light';
   private activeSection: string = 'dashboard';
+  private statsUpdateInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     this.init();
@@ -210,6 +211,26 @@ export class DashboardComponent {
           </div>
         </div>
 
+        <!-- Database & Storage Stats -->
+        <div class="db-project-stats">
+          <h3>Статистика базы данных</h3>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon storage">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="11" width="18" height="10" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+              </div>
+              <div class="stat-content">
+                <h4>Хранилище</h4>
+                <p class="stat-value" id="storageSize">0 MB</p>
+                <p class="stat-detail">Свободно: <span id="freeSpace">0 MB</span></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Activity Breakdown -->
         <div class="activity-breakdown">
           <h3>Распределение времени сегодня</h3>
@@ -397,6 +418,12 @@ export class DashboardComponent {
 
     // Profile avatar upload
     this.bindProfileAvatarEvents();
+
+    // Обновляем статистику БД и проектов
+    this.updateDatabaseStats();
+
+    // Добавляем обработчики для карточек статистики
+    this.bindStatsCardEvents();
 
     // Prevent close on content click
     const wrapper = this.container?.querySelector('.dashboard-wrapper');
@@ -621,6 +648,531 @@ export class DashboardComponent {
     return Math.round((value / total) * 100);
   }
 
+  private updateDatabaseStats(): void {
+    // Расчет размера базы данных
+    let dbSize = 0;
+    let messageCount = 0;
+
+    // Получаем все данные из localStorage
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key) {
+        const value = localStorage.getItem(key);
+        if (value) {
+          dbSize += key.length + value.length;
+          
+          // Считаем сообщения AI
+          if (key.includes('ai') || key.includes('chat') || key.includes('message')) {
+            try {
+              const data = JSON.parse(value);
+              if (Array.isArray(data)) {
+                messageCount += data.length;
+              }
+            } catch {
+              // Игнорируем ошибки парсинга
+            }
+          }
+        }
+      }
+    }
+
+    // Расчет размера в KB/MB
+    const dbSizeKB = Math.round(dbSize / 1024);
+    const dbSizeMB = (dbSizeKB / 1024).toFixed(2);
+
+    // Обновляем элементы хранилища
+    const storageSizeElement = document.getElementById('storageSize');
+    const freeSpaceElement = document.getElementById('freeSpace');
+    const totalStorageSizeElement = document.getElementById('totalStorageSize');
+    
+    if (storageSizeElement) {
+      storageSizeElement.textContent = `${dbSizeKB > 1024 ? `${dbSizeMB} MB` : `${dbSizeKB} KB`}`;
+    }
+    if (freeSpaceElement) {
+      freeSpaceElement.textContent = `${Math.max(0, 10 - parseFloat(dbSizeMB)).toFixed(2)} MB`;
+    }
+    if (totalStorageSizeElement) {
+      totalStorageSizeElement.textContent = `${dbSizeMB} MB`;
+    }
+  }
+
+  private countJSONProjects(): number {
+    let count = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.includes('project') || key.includes('json') || key.endsWith('.json'))) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  private countTotalFiles(): number {
+    let count = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.includes('file') || key.includes('document') || key.includes('sheet'))) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  private countAISessions(): number {
+    try {
+      const sessions = localStorage.getItem('ai_sessions');
+      if (sessions) {
+        const data = JSON.parse(sessions);
+        return Array.isArray(data) ? data.length : 0;
+      }
+    } catch {
+      // Игнорируем ошибки
+    }
+    return 0;
+  }
+
+  private countActiveSessions(): number {
+    try {
+      const currentSession = localStorage.getItem('time_tracker_current_session');
+      if (currentSession) {
+        const session = JSON.parse(currentSession);
+        return session.is_active ? 1 : 0;
+      }
+    } catch {
+      // Игнорируем ошибки
+    }
+    return 0;
+  }
+
+  private calculateStorageSize(): string {
+    let totalSize = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key) {
+        const value = localStorage.getItem(key);
+        if (value) {
+          totalSize += key.length + value.length;
+        }
+      }
+    }
+    
+    const sizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+    return `${sizeMB} MB`;
+  }
+
+  private calculateFreeSpace(): string {
+    // localStorage обычно имеет лимит ~5-10MB
+    let totalSize = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key) {
+        const value = localStorage.getItem(key);
+        if (value) {
+          totalSize += key.length + value.length;
+        }
+      }
+    }
+    
+    const usedMB = totalSize / (1024 * 1024);
+    const freeMB = Math.max(0, 10 - usedMB); // Предполагаем лимит 10MB
+    return `${freeMB.toFixed(2)} MB`;
+  }
+
+  private bindStatsCardEvents(): void {
+    console.log('[Dashboard] Binding stats card events...');
+    
+    // Добавляем клик на карточку хранилища
+    const storageCard = this.container?.querySelector('.stat-icon.storage')?.closest('.stat-card') as HTMLElement;
+    console.log('[Dashboard] Storage card found:', !!storageCard);
+    
+    if (storageCard) {
+      storageCard.addEventListener('click', (e) => {
+        console.log('[Dashboard] Storage card clicked!');
+        e.preventDefault();
+        e.stopPropagation();
+        this.showStorageDetails();
+      });
+      storageCard.style.cursor = 'pointer';
+      storageCard.style.position = 'relative';
+      
+      // Добавляем визуальный индикатор кликабельности
+      storageCard.style.transition = 'transform 0.2s ease, box-shadow 0.2s ease';
+      console.log('[Dashboard] Storage card event listener added');
+    }
+
+    // Добавляем клики на другие карточки для будущей функциональности
+    const dbCard = this.container?.querySelector('.stat-icon.database')?.closest('.stat-card') as HTMLElement;
+    console.log('[Dashboard] DB card found:', !!dbCard);
+    
+    if (dbCard) {
+      dbCard.addEventListener('click', (e) => {
+        console.log('[Dashboard] DB card clicked!');
+        e.preventDefault();
+        e.stopPropagation();
+        this.showDatabaseDetails();
+      });
+      dbCard.style.cursor = 'pointer';
+      dbCard.style.position = 'relative';
+      dbCard.style.transition = 'transform 0.2s ease, box-shadow 0.2s ease';
+      console.log('[Dashboard] DB card event listener added');
+    }
+  }
+
+  private showStorageDetails(): void {
+    const storageData = this.getDetailedStorageInfo();
+    const aiSessionCount = this.countAISessions();
+    const projectCount = this.countJSONProjects();
+    
+    const modal = document.createElement('div');
+    modal.className = 'storage-modal-overlay';
+    modal.innerHTML = `
+      <div class="storage-modal">
+        <div class="storage-modal-header">
+          <h3>Детальная информация о хранилище</h3>
+          <button class="storage-modal-close" onclick="this.closest('.storage-modal-overlay').remove()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="storage-modal-content">
+          <div class="storage-overview">
+            <div class="storage-chart">
+              <div class="storage-circle">
+                <div class="storage-fill" style="background: conic-gradient(var(--primary) ${storageData.percentage}%, var(--bg-secondary) ${storageData.percentage}%)"></div>
+                <div class="storage-center">
+                  <div class="storage-percentage">${storageData.percentage}%</div>
+                  <div class="storage-label">Занято</div>
+                </div>
+              </div>
+            </div>
+            <div class="storage-stats">
+              <div class="storage-stat">
+                <span class="storage-stat-label">Всего:</span>
+                <span class="storage-stat-value">10 MB</span>
+              </div>
+              <div class="storage-stat">
+                <span class="storage-stat-label">Занято:</span>
+                <span class="storage-stat-value">${storageData.usedMB} MB</span>
+              </div>
+              <div class="storage-stat">
+                <span class="storage-stat-label">Свободно:</span>
+                <span class="storage-stat-value">${storageData.freeMB} MB</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="storage-sections">
+            <!-- AI Сессии -->
+            <div class="storage-section">
+              <div class="storage-section-header" onclick="this.toggleSection('ai-section')">
+                <div class="storage-section-info">
+                  <div class="storage-section-icon ai">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <polyline points="12,6 12,12 16,14"/>
+                    </svg>
+                  </div>
+                  <div class="storage-section-title">
+                    <h4>AI Сессии</h4>
+                    <p class="storage-section-count">${aiSessionCount} сессий</p>
+                  </div>
+                </div>
+                <svg class="storage-section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6,9 12,15 18,9"/>
+                </svg>
+              </div>
+              <div class="storage-section-content" id="ai-section">
+                <div class="storage-section-items">
+                  <div class="storage-section-item">
+                    <span class="item-label">Всего сессий:</span>
+                    <span class="item-value">${aiSessionCount}</span>
+                  </div>
+                  <div class="storage-section-item">
+                    <span class="item-label">Активных:</span>
+                    <span class="item-value">${this.countActiveSessions()}</span>
+                  </div>
+                  <div class="storage-section-item">
+                    <span class="item-label">Размер данных:</span>
+                    <span class="item-value">${this.formatBytes(this.getAIDataSize())}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- JSON Проекты -->
+            <div class="storage-section">
+              <div class="storage-section-header" onclick="this.toggleSection('projects-section')">
+                <div class="storage-section-info">
+                  <div class="storage-section-icon projects">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                    </svg>
+                  </div>
+                  <div class="storage-section-title">
+                    <h4>JSON Проекты</h4>
+                    <p class="storage-section-count">${projectCount} проектов</p>
+                  </div>
+                </div>
+                <svg class="storage-section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6,9 12,15 18,9"/>
+                </svg>
+              </div>
+              <div class="storage-section-content" id="projects-section">
+                <div class="storage-section-items">
+                  <div class="storage-section-item">
+                    <span class="item-label">Всего проектов:</span>
+                    <span class="item-value">${projectCount}</span>
+                  </div>
+                  <div class="storage-section-item">
+                    <span class="item-label">Всего файлов:</span>
+                    <span class="item-value">${this.countTotalFiles()}</span>
+                  </div>
+                  <div class="storage-section-item">
+                    <span class="item-label">Размер данных:</span>
+                    <span class="item-value">${this.formatBytes(this.getProjectsDataSize())}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="storage-breakdown">
+            <h4>Распределение по типам данных</h4>
+            <div class="storage-items">
+              ${storageData.categories.map(category => `
+                <div class="storage-item">
+                  <div class="storage-item-info">
+                    <div class="storage-item-color" style="background: ${category.color}"></div>
+                    <span class="storage-item-name">${category.name}</span>
+                  </div>
+                  <div class="storage-item-size">${category.size}</div>
+                  <div class="storage-item-percentage">${category.percentage}%</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="storage-actions">
+            <button class="storage-btn primary" onclick="this.clearStorage()">Очистить кэш</button>
+            <button class="storage-btn secondary" onclick="this.exportStorage()">Экспорт данных</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Добавляем обработчики для кнопок
+    const clearBtn = modal.querySelector('.storage-btn.primary');
+    const exportBtn = modal.querySelector('.storage-btn.secondary');
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => this.clearStorageCache(modal));
+    }
+
+    if (exportBtn) {
+      exportBtn.addEventListener('click', () => this.exportStorageData());
+    }
+
+    // Добавляем обработчики для секций
+    this.addSectionHandlers(modal);
+  }
+
+  private getDetailedStorageInfo() {
+    let totalSize = 0;
+    const categories: { [key: string]: { size: number, count: number } } = {};
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key) {
+        const value = localStorage.getItem(key);
+        if (value) {
+          const size = key.length + value.length;
+          totalSize += size;
+
+          // Категоризируем данные
+          let category = 'other';
+          if (key.includes('ai') || key.includes('chat') || key.includes('message')) {
+            category = 'ai';
+          } else if (key.includes('project') || key.includes('json')) {
+            category = 'projects';
+          } else if (key.includes('time') || key.includes('session')) {
+            category = 'sessions';
+          } else if (key.includes('avatar') || key.includes('theme') || key.includes('settings')) {
+            category = 'settings';
+          }
+
+          if (!categories[category]) {
+            categories[category] = { size: 0, count: 0 };
+          }
+          categories[category].size += size;
+          categories[category].count++;
+        }
+      }
+    }
+
+    const usedMB = (totalSize / (1024 * 1024)).toFixed(2);
+    const freeMB = Math.max(0, 10 - parseFloat(usedMB)).toFixed(2);
+    const percentage = Math.round((parseFloat(usedMB) / 10) * 100);
+
+    const categoryData = [
+      { name: 'AI данные', color: '#3b82f6', size: this.formatBytes(categories.ai?.size || 0), percentage: Math.round(((categories.ai?.size || 0) / totalSize) * 100) },
+      { name: 'Проекты', color: '#10b981', size: this.formatBytes(categories.projects?.size || 0), percentage: Math.round(((categories.projects?.size || 0) / totalSize) * 100) },
+      { name: 'Сессии', color: '#f59e0b', size: this.formatBytes(categories.sessions?.size || 0), percentage: Math.round(((categories.sessions?.size || 0) / totalSize) * 100) },
+      { name: 'Настройки', color: '#8b5cf6', size: this.formatBytes(categories.settings?.size || 0), percentage: Math.round(((categories.settings?.size || 0) / totalSize) * 100) },
+      { name: 'Другое', color: '#6b7280', size: this.formatBytes(categories.other?.size || 0), percentage: Math.round(((categories.other?.size || 0) / totalSize) * 100) }
+    ];
+
+    return {
+      usedMB: parseFloat(usedMB),
+      freeMB: parseFloat(freeMB),
+      percentage,
+      categories: categoryData
+    };
+  }
+
+  private formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  private clearStorageCache(modal: HTMLElement): void {
+    // Очищаем только кэш, сохраняя важные данные
+    const keysToKeep = [
+      'user-avatar',
+      'dashboard-theme',
+      'time_tracker_sessions',
+      'time_tracker_current_session',
+      'ai_sessions'
+    ];
+
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && !keysToKeep.includes(key)) {
+        keysToRemove.push(key);
+      }
+    }
+
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+    
+    // Обновляем статистику
+    this.updateDatabaseStats();
+    
+    // Показываем уведомление
+    const notification = document.createElement('div');
+    notification.className = 'storage-notification';
+    notification.textContent = `Очищено ${keysToRemove.length} элементов кэша`;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => notification.remove(), 3000);
+  }
+
+  private exportStorageData(): void {
+    const data: { [key: string]: any } = {};
+    
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key) {
+        const value = localStorage.getItem(key);
+        if (value) {
+          try {
+            data[key] = JSON.parse(value);
+          } catch {
+            data[key] = value;
+          }
+        }
+      }
+    }
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `smarttable-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  private showDatabaseDetails(): void {
+    // Заглушка для будущей функциональности
+    alert('Детальная информация о базе данных будет доступна в следующем обновлении');
+  }
+
+  private showProjectsDetails(): void {
+    // Заглушка для будущей функциональности
+    alert('Детальная информация о проектах будет доступна в следующем обновлении');
+  }
+
+  private showSessionsDetails(): void {
+    // Заглушка для будущей функциональности
+    alert('Детальная информация о сессиях будет доступна в следующем обновлении');
+  }
+
+  private getAIDataSize(): number {
+    let size = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.includes('ai') || key.includes('chat') || key.includes('message') || key.includes('session'))) {
+        const value = localStorage.getItem(key);
+        if (value) {
+          size += key.length + value.length;
+        }
+      }
+    }
+    return size;
+  }
+
+  private getProjectsDataSize(): number {
+    let size = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.includes('project') || key.includes('json') || key.endsWith('.json'))) {
+        const value = localStorage.getItem(key);
+        if (value) {
+          size += key.length + value.length;
+        }
+      }
+    }
+    return size;
+  }
+
+  private addSectionHandlers(modal: HTMLElement): void {
+    // Добавляем обработчики для переключения секций
+    const aiHeader = modal.querySelector('.storage-section-header[onclick*="ai-section"]');
+    const projectsHeader = modal.querySelector('.storage-section-header[onclick*="projects-section"]');
+
+    if (aiHeader) {
+      aiHeader.addEventListener('click', () => this.toggleSection('ai-section', modal));
+    }
+
+    if (projectsHeader) {
+      projectsHeader.addEventListener('click', () => this.toggleSection('projects-section', modal));
+    }
+  }
+
+  private toggleSection(sectionId: string, modal: HTMLElement): void {
+    const section = modal.querySelector(`#${sectionId}`) as HTMLElement;
+    const arrow = modal.querySelector(`.storage-section-header[onclick*="${sectionId}"] .storage-section-arrow`) as HTMLElement;
+    
+    if (section && arrow) {
+      const isExpanded = section.style.display !== 'none';
+      
+      if (isExpanded) {
+        section.style.display = 'none';
+        arrow.style.transform = 'rotate(0deg)';
+      } else {
+        section.style.display = 'block';
+        arrow.style.transform = 'rotate(180deg)';
+      }
+    }
+  }
+
   private loadSavedAvatar(): void {
     const savedAvatar = localStorage.getItem('user-avatar');
     if (savedAvatar) {
@@ -665,6 +1217,14 @@ export class DashboardComponent {
     
     // Начинаем отслеживание времени в личном кабинете
     timeTracker.startSession('dashboard');
+    
+    // Обновляем статистику при открытии
+    this.updateDatabaseStats();
+    
+    // Устанавливаем периодическое обновление статистики каждые 5 секунд
+    this.statsUpdateInterval = setInterval(() => {
+      this.updateDatabaseStats();
+    }, 5000);
   }
 
   close(): void {
@@ -673,6 +1233,12 @@ export class DashboardComponent {
     this.isOpen = false;
     this.container.style.display = 'none';
     document.body.style.overflow = '';
+    
+    // Очищаем интервал обновления статистики
+    if (this.statsUpdateInterval) {
+      clearInterval(this.statsUpdateInterval);
+      this.statsUpdateInterval = null;
+    }
     
     // Завершаем сессию личного кабинета
     timeTracker.endCurrentSession();

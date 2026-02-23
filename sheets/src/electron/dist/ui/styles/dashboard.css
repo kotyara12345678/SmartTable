@@ -452,6 +452,150 @@
   margin: 0;
 }
 
+/* Database & Project Stats */
+.db-project-stats {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  margin-bottom: 32px;
+  box-shadow: var(--shadow-sm);
+}
+
+.db-project-stats h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 20px 0;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+}
+
+.stat-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: var(--transition);
+  cursor: pointer;
+  position: relative;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+  border-color: var(--primary);
+}
+
+.stat-card:active {
+  transform: translateY(0px);
+  box-shadow: var(--shadow-md);
+}
+
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.stat-icon.database {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.stat-icon.projects {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.stat-icon.sessions {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.stat-icon.storage {
+  background: var(--error-bg);
+  color: var(--error);
+}
+
+.stat-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.stat-content {
+  flex: 1;
+}
+
+.stat-content h4 {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin: 0 0 4px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 2px 0;
+}
+
+.stat-detail {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+/* Storage Size Card */
+.storage-size-card {
+  margin-top: 24px;
+}
+
+.storage-size-card .stat-card {
+  background: linear-gradient(135deg, var(--primary-light), var(--primary));
+  border: 1px solid var(--primary);
+  color: white;
+  box-shadow: var(--shadow-md);
+}
+
+.storage-size-card .stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--primary-hover);
+}
+
+.storage-size-card .stat-icon {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.storage-size-card .stat-content h4 {
+  color: white;
+}
+
+.storage-size-card .stat-content .stat-value {
+  color: white;
+}
+
+.storage-size-card .stat-content .stat-detail {
+  color: rgba(255, 255, 255, 0.8);
+}
+
 /* Activity Breakdown */
 .activity-breakdown {
   background: var(--surface);
