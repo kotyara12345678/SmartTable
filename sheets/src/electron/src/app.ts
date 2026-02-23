@@ -7,6 +7,8 @@ import { TopBarComponent } from './ui/components/TopBarComponent.js';
 import { RibbonComponent } from './ui/components/RibbonComponent.js';
 import { ChartsWidget } from './ui/widgets/charts/ChartsWidget.js';
 import { SettingsPanelComponent } from './ui/components/SettingsPanelComponent.js';
+import { UserProfileComponent } from './ui/components/UserProfileComponent.js';
+import { DashboardComponent } from './ui/components/DashboardComponent.js';
 import { themeManager } from './ui/core/theme-manager.js';
 
 // Глобальное состояние приложения
@@ -27,6 +29,8 @@ let topBar: TopBarComponent | null = null;
 let ribbon: RibbonComponent | null = null;
 let chartsWidget: ChartsWidget | null = null;
 let settingsPanel: SettingsPanelComponent | null = null;
+let userProfile: UserProfileComponent | null = null;
+let dashboard: DashboardComponent | null = null;
 
 /**
  * Инициализация приложения
@@ -72,6 +76,20 @@ function initApp(): void {
     settingsPanel.init();
     (window as any).settingsPanel = settingsPanel;
     logs.push('[App] SettingsPanelComponent initialized');
+
+    // Инициализация компонента профиля пользователя
+    logs.push('[App] Creating UserProfileComponent...');
+    userProfile = new UserProfileComponent();
+    userProfile.init();
+    (window as any).userProfile = userProfile;
+    logs.push('[App] UserProfileComponent initialized');
+
+    // Инициализация компонента Dashboard
+    logs.push('[App] Creating DashboardComponent...');
+    dashboard = new DashboardComponent();
+    dashboard.init();
+    (window as any).dashboard = dashboard;
+    logs.push('[App] DashboardComponent initialized');
 
     // Глобальные обработчики событий
     setupGlobalEventListeners();
@@ -416,6 +434,12 @@ function cleanup(): void {
   if (chartsWidget) {
     chartsWidget.close();
     chartsWidget.destroy();
+  }
+  if (userProfile) {
+    userProfile.destroy();
+  }
+  if (dashboard) {
+    dashboard.destroy();
   }
 }
 

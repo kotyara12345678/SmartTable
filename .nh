@@ -1,0 +1,15 @@
+
+git checkout sandbox
+
+git fetch origin master
+
+git reset --hard origin/master
+
+git push origin sandbox --force
+
+
+git add .
+
+git commit -m "AI перенесен в python для удобства и расширения функционала"
+
+git push origin sandbox
