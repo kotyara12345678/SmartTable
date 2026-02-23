@@ -7,6 +7,7 @@ import { TopBarComponent } from './ui/components/TopBarComponent.js';
 import { RibbonComponent } from './ui/components/RibbonComponent.js';
 import { ChartsWidget } from './ui/widgets/charts/ChartsWidget.js';
 import { SettingsPanelComponent } from './ui/components/SettingsPanelComponent.js';
+import { StartScreenComponent } from './ui/components/StartScreenComponent.js';
 import { UserProfileComponent } from './ui/components/UserProfileComponent.js';
 import { DashboardComponent } from './ui/components/DashboardComponent.js';
 import { AIChatComponent } from './ui/components/AIChatComponent.js';
@@ -28,6 +29,7 @@ const state: AppState = {
 };
 
 // Компоненты приложения
+let startScreen: StartScreenComponent | null = null;
 let topBar: TopBarComponent | null = null;
 let ribbon: RibbonComponent | null = null;
 let chartsWidget: ChartsWidget | null = null;
@@ -78,6 +80,37 @@ async function initApp(): Promise<void> {
       // Добавляем в глобальную область для доступа из renderer
       (window as any).chartsWidget = chartsWidget;
       logs.push('[App] ChartsWidget initialized');
+    }
+
+    // Инициализация начального экрана
+    logs.push('[App] Creating StartScreenComponent...');
+    startScreen = new StartScreenComponent();
+    await startScreen.init((projectName: string) => {
+      // Callback при создании проекта
+      logs.push('[App] Project created: ' + projectName);
+      // Обновляем заголовок в TopBar
+      if (topBar) {
+        topBar.setProjectName(projectName);
+      }
+      // Скрываем начальный экран
+      startScreen?.hide();
+    });
+    (window as any).startScreen = startScreen;
+    logs.push('[App] StartScreenComponent initialized');
+    
+    // Проверяем есть ли сохранённый проект
+    const savedProject = localStorage.getItem('smarttable-current-project');
+    if (savedProject && startScreen) {
+      // Если есть проект - скрываем начальный экран и загружаем
+      logs.push('[App] Found saved project: ' + savedProject);
+      startScreen.hide();
+      if (topBar) {
+        topBar.setProjectName(savedProject);
+      }
+    } else if (startScreen) {
+      // Если нет проекта - показываем начальный экран
+      logs.push('[App] No saved project, showing start screen');
+      startScreen.show();
     }
 
     // Инициализация панели настроек

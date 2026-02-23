@@ -3384,9 +3384,6 @@ function findAndReplace(findText: string, replaceText: string, options: { matchC
   return { found, replaced };
 }
 
-// ==========================================
-// === CONDITIONAL FORMATTING ===
-// ==========================================
 function addConditionalFormat(range: string, rule: string, style: any): void {
   state.conditionalFormats.push({ range, rule, style });
   applyConditionalFormatting();

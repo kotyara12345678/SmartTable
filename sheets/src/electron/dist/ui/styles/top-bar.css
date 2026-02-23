@@ -138,3 +138,49 @@
   background: var(--primary-hover);
   transform: scale(1.05);
 }
+
+/* App Context Menu */
+.app-context-menu {
+  animation: menuFadeIn 0.15s ease;
+}
+
+@keyframes menuFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.app-menu-item:hover {
+  background: var(--hover-bg);
+}
+
+.app-menu-item svg {
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
+}
+
+.app-menu-item span {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.app-menu-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}

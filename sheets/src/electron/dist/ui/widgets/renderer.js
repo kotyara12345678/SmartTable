@@ -3035,9 +3035,6 @@ function findAndReplace(findText, replaceText, options = {}) {
     console.log('[FindReplace] Found:', found, 'Replaced:', replaced);
     return { found, replaced };
 }
-// ==========================================
-// === CONDITIONAL FORMATTING ===
-// ==========================================
 function addConditionalFormat(range, rule, style) {
     state.conditionalFormats.push({ range, rule, style });
     applyConditionalFormatting();
