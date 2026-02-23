@@ -1,6 +1,7 @@
 /**
  * Dashboard Component - современный личный кабинет
  */
+import { timeTracker } from '../core/time-tracker.js';
 export class DashboardComponent {
     constructor() {
         this.isOpen = false;
@@ -101,6 +102,11 @@ export class DashboardComponent {
               <h1 class="page-title" id="pageTitle">Dashboard</h1>
             </div>
             <div class="header-right">
+              <button class="ai-chat-btn" id="aiChatDashboardBtn" title="AI Ассистент">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+              </button>
               <button class="notification-btn" id="notificationBtn">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -124,12 +130,126 @@ export class DashboardComponent {
         document.body.appendChild(this.container);
     }
     getDashboardContent() {
+        const today = new Date().toISOString().split('T')[0];
+        const dailyStats = timeTracker.getDailyStats(today);
+        const weeklyStats = timeTracker.getWeeklyStats();
+        const totalStats = timeTracker.getTotalStats();
         return `
       <div class="dashboard-section">
         <!-- Welcome Section -->
         <div class="welcome-section">
           <h2 class="welcome-title">Добро пожаловать обратно! 👋</h2>
           <p class="welcome-subtitle">Вот ваша статистика и последние действия</p>
+        </div>
+
+        <!-- Time Stats Cards -->
+        <div class="time-stats-grid">
+          <div class="time-stat-card today">
+            <div class="time-stat-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12,6 12,12 16,14"/>
+              </svg>
+            </div>
+            <div class="time-stat-content">
+              <h3 class="time-stat-title">Сегодня</h3>
+              <p class="time-stat-value">${timeTracker.formatTime(dailyStats.total_seconds)}</p>
+              <p class="time-stat-detail">${dailyStats.session_count} сессий</p>
+            </div>
+          </div>
+
+          <div class="time-stat-card week">
+            <div class="time-stat-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+            </div>
+            <div class="time-stat-content">
+              <h3 class="time-stat-title">Эта неделя</h3>
+              <p class="time-stat-value">${timeTracker.formatTime(weeklyStats.total_seconds)}</p>
+              <p class="time-stat-detail">В среднем ${timeTracker.formatTime(weeklyStats.average_daily_seconds)} в день</p>
+            </div>
+          </div>
+
+          <div class="time-stat-card total">
+            <div class="time-stat-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 20V10"/>
+                <path d="M18 20V4"/>
+                <path d="M6 20v-4"/>
+              </svg>
+            </div>
+            <div class="time-stat-content">
+              <h3 class="time-stat-title">Всего</h3>
+              <p class="time-stat-value">${totalStats.total_hours}ч</p>
+              <p class="time-stat-detail">${totalStats.days_active} дней активности</p>
+            </div>
+          </div>
+
+          <div class="time-stat-card favorite">
+            <div class="time-stat-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+              </svg>
+            </div>
+            <div class="time-stat-content">
+              <h3 class="time-stat-title">Любимая активность</h3>
+              <p class="time-stat-value">${this.getActivityTypeLabel(totalStats.most_used_type)}</p>
+              <p class="time-stat-detail">${totalStats.total_sessions} сессий всего</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activity Breakdown -->
+        <div class="activity-breakdown">
+          <h3>Распределение времени сегодня</h3>
+          <div class="activity-bars">
+            <div class="activity-bar">
+              <div class="activity-label">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2Z"/>
+                  <polyline points="14,2 14,8 20,8"/>
+                </svg>
+                <span>Таблицы</span>
+              </div>
+              <div class="activity-progress">
+                <div class="activity-fill spreadsheet" style="width: ${this.getPercentage(dailyStats.spreadsheet_seconds, dailyStats.total_seconds)}%"></div>
+                <span class="activity-time">${timeTracker.formatTime(dailyStats.spreadsheet_seconds)}</span>
+              </div>
+            </div>
+
+            <div class="activity-bar">
+              <div class="activity-label">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="7" height="7"/>
+                  <rect x="14" y="3" width="7" height="7"/>
+                  <rect x="14" y="14" width="7" height="7"/>
+                  <rect x="3" y="14" width="7" height="7"/>
+                </svg>
+                <span>Личный кабинет</span>
+              </div>
+              <div class="activity-progress">
+                <div class="activity-fill dashboard" style="width: ${this.getPercentage(dailyStats.dashboard_seconds, dailyStats.total_seconds)}%"></div>
+                <span class="activity-time">${timeTracker.formatTime(dailyStats.dashboard_seconds)}</span>
+              </div>
+            </div>
+
+            <div class="activity-bar">
+              <div class="activity-label">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span>AI Ассистент</span>
+              </div>
+              <div class="activity-progress">
+                <div class="activity-fill ai-chat" style="width: ${this.getPercentage(dailyStats.ai_chat_seconds, dailyStats.total_seconds)}%"></div>
+                <span class="activity-time">${timeTracker.formatTime(dailyStats.ai_chat_seconds)}</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Metrics Cards -->
@@ -170,7 +290,7 @@ export class DashboardComponent {
             </div>
             <div class="metric-content">
               <h3 class="metric-title">Время работы</h3>
-              <p class="metric-value">142ч</p>
+              <p class="metric-value">${timeTracker.formatTime(dailyStats.total_seconds)}</p>
               <p class="metric-change neutral">+8ч за неделю</p>
             </div>
           </div>
@@ -258,6 +378,9 @@ export class DashboardComponent {
         // Notifications
         const notificationBtn = document.getElementById('notificationBtn');
         notificationBtn?.addEventListener('click', () => this.showNotifications());
+        // AI Chat
+        const aiChatBtn = document.getElementById('aiChatDashboardBtn');
+        aiChatBtn?.addEventListener('click', () => this.openAIChat());
         // Profile avatar upload
         this.bindProfileAvatarEvents();
         // Prevent close on content click
@@ -436,6 +559,27 @@ export class DashboardComponent {
     showNotifications() {
         alert('Уведомления: 3 новых сообщения');
     }
+    openAIChat() {
+        const aiChat = window.aiChat;
+        if (aiChat) {
+            aiChat.open();
+        }
+    }
+    getActivityTypeLabel(type) {
+        const labels = {
+            'spreadsheet': 'Таблицы',
+            'dashboard': 'Личный кабинет',
+            'ai_chat': 'AI Ассистент',
+            'other': 'Другое',
+            'none': 'Нет данных'
+        };
+        return labels[type] || type;
+    }
+    getPercentage(value, total) {
+        if (total === 0)
+            return 0;
+        return Math.round((value / total) * 100);
+    }
     loadSavedAvatar() {
         const savedAvatar = localStorage.getItem('user-avatar');
         if (savedAvatar) {
@@ -475,6 +619,8 @@ export class DashboardComponent {
         this.isOpen = true;
         this.container.style.display = 'block';
         document.body.style.overflow = 'hidden';
+        // Начинаем отслеживание времени в личном кабинете
+        timeTracker.startSession('dashboard');
     }
     close() {
         if (!this.isOpen || !this.container)
@@ -482,6 +628,10 @@ export class DashboardComponent {
         this.isOpen = false;
         this.container.style.display = 'none';
         document.body.style.overflow = '';
+        // Завершаем сессию личного кабинета
+        timeTracker.endCurrentSession();
+        // Начинаем отслеживание времени в таблицах (предполагаем, что это основная активность)
+        timeTracker.startSession('spreadsheet');
     }
     destroy() {
         this.close();

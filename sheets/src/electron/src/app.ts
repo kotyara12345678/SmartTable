@@ -9,7 +9,10 @@ import { ChartsWidget } from './ui/widgets/charts/ChartsWidget.js';
 import { SettingsPanelComponent } from './ui/components/SettingsPanelComponent.js';
 import { UserProfileComponent } from './ui/components/UserProfileComponent.js';
 import { DashboardComponent } from './ui/components/DashboardComponent.js';
+import { AIChatComponent } from './ui/components/AIChatComponent.js';
 import { themeManager } from './ui/core/theme-manager.js';
+import { aiContextService } from './ui/core/ai/ai-context-service.js';
+import { timeTracker } from './ui/core/time-tracker.js';
 
 // Глобальное состояние приложения
 interface AppState {
@@ -31,11 +34,12 @@ let chartsWidget: ChartsWidget | null = null;
 let settingsPanel: SettingsPanelComponent | null = null;
 let userProfile: UserProfileComponent | null = null;
 let dashboard: DashboardComponent | null = null;
+let aiChat: AIChatComponent | null = null;
 
 /**
  * Инициализация приложения
  */
-function initApp(): void {
+async function initApp(): Promise<void> {
   const logs: string[] = [];
   logs.push('[App] Initializing SmartTable...');
   logs.push('[App] DOM ready: ' + document.readyState);
@@ -47,6 +51,12 @@ function initApp(): void {
     // Инициализация менеджера тем
     logs.push('[App] Initializing ThemeManager...');
     themeManager.initTheme();
+
+    // Инициализация AI сервиса с базой данных
+    logs.push('[App] Initializing AI Context Service...');
+    await aiContextService.init();
+    (window as any).aiContextService = aiContextService;
+    logs.push('[App] AI Context Service initialized');
 
     // Инициализация компонентов
     logs.push('[App] Creating TopBarComponent...');
@@ -90,6 +100,20 @@ function initApp(): void {
     dashboard.init();
     (window as any).dashboard = dashboard;
     logs.push('[App] DashboardComponent initialized');
+
+    // Инициализация AI чата
+    logs.push('[App] Creating AIChatComponent...');
+    aiChat = new AIChatComponent();
+    (window as any).aiChat = aiChat;
+    logs.push('[App] AIChatComponent initialized');
+
+    // Инициализация трекера времени
+    logs.push('[App] Initializing TimeTracker...');
+    (window as any).timeTracker = timeTracker;
+    logs.push('[App] TimeTracker initialized');
+
+    // Начинаем отслеживание времени в таблицах при запуске
+    timeTracker.startSession('spreadsheet');
 
     // Глобальные обработчики событий
     setupGlobalEventListeners();
@@ -441,13 +465,16 @@ function cleanup(): void {
   if (dashboard) {
     dashboard.destroy();
   }
+  if (aiChat) {
+    aiChat.destroy();
+  }
 }
 
 // Инициализация при загрузке DOM
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initApp);
+  document.addEventListener('DOMContentLoaded', () => initApp().catch(console.error));
 } else {
-  initApp();
+  initApp().catch(console.error);
 }
 
 // Очистка при выгрузке

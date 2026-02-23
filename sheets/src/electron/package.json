@@ -26,6 +26,8 @@
     "typescript": "^5.8.2"
   },
   "dependencies": {
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "sqlite3": "^5.1.6",
+    "sqlite": "^5.1.1"
   }
 }
