@@ -1,24 +1,49 @@
 /**
- * UserProfile Component - простой личный кабинет
+ * UserProfile Component - личный кабинет с загрузкой аватара
+ * Поддерживаемые форматы: PNG, JPG, JPEG, GIF, WebP (макс. 5MB)
  */
 export class UserProfileComponent {
     constructor() {
         this.isOpen = false;
         this.container = null;
         this.userAvatar = null;
+        this.currentAvatar = null;
+        this.fileInput = null;
         this.init();
     }
     init() {
+        this.loadAvatar();
         this.createUserAvatar();
         this.createModal();
         this.bindEvents();
+    }
+    loadAvatar() {
+        const savedAvatar = localStorage.getItem('user-avatar');
+        if (savedAvatar) {
+            this.currentAvatar = savedAvatar;
+        }
+    }
+    saveAvatar(avatarData) {
+        try {
+            this.currentAvatar = avatarData;
+            localStorage.setItem('user-avatar', avatarData);
+            console.log('[UserProfile] Avatar saved');
+        }
+        catch (e) {
+            console.error('[UserProfile] Failed to save avatar:', e);
+            alert('Не удалось сохранить аватар. Возможно, файл слишком большой.');
+        }
     }
     createUserAvatar() {
         this.userAvatar = document.querySelector('#userAvatar');
         if (this.userAvatar) {
             this.userAvatar.style.cursor = 'pointer';
+            // Применяем сохранённый аватар если есть
+            if (this.currentAvatar) {
+                this.userAvatar.classList.add('has-image');
+                this.userAvatar.style.setProperty('--avatar-image', `url(${this.currentAvatar})`);
+            }
             this.userAvatar.addEventListener('click', () => {
-                // Открываем Dashboard вместо простого модального окна
                 const dashboard = window.dashboard;
                 if (dashboard) {
                     dashboard.open();
@@ -31,6 +56,8 @@ export class UserProfileComponent {
             return;
         this.container = document.createElement('div');
         this.container.id = 'user-profile-modal';
+        const avatarInitial = this.currentAvatar ? '' : 'П';
+        const hasAvatarClass = this.currentAvatar ? 'has-image' : '';
         this.container.innerHTML = `
       <div class="profile-overlay" id="profileOverlay"></div>
       <div class="profile-modal">
@@ -40,8 +67,13 @@ export class UserProfileComponent {
         </div>
         <div class="profile-content">
           <div class="avatar-section">
-            <div class="avatar-large" id="avatarLarge">П</div>
-            <button class="change-avatar-btn">Изменить фото</button>
+            <div class="avatar-large ${hasAvatarClass}" id="avatarLarge">${avatarInitial}</div>
+            <input type="file" id="avatarInput" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp" style="display: none;">
+            <button class="change-avatar-btn" id="changeAvatarBtn">
+              ${this.currentAvatar ? 'Изменить фото' : 'Загрузить фото'}
+            </button>
+            ${this.currentAvatar ? `<button class="remove-avatar-btn" id="removeAvatar">Удалить фото</button>` : ''}
+            <p class="avatar-hint">PNG, JPG, GIF, WebP (макс. 5MB)</p>
           </div>
           <div class="form-section">
             <div class="form-group">
@@ -75,17 +107,134 @@ export class UserProfileComponent {
         document.body.appendChild(this.container);
     }
     bindEvents() {
+        // Сохраняем ссылку на input для последующего использования
+        this.fileInput = document.getElementById('avatarInput');
         const overlay = document.getElementById('profileOverlay');
         const closeBtn = document.getElementById('profileClose');
         const saveBtn = document.getElementById('saveProfile');
         const cancelBtn = document.getElementById('cancelProfile');
+        const changeAvatarBtn = document.getElementById('changeAvatarBtn');
+        const removeAvatarBtn = document.getElementById('removeAvatar');
         overlay?.addEventListener('click', () => this.close());
         closeBtn?.addEventListener('click', () => this.close());
         cancelBtn?.addEventListener('click', () => this.close());
         saveBtn?.addEventListener('click', () => this.save());
+        // Обработка кнопки смены аватара - используем mousedown для надёжности
+        changeAvatarBtn?.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (this.fileInput) {
+                this.fileInput.click();
+            }
+        });
+        // Обработка выбора файла
+        this.fileInput?.addEventListener('change', (e) => {
+            const target = e.target;
+            const file = target.files?.[0];
+            console.log('[UserProfile] File selected:', file?.name, file?.type, file?.size);
+            if (file) {
+                this.loadImageFile(file);
+            }
+            // Сбрасываем value чтобы можно было выбрать тот же файл снова
+            target.value = '';
+        });
+        // Обработка удаления аватара
+        removeAvatarBtn?.addEventListener('click', () => {
+            this.removeAvatar();
+        });
         // Предотвращаем закрытие при клике на модальное окно
         const modal = this.container?.querySelector('.profile-modal');
         modal?.addEventListener('click', (e) => e.stopPropagation());
+    }
+    loadImageFile(file) {
+        console.log('[UserProfile] Loading file:', file.name, file.type, file.size);
+        // Проверка типа файла
+        const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
+        if (!allowedTypes.includes(file.type.toLowerCase())) {
+            alert('Неподдерживаемый формат файла.\n\nРазрешённые форматы:\n• PNG\n• JPG/JPEG\n• GIF\n• WebP');
+            return;
+        }
+        // Проверка размера (макс 5MB)
+        const maxSize = 5 * 1024 * 1024;
+        if (file.size > maxSize) {
+            alert(`Файл слишком большой.\n\nМаксимальный размер: 5MB\nВаш файл: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const result = e.target?.result;
+            console.log('[UserProfile] File loaded successfully');
+            this.saveAvatar(result);
+            this.updateAvatarUI(result);
+            this.refreshAvatarButtons();
+        };
+        reader.onerror = () => {
+            console.error('[UserProfile] File read error');
+            alert('Ошибка загрузки файла. Попробуйте другой файл.');
+        };
+        reader.readAsDataURL(file);
+    }
+    updateAvatarUI(avatarData) {
+        console.log('[UserProfile] Updating avatar UI');
+        // Обновляем аватар в модальном окне
+        const avatarLarge = document.getElementById('avatarLarge');
+        if (avatarLarge) {
+            avatarLarge.classList.add('has-image');
+            avatarLarge.style.setProperty('--avatar-image', `url(${avatarData})`);
+            avatarLarge.textContent = '';
+        }
+        // Обновляем аватар в шапке
+        if (this.userAvatar) {
+            this.userAvatar.classList.add('has-image');
+            this.userAvatar.style.setProperty('--avatar-image', `url(${avatarData})`);
+        }
+        // Обновляем текст кнопки
+        const changeBtn = document.getElementById('changeAvatarBtn');
+        if (changeBtn) {
+            changeBtn.textContent = 'Изменить фото';
+        }
+    }
+    removeAvatar() {
+        console.log('[UserProfile] Removing avatar');
+        this.currentAvatar = null;
+        localStorage.removeItem('user-avatar');
+        // Сбрасываем аватар в модальном окне
+        const avatarLarge = document.getElementById('avatarLarge');
+        if (avatarLarge) {
+            avatarLarge.classList.remove('has-image');
+            avatarLarge.style.removeProperty('--avatar-image');
+            avatarLarge.textContent = 'П';
+        }
+        // Сбрасываем аватар в шапке
+        if (this.userAvatar) {
+            this.userAvatar.classList.remove('has-image');
+            this.userAvatar.style.removeProperty('--avatar-image');
+        }
+        this.refreshAvatarButtons();
+    }
+    refreshAvatarButtons() {
+        const avatarSection = document.querySelector('.avatar-section');
+        if (!avatarSection)
+            return;
+        let removeBtn = document.getElementById('removeAvatar');
+        const changeBtn = document.getElementById('changeAvatarBtn');
+        if (changeBtn) {
+            changeBtn.textContent = this.currentAvatar ? 'Изменить фото' : 'Загрузить фото';
+        }
+        if (this.currentAvatar && !removeBtn) {
+            // Создаём кнопку удаления
+            const newRemoveBtn = document.createElement('button');
+            newRemoveBtn.id = 'removeAvatar';
+            newRemoveBtn.className = 'remove-avatar-btn';
+            newRemoveBtn.textContent = 'Удалить фото';
+            newRemoveBtn.addEventListener('click', () => this.removeAvatar());
+            if (changeBtn) {
+                changeBtn.parentNode?.insertBefore(newRemoveBtn, changeBtn.nextSibling);
+            }
+        }
+        else if (!this.currentAvatar && removeBtn) {
+            removeBtn.remove();
+        }
     }
     open() {
         if (this.isOpen || !this.container)
@@ -93,6 +242,8 @@ export class UserProfileComponent {
         this.isOpen = true;
         this.container.style.display = 'block';
         document.body.style.overflow = 'hidden';
+        // Обновляем UI при открытии
+        this.refreshAvatarButtons();
     }
     close() {
         if (!this.isOpen || !this.container)
@@ -106,15 +257,6 @@ export class UserProfileComponent {
         const emailInput = document.getElementById('userEmail');
         if (nameInput && emailInput) {
             const name = nameInput.value || 'Пользователь';
-            // Обновляем аватар в шапке
-            if (this.userAvatar) {
-                this.userAvatar.textContent = name.charAt(0).toUpperCase();
-            }
-            // Обновляем аватар в модальном окне
-            const avatarLarge = document.getElementById('avatarLarge');
-            if (avatarLarge) {
-                avatarLarge.textContent = name.charAt(0).toUpperCase();
-            }
             console.log('Profile saved:', name, emailInput.value);
         }
         this.close();
@@ -122,6 +264,7 @@ export class UserProfileComponent {
     destroy() {
         this.close();
         this.container?.remove();
+        this.fileInput = null;
     }
 }
 //# sourceMappingURL=UserProfileComponent.js.map

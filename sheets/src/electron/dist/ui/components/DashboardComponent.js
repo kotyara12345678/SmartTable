@@ -1,5 +1,5 @@
 /**
- * Dashboard Component - современный личный кабинет
+ * Dashboard Component - современный личный кабинет с функциональными действиями
  */
 import { timeTracker } from '../core/time-tracker.js';
 export class DashboardComponent {
@@ -9,20 +9,82 @@ export class DashboardComponent {
         this.currentTheme = 'light';
         this.activeSection = 'dashboard';
         this.statsUpdateInterval = null;
+        this.recentActions = [];
+        this.currentAvatar = null;
         this.init();
     }
     init() {
+        this.loadActions();
+        this.loadAvatar();
         this.createDashboard();
         this.bindEvents();
         this.loadTheme();
         this.loadSavedAvatar();
+        this.startStatsUpdate();
+    }
+    loadAvatar() {
+        const savedAvatar = localStorage.getItem('user-avatar');
+        if (savedAvatar) {
+            this.currentAvatar = savedAvatar;
+        }
+    }
+    loadActions() {
+        try {
+            const saved = localStorage.getItem('smarttable-actions');
+            if (saved) {
+                const actions = JSON.parse(saved);
+                this.recentActions = actions.map((a) => ({
+                    ...a,
+                    date: new Date(a.date)
+                }));
+            }
+        }
+        catch (e) {
+            console.error('[Dashboard] Failed to load actions:', e);
+        }
+    }
+    saveActions() {
+        try {
+            localStorage.setItem('smarttable-actions', JSON.stringify(this.recentActions));
+        }
+        catch (e) {
+            console.error('[Dashboard] Failed to save actions:', e);
+        }
+    }
+    addAction(action) {
+        const newAction = {
+            id: `action-${Date.now()}`,
+            date: new Date(),
+            ...action
+        };
+        this.recentActions.unshift(newAction);
+        // Храним только последние 50 действий
+        if (this.recentActions.length > 50) {
+            this.recentActions = this.recentActions.slice(0, 50);
+        }
+        this.saveActions();
+        this.renderRecentActions();
+    }
+    startStatsUpdate() {
+        // Обновляем статистику каждые 30 секунд
+        this.statsUpdateInterval = setInterval(() => {
+            this.updateDatabaseStats();
+        }, 30000);
     }
     createDashboard() {
         if (document.getElementById('dashboard-container'))
             return;
         this.container = document.createElement('div');
         this.container.id = 'dashboard-container';
-        this.container.innerHTML = `
+        this.container.innerHTML = this.getDashboardHTML();
+        document.body.appendChild(this.container);
+    }
+    getDashboardHTML() {
+        const today = new Date().toISOString().split('T')[0];
+        const dailyStats = timeTracker.getDailyStats(today);
+        const weeklyStats = timeTracker.getWeeklyStats();
+        const totalStats = timeTracker.getTotalStats();
+        return `
       <div class="dashboard-overlay" id="dashboardOverlay"></div>
       <div class="dashboard-wrapper">
         <!-- Sidebar -->
@@ -35,7 +97,7 @@ export class DashboardComponent {
               <span class="logo-text">SmartTable</span>
             </div>
           </div>
-          
+
           <nav class="sidebar-nav">
             <a href="#" class="nav-item active" data-section="dashboard">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -121,7 +183,6 @@ export class DashboardComponent {
         </main>
       </div>
     `;
-        document.body.appendChild(this.container);
     }
     getDashboardContent() {
         const today = new Date().toISOString().split('T')[0];
@@ -268,7 +329,7 @@ export class DashboardComponent {
 
         <!-- Metrics Cards -->
         <div class="metrics-grid">
-          <div class="metric-card">
+          <div class="metric-card" id="activityMetricCard" title="Нажмите для подробностей">
             <div class="metric-icon activity">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/>
@@ -315,45 +376,81 @@ export class DashboardComponent {
         <div class="recent-actions">
           <div class="section-header">
             <h3>Последние действия</h3>
-            <button class="view-all-btn">Посмотреть все</button>
+            <button class="clear-history-btn" id="btnClearHistory">Очистить историю</button>
           </div>
-          <div class="actions-table">
-            <div class="table-header">
-              <div class="table-cell">Дата</div>
-              <div class="table-cell">Действие</div>
-              <div class="table-cell">Статус</div>
-            </div>
-            <div class="table-body">
-              <div class="table-row">
-                <div class="table-cell">23.02.2026 13:45</div>
-                <div class="table-cell">Создан новый документ</div>
-                <div class="table-cell"><span class="status success">Успешно</span></div>
-              </div>
-              <div class="table-row">
-                <div class="table-cell">23.02.2026 12:30</div>
-                <div class="table-cell">Экспорт в PDF</div>
-                <div class="table-cell"><span class="status success">Успешно</span></div>
-              </div>
-              <div class="table-row">
-                <div class="table-cell">23.02.2026 11:15</div>
-                <div class="table-cell">Изменение формул</div>
-                <div class="table-cell"><span class="status success">Успешно</span></div>
-              </div>
-              <div class="table-row">
-                <div class="table-cell">22.02.2026 18:20</div>
-                <div class="table-cell">Синхронизация</div>
-                <div class="table-cell"><span class="status warning">В процессе</span></div>
-              </div>
-              <div class="table-row">
-                <div class="table-cell">22.02.2026 16:45</div>
-                <div class="table-cell">Удаление листа</div>
-                <div class="table-cell"><span class="status success">Успешно</span></div>
-              </div>
-            </div>
+          <div class="actions-table" id="recentActionsTable">
+            ${this.getRecentActionsHTML()}
           </div>
         </div>
       </div>
     `;
+    }
+    getRecentActionsHTML() {
+        if (this.recentActions.length === 0) {
+            return `
+        <div class="no-actions">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12,6 12,12 16,14"/>
+          </svg>
+          <p>История действий пуста</p>
+        </div>
+      `;
+        }
+        return `
+      <div class="table-header">
+        <div class="table-cell">Дата</div>
+        <div class="table-cell">Действие</div>
+        <div class="table-cell">Статус</div>
+      </div>
+      <div class="table-body">
+        ${this.recentActions.slice(0, 10).map(action => `
+          <div class="table-row">
+            <div class="table-cell">${this.formatDate(action.date)}</div>
+            <div class="table-cell">${action.action}</div>
+            <div class="table-cell"><span class="status ${action.status}">${this.getStatusLabel(action.status)}</span></div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    }
+    renderRecentActions() {
+        const table = document.getElementById('recentActionsTable');
+        if (table) {
+            table.innerHTML = this.getRecentActionsHTML();
+        }
+    }
+    formatDate(date) {
+        return date.toLocaleString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+    getStatusLabel(status) {
+        const labels = {
+            success: 'Успешно',
+            warning: 'В процессе',
+            error: 'Ошибка',
+            pending: 'Ожидание'
+        };
+        return labels[status] || status;
+    }
+    getActivityTypeLabel(type) {
+        const labels = {
+            spreadsheet: 'Таблицы',
+            dashboard: 'Личный кабинет',
+            ai_chat: 'AI Ассистент',
+            settings: 'Настройки'
+        };
+        return labels[type] || type;
+    }
+    getPercentage(value, total) {
+        if (total === 0)
+            return 0;
+        return Math.round((value / total) * 100);
     }
     bindEvents() {
         // Close dashboard
@@ -382,6 +479,12 @@ export class DashboardComponent {
         // AI Chat
         const aiChatBtn = document.getElementById('aiChatDashboardBtn');
         aiChatBtn?.addEventListener('click', () => this.openAIChat());
+        // Activity Metric Card
+        document.getElementById('activityMetricCard')?.addEventListener('click', () => {
+            this.showActivityDetail();
+        });
+        // Clear history
+        document.getElementById('btnClearHistory')?.addEventListener('click', () => this.clearHistory());
         // Profile avatar upload
         this.bindProfileAvatarEvents();
         // Обновляем статистику БД и проектов
@@ -391,6 +494,154 @@ export class DashboardComponent {
         // Prevent close on content click
         const wrapper = this.container?.querySelector('.dashboard-wrapper');
         wrapper?.addEventListener('click', (e) => e.stopPropagation());
+    }
+    showActivityDetail() {
+        const today = new Date().toISOString().split('T')[0];
+        const dailyStats = timeTracker.getDailyStats(today);
+        const stats = [
+            {
+                icon: `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2Z"/>
+            <polyline points="14,2 14,8 20,8"/>
+          </svg>
+        `,
+                title: 'Работа с таблицами',
+                time: timeTracker.formatTime(dailyStats.spreadsheet_seconds),
+                detail: `Ячеек: ${this.getCellsFilled()}`,
+                color: 'spreadsheet'
+            },
+            {
+                icon: `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7"/>
+            <rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/>
+            <rect x="3" y="14" width="7" height="7"/>
+          </svg>
+        `,
+                title: 'Личный кабинет',
+                time: timeTracker.formatTime(dailyStats.dashboard_seconds),
+                detail: `Открытий: ${this.getDashboardOpens()}`,
+                color: 'dashboard'
+            },
+            {
+                icon: `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1v-1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/>
+            <circle cx="7.5" cy="14.5" r="1.5"/>
+            <circle cx="16.5" cy="14.5" r="1.5"/>
+          </svg>
+        `,
+                title: 'AI Ассистент',
+                time: timeTracker.formatTime(dailyStats.ai_chat_seconds),
+                detail: `Запросов: ${this.getAIRequests()}`,
+                color: 'ai'
+            },
+            {
+                icon: `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        `,
+                title: 'Настройки',
+                time: '-',
+                detail: `Изменений: ${this.getSettingsChanges()}`,
+                color: 'settings'
+            }
+        ];
+        // Создаём модальное окно с деталями
+        const modal = document.createElement('div');
+        modal.className = 'activity-detail-modal';
+        modal.innerHTML = `
+      <div class="activity-detail-overlay"></div>
+      <div class="activity-detail-panel">
+        <div class="activity-detail-panel-header">
+          <h3>Детальная активность</h3>
+          <button class="close-activity-detail">×</button>
+        </div>
+        <div class="activity-detail-panel-content">
+          <div class="activity-summary">
+            <div class="activity-total">
+              <span class="activity-total-label">Всего сегодня</span>
+              <span class="activity-total-value">${timeTracker.formatTime(dailyStats.total_seconds)}</span>
+            </div>
+            <div class="activity-percent">${this.getPercentage(dailyStats.total_seconds, 8 * 3600)}% от 8 часов</div>
+          </div>
+          <div class="activity-stats-list">
+            ${stats.map(stat => `
+              <div class="activity-stat-item ${stat.color}">
+                <div class="activity-stat-icon">${stat.icon}</div>
+                <div class="activity-stat-info">
+                  <div class="activity-stat-title">${stat.title}</div>
+                  <div class="activity-stat-detail">${stat.detail}</div>
+                </div>
+                <div class="activity-stat-time">${stat.time}</div>
+              </div>
+            `).join('')}
+          </div>
+          <button class="activity-action-btn" id="activityActionBtn">Перейти к таблице</button>
+        </div>
+      </div>
+    `;
+        document.body.appendChild(modal);
+        // Закрытие
+        const closeBtn = modal.querySelector('.close-activity-detail');
+        const overlay = modal.querySelector('.activity-detail-overlay');
+        const actionBtn = modal.querySelector('#activityActionBtn');
+        closeBtn?.addEventListener('click', () => modal.remove());
+        overlay?.addEventListener('click', () => modal.remove());
+        actionBtn?.addEventListener('click', () => {
+            this.close();
+            modal.remove();
+        });
+        // Добавляем действие в историю
+        this.addAction({
+            action: 'Просмотр детальной активности',
+            type: 'other',
+            status: 'success'
+        });
+    }
+    getCellsFilled() {
+        let count = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('cell-'))
+                count++;
+        }
+        return count;
+    }
+    getDashboardOpens() {
+        const saved = localStorage.getItem('dashboard-opens');
+        return saved ? parseInt(saved) : 0;
+    }
+    getAIRequests() {
+        const saved = localStorage.getItem('ai-requests');
+        return saved ? parseInt(saved) : 0;
+    }
+    getSettingsChanges() {
+        const saved = localStorage.getItem('settings-changes');
+        return saved ? parseInt(saved) : 0;
+    }
+    openAIChat() {
+        const aiPanel = document.getElementById('ai-panel-container');
+        if (aiPanel) {
+            aiPanel.classList.add('open');
+        }
+    }
+    clearHistory() {
+        const confirmed = confirm('Вы уверены, что хотите очистить историю действий?');
+        if (confirmed) {
+            this.recentActions = [];
+            this.saveActions();
+            this.renderRecentActions();
+            this.addAction({
+                action: 'Очистка истории',
+                type: 'delete',
+                status: 'success'
+            });
+        }
     }
     bindProfileAvatarEvents() {
         const changeAvatarBtn = document.getElementById('changeProfileAvatarBtn');
@@ -409,9 +660,7 @@ export class DashboardComponent {
         const reader = new FileReader();
         reader.onload = (e) => {
             const imageUrl = e.target?.result;
-            // Сохраняем в localStorage
             localStorage.setItem('user-avatar', imageUrl);
-            // Обновляем аватар в профиле
             const profileAvatarLarge = document.getElementById('profileAvatarLarge');
             if (profileAvatarLarge) {
                 profileAvatarLarge.style.backgroundImage = `url(${imageUrl})`;
@@ -419,10 +668,9 @@ export class DashboardComponent {
                 profileAvatarLarge.style.backgroundPosition = 'center';
                 profileAvatarLarge.style.backgroundRepeat = 'no-repeat';
                 profileAvatarLarge.style.backgroundColor = 'transparent';
-                profileAvatarLarge.textContent = ''; // Убираем текст когда есть фото
-                profileAvatarLarge.classList.add('has-image'); // Добавляем класс для стилизации
+                profileAvatarLarge.textContent = '';
+                profileAvatarLarge.classList.add('has-image');
             }
-            // Обновляем аватар в шапке
             const userAvatarHeader = document.getElementById('userAvatarHeader');
             if (userAvatarHeader) {
                 userAvatarHeader.style.backgroundImage = `url(${imageUrl})`;
@@ -430,74 +678,84 @@ export class DashboardComponent {
                 userAvatarHeader.style.backgroundPosition = 'center';
                 userAvatarHeader.style.backgroundRepeat = 'no-repeat';
                 userAvatarHeader.style.backgroundColor = 'transparent';
-                userAvatarHeader.textContent = ''; // Убираем текст когда есть фото
-                userAvatarHeader.classList.add('has-image'); // Добавляем класс для стилизации
+                userAvatarHeader.textContent = '';
+                userAvatarHeader.classList.add('has-image');
             }
-            console.log('Avatar uploaded successfully');
+            this.addAction({
+                action: 'Обновление аватара',
+                type: 'settings',
+                status: 'success'
+            });
         };
         reader.readAsDataURL(file);
     }
     switchSection(section) {
         this.activeSection = section;
-        // Update active nav item
-        document.querySelectorAll('.nav-item').forEach(item => {
-            item.classList.remove('active');
+        // Обновляем активный пункт меню
+        const navItems = document.querySelectorAll('.nav-item');
+        navItems.forEach(item => {
+            item.classList.toggle('active', item.dataset.section === section);
         });
-        document.querySelector(`[data-section="${section}"]`)?.classList.add('active');
-        // Update page title
+        // Обновляем заголовок
         const titles = {
             dashboard: 'Dashboard',
             profile: 'Профиль',
             history: 'История',
-            settings: 'Настройки',
             support: 'Поддержка'
         };
-        const titleElement = document.getElementById('pageTitle');
-        if (titleElement) {
-            titleElement.textContent = titles[section] || 'Dashboard';
+        const pageTitle = document.getElementById('pageTitle');
+        if (pageTitle) {
+            pageTitle.textContent = titles[section] || 'Dashboard';
         }
-        // Update content
-        const contentElement = document.getElementById('dashboardContent');
-        if (contentElement) {
+        // Переключаем контент
+        const content = document.getElementById('dashboardContent');
+        if (content) {
             switch (section) {
+                case 'dashboard':
+                    content.innerHTML = this.getDashboardContent();
+                    // Перепривязываем обработчик для карточки активности
+                    setTimeout(() => {
+                        document.getElementById('activityMetricCard')?.addEventListener('click', () => {
+                            this.showActivityDetail();
+                        });
+                    }, 0);
+                    document.getElementById('btnClearHistory')?.addEventListener('click', () => this.clearHistory());
+                    break;
                 case 'profile':
-                    contentElement.innerHTML = this.getProfileContent();
-                    // Перепривязываем события для аватара после обновления HTML
-                    setTimeout(() => this.bindProfileAvatarEvents(), 100);
+                    content.innerHTML = this.getProfileContent();
                     break;
                 case 'history':
-                    contentElement.innerHTML = this.getHistoryContent();
+                    content.innerHTML = this.getHistoryContent();
                     break;
                 case 'support':
-                    contentElement.innerHTML = this.getSupportContent();
+                    content.innerHTML = this.getSupportContent();
                     break;
-                default:
-                    contentElement.innerHTML = this.getDashboardContent();
             }
         }
     }
     getProfileContent() {
+        const userName = localStorage.getItem('user-name') || 'Пользователь';
+        const userEmail = localStorage.getItem('user-email') || 'user@example.com';
         return `
-      <div class="profile-section">
-        <div class="profile-card">
-          <div class="profile-avatar">
-            <div class="avatar-large" id="profileAvatarLarge">П</div>
-            <input type="file" id="profileAvatarInput" accept="image/*" style="display: none;">
-            <button class="change-avatar-btn" id="changeProfileAvatarBtn">Изменить фото</button>
+      <div class="dashboard-section">
+        <div class="profile-section">
+          <h2>Профиль пользователя</h2>
+          <div class="profile-avatar-large" id="profileAvatarLarge">
+            ${this.currentAvatar ? '' : userName.charAt(0).toUpperCase()}
           </div>
-          <div class="profile-info">
-            <h2>Пользователь</h2>
-            <p class="profile-email">user@example.com</p>
-            <div class="profile-stats">
-              <div class="stat">
-                <span class="stat-label">Дата регистрации</span>
-                <span class="stat-value">15.01.2024</span>
-              </div>
-              <div class="stat">
-                <span class="stat-label">План</span>
-                <span class="stat-value">Pro</span>
-              </div>
+          <input type="file" id="profileAvatarInput" accept="image/*" style="display: none;">
+          <button class="change-avatar-btn" id="changeProfileAvatarBtn">Изменить фото</button>
+
+          <div class="profile-form">
+            <div class="form-group">
+              <label>Имя</label>
+              <input type="text" id="profileName" value="${userName}">
             </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" id="profileEmail" value="${userEmail}">
+            </div>
+            <button class="save-profile-btn" id="saveProfileBtn">Сохранить</button>
           </div>
         </div>
       </div>
@@ -505,9 +763,12 @@ export class DashboardComponent {
     }
     getHistoryContent() {
         return `
-      <div class="history-section">
+      <div class="dashboard-section">
         <h2>История действий</h2>
-        <p>Полная история ваших действий в приложении</p>
+        <div class="full-history" id="fullHistoryTable">
+          ${this.getRecentActionsHTML()}
+        </div>
+        <button class="clear-history-btn" id="btnClearFullHistory">Очистить всю историю</button>
       </div>
     `;
     }
@@ -516,7 +777,7 @@ export class DashboardComponent {
       <div class="support-section">
         <h2>Поддержка</h2>
         <p class="support-description">Свяжитесь с нашей командой поддержки или присоединяйтесь к сообществу</p>
-        
+
         <div class="support-links">
           <a href="https://t.me/SmarTable_chat" target="_blank" rel="noopener noreferrer" class="support-link telegram">
             <div class="support-link-icon">
@@ -546,6 +807,11 @@ export class DashboardComponent {
         this.currentTheme = this.currentTheme === 'light' ? 'dark' : 'light';
         this.applyTheme();
         this.saveTheme();
+        this.addAction({
+            action: `Применена ${this.currentTheme === 'light' ? 'светлая' : 'тёмная'} тема`,
+            type: 'theme',
+            status: 'success'
+        });
     }
     applyTheme() {
         const root = document.documentElement;
@@ -573,764 +839,95 @@ export class DashboardComponent {
         localStorage.setItem('dashboard-theme', this.currentTheme);
     }
     showNotifications() {
-        // Получаем список уведомлений из localStorage
-        const notifications = this.getNotifications();
-        // Создаём модальное окно
+        const notifications = [
+            { title: 'Добро пожаловать!', message: 'Начните работу с SmartTable', time: '2 мин назад' },
+            { title: 'Обновление', message: 'Доступна новая версия приложения', time: '1 час назад' },
+            { title: 'Напоминание', message: 'Не забудьте сохранить файл', time: '3 часа назад' }
+        ];
         const modal = document.createElement('div');
         modal.className = 'notifications-modal';
-        let notificationsHtml = '';
-        if (notifications.length > 0) {
-            notifications.forEach((n) => {
-                notificationsHtml += `
-          <div class="notification-item ${n.read ? 'read' : 'unread'}">
-            <div class="notification-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-              </svg>
-            </div>
-            <div class="notification-text">
-              <p class="notification-title">${n.title}</p>
-              <p class="notification-message">${n.message}</p>
-              <span class="notification-time">${n.time}</span>
-            </div>
-          </div>`;
-            });
-        }
-        else {
-            notificationsHtml = `
-        <div class="no-notifications">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-          </svg>
-          <p>Нет уведомлений</p>
-        </div>`;
-        }
         modal.innerHTML = `
-      <div class="notifications-overlay" id="notificationsOverlay"></div>
+      <div class="notifications-overlay"></div>
       <div class="notifications-panel">
         <div class="notifications-header">
           <h3>Уведомления</h3>
-          <button class="close-btn" id="closeNotifications">&times;</button>
+          <button class="close-notifications">×</button>
         </div>
-        <div class="notifications-content">
-          ${notificationsHtml}
-        </div>
-      </div>`;
-        document.body.appendChild(modal);
-        // Обработчики закрытия
-        const overlay = document.getElementById('notificationsOverlay');
-        const closeBtn = document.getElementById('closeNotifications');
-        const closeModal = () => {
-            modal.remove();
-            // Отмечаем уведомления как прочитанные
-            this.markNotificationsAsRead();
-        };
-        overlay?.addEventListener('click', closeModal);
-        closeBtn?.addEventListener('click', closeModal);
-        // Проматываем вниз
-        setTimeout(() => {
-            const content = modal.querySelector('.notifications-content');
-            if (content) {
-                content.scrollTop = content.scrollHeight;
-            }
-        }, 100);
-    }
-    getNotifications() {
-        // Получаем уведомления из localStorage
-        try {
-            const saved = localStorage.getItem('notifications');
-            return saved ? JSON.parse(saved) : this.getDefaultNotifications();
-        }
-        catch {
-            return this.getDefaultNotifications();
-        }
-    }
-    getDefaultNotifications() {
-        return [
-            { title: 'Добро пожаловать!', message: 'Спасибо за использование SmartTable', time: 'Сегодня', read: false },
-            { title: 'Новая функция', message: 'Теперь вы можете загружать фото профиля', time: 'Вчера', read: false },
-        ];
-    }
-    markNotificationsAsRead() {
-        const notifications = this.getNotifications();
-        notifications.forEach(n => n.read = true);
-        localStorage.setItem('notifications', JSON.stringify(notifications));
-        // Скрываем badge
-        const badge = document.querySelector('.notification-badge');
-        if (badge) {
-            badge.style.display = 'none';
-        }
-    }
-    openAIChat() {
-        const aiChat = window.aiChat;
-        if (aiChat) {
-            aiChat.open();
-        }
-    }
-    getActivityTypeLabel(type) {
-        const labels = {
-            'spreadsheet': 'Таблицы',
-            'dashboard': 'Личный кабинет',
-            'ai_chat': 'AI Ассистент',
-            'other': 'Другое',
-            'none': 'Нет данных'
-        };
-        return labels[type] || type;
-    }
-    getPercentage(value, total) {
-        if (total === 0)
-            return 0;
-        return Math.round((value / total) * 100);
-    }
-    updateDatabaseStats() {
-        // Расчет размера базы данных
-        let dbSize = 0;
-        let messageCount = 0;
-        // Получаем все данные из localStorage
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key) {
-                const value = localStorage.getItem(key);
-                if (value) {
-                    dbSize += key.length + value.length;
-                    // Считаем сообщения AI
-                    if (key.includes('ai') || key.includes('chat') || key.includes('message')) {
-                        try {
-                            const data = JSON.parse(value);
-                            if (Array.isArray(data)) {
-                                messageCount += data.length;
-                            }
-                        }
-                        catch {
-                            // Игнорируем ошибки парсинга
-                        }
-                    }
-                }
-            }
-        }
-        // Расчет размера в KB/MB
-        const dbSizeKB = Math.round(dbSize / 1024);
-        const dbSizeMB = (dbSizeKB / 1024).toFixed(2);
-        // Обновляем элементы хранилища
-        const storageSizeElement = document.getElementById('storageSize');
-        const freeSpaceElement = document.getElementById('freeSpace');
-        const totalStorageSizeElement = document.getElementById('totalStorageSize');
-        if (storageSizeElement) {
-            storageSizeElement.textContent = `${dbSizeKB > 1024 ? `${dbSizeMB} MB` : `${dbSizeKB} KB`}`;
-        }
-        if (freeSpaceElement) {
-            freeSpaceElement.textContent = `${Math.max(0, 10 - parseFloat(dbSizeMB)).toFixed(2)} MB`;
-        }
-        if (totalStorageSizeElement) {
-            totalStorageSizeElement.textContent = `${dbSizeMB} MB`;
-        }
-        // Обновление карточки "Активность"
-        this.updateActivityStats();
-        // Обновление карточки "Документы"
-        this.updateDocumentsStats();
-        // Обновление секции XLSX файлов
-        this.updateXLSXStats();
-    }
-    updateActivityStats() {
-        const activityValueElement = document.getElementById('activityValue');
-        const activityChangeElement = document.getElementById('activityChange');
-        if (!activityValueElement || !activityChangeElement)
-            return;
-        const today = new Date().toISOString().split('T')[0];
-        const dailyStats = timeTracker.getDailyStats(today);
-        const weeklyStats = timeTracker.getWeeklyStats();
-        // Получаем статистику за вчера
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayString = yesterday.toISOString().split('T')[0];
-        const yesterdayStats = timeTracker.getDailyStats(yesterdayString);
-        // Рассчитываем процент активности (отношение времени сегодня ко времени вчера)
-        let activityPercent = 0;
-        if (yesterdayStats.total_seconds > 0) {
-            activityPercent = Math.round((dailyStats.total_seconds / yesterdayStats.total_seconds) * 100);
-        }
-        else if (dailyStats.total_seconds > 0) {
-            activityPercent = 100; // Если вчера не было активности, а сегодня есть - это 100%
-        }
-        // Рассчитываем изменение по сравнению с прошлой неделей
-        const lastWeekStart = new Date();
-        lastWeekStart.setDate(lastWeekStart.getDate() - 7 - lastWeekStart.getDay());
-        const lastWeekEnd = new Date(lastWeekStart);
-        lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
-        let lastWeekTotal = 0;
-        for (let d = new Date(lastWeekStart); d <= lastWeekEnd; d.setDate(d.getDate() + 1)) {
-            const dateStr = d.toISOString().split('T')[0];
-            const dayStats = timeTracker.getDailyStats(dateStr);
-            lastWeekTotal += dayStats.total_seconds;
-        }
-        const thisWeekTotal = weeklyStats.total_seconds;
-        let weekChange = 0;
-        let weekChangeText = '';
-        let changeClass = 'neutral';
-        if (lastWeekTotal > 0) {
-            weekChange = Math.round(((thisWeekTotal - lastWeekTotal) / lastWeekTotal) * 100);
-            if (weekChange > 0) {
-                weekChangeText = `+${weekChange}% за неделю`;
-                changeClass = 'positive';
-            }
-            else if (weekChange < 0) {
-                weekChangeText = `${weekChange}% за неделю`;
-                changeClass = 'negative';
-            }
-            else {
-                weekChangeText = 'Без изменений';
-            }
-        }
-        else if (thisWeekTotal > 0) {
-            weekChangeText = 'Новая неделя';
-            changeClass = 'positive';
-        }
-        else {
-            weekChangeText = 'Нет данных';
-        }
-        // Обновляем значения
-        activityValueElement.textContent = `${activityPercent}%`;
-        activityChangeElement.textContent = weekChangeText;
-        // Обновляем класс для изменения
-        activityChangeElement.className = `metric-change ${changeClass}`;
-    }
-    updateDocumentsStats() {
-        const documentsCountElement = document.getElementById('documentsCount');
-        const documentsChangeElement = document.getElementById('documentsChange');
-        if (!documentsCountElement || !documentsChangeElement)
-            return;
-        // Подсчитываем количество файлов/проектов в localStorage
-        let totalFiles = 0;
-        let newFilesToday = 0;
-        const today = new Date().toISOString().split('T')[0];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key) {
-                // Считаем файлы SmartTable (проекты, таблицы и т.д.)
-                if (key.includes('project') || key.includes('sheet') || key.includes('table') ||
-                    key.includes('file') || key.endsWith('.json')) {
-                    totalFiles++;
-                    // Проверяем, создан ли файл сегодня
-                    try {
-                        const value = localStorage.getItem(key);
-                        if (value) {
-                            const data = JSON.parse(value);
-                            // Проверяем дату создания
-                            if (data.createdAt && data.createdAt.startsWith(today)) {
-                                newFilesToday++;
-                            }
-                        }
-                    }
-                    catch {
-                        // Игнорируем ошибки парсинга
-                    }
-                }
-            }
-        }
-        // Также считаем JSON проекты
-        totalFiles += this.countJSONProjects();
-        // Обновляем значения
-        documentsCountElement.textContent = totalFiles.toString();
-        if (newFilesToday > 0) {
-            documentsChangeElement.textContent = `+${newFilesToday} новых`;
-            documentsChangeElement.className = 'metric-change positive';
-        }
-        else {
-            documentsChangeElement.textContent = 'Нет новых';
-            documentsChangeElement.className = 'metric-change neutral';
-        }
-    }
-    updateXLSXStats() {
-        const xlsxCountElement = document.getElementById('xlsxCount');
-        const xlsxTotalCountElement = document.getElementById('xlsxTotalCount');
-        const xlsxDataSizeElement = document.getElementById('xlsxDataSize');
-        if (!xlsxCountElement || !xlsxTotalCountElement || !xlsxDataSizeElement)
-            return;
-        const xlsxCount = this.countXLSXFiles();
-        const xlsxSize = this.getXLSXDataSize();
-        xlsxCountElement.textContent = `${xlsxCount} файлов`;
-        xlsxTotalCountElement.textContent = xlsxCount.toString();
-        xlsxDataSizeElement.textContent = this.formatBytes(xlsxSize);
-    }
-    countJSONProjects() {
-        let count = 0;
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && (key.includes('project') || key.includes('json') || key.endsWith('.json'))) {
-                count++;
-            }
-        }
-        return count;
-    }
-    countXLSXFiles() {
-        let count = 0;
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && (key.includes('xlsx') || key.includes('spreadsheet') ||
-                key.includes('sheet') || key.includes('excel') ||
-                key.includes('table') || key.endsWith('.xls'))) {
-                count++;
-            }
-        }
-        return count;
-    }
-    getXLSXDataSize() {
-        let size = 0;
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && (key.includes('xlsx') || key.includes('spreadsheet') ||
-                key.includes('sheet') || key.includes('excel') ||
-                key.includes('table') || key.endsWith('.xls'))) {
-                const value = localStorage.getItem(key);
-                if (value) {
-                    size += key.length + value.length;
-                }
-            }
-        }
-        return size;
-    }
-    countTotalFiles() {
-        let count = 0;
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && (key.includes('file') || key.includes('document') || key.includes('sheet'))) {
-                count++;
-            }
-        }
-        return count;
-    }
-    countAISessions() {
-        try {
-            const sessions = localStorage.getItem('ai_sessions');
-            if (sessions) {
-                const data = JSON.parse(sessions);
-                return Array.isArray(data) ? data.length : 0;
-            }
-        }
-        catch {
-            // Игнорируем ошибки
-        }
-        return 0;
-    }
-    countActiveSessions() {
-        try {
-            const currentSession = localStorage.getItem('time_tracker_current_session');
-            if (currentSession) {
-                const session = JSON.parse(currentSession);
-                return session.is_active ? 1 : 0;
-            }
-        }
-        catch {
-            // Игнорируем ошибки
-        }
-        return 0;
-    }
-    calculateStorageSize() {
-        let totalSize = 0;
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key) {
-                const value = localStorage.getItem(key);
-                if (value) {
-                    totalSize += key.length + value.length;
-                }
-            }
-        }
-        const sizeMB = (totalSize / (1024 * 1024)).toFixed(2);
-        return `${sizeMB} MB`;
-    }
-    calculateFreeSpace() {
-        // localStorage обычно имеет лимит ~5-10MB
-        let totalSize = 0;
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key) {
-                const value = localStorage.getItem(key);
-                if (value) {
-                    totalSize += key.length + value.length;
-                }
-            }
-        }
-        const usedMB = totalSize / (1024 * 1024);
-        const freeMB = Math.max(0, 10 - usedMB); // Предполагаем лимит 10MB
-        return `${freeMB.toFixed(2)} MB`;
-    }
-    bindStatsCardEvents() {
-        console.log('[Dashboard] Binding stats card events...');
-        // Добавляем клик на карточку хранилища
-        const storageCard = this.container?.querySelector('.stat-icon.storage')?.closest('.stat-card');
-        console.log('[Dashboard] Storage card found:', !!storageCard);
-        if (storageCard) {
-            storageCard.addEventListener('click', (e) => {
-                console.log('[Dashboard] Storage card clicked!');
-                e.preventDefault();
-                e.stopPropagation();
-                this.showStorageDetails();
-            });
-            storageCard.style.cursor = 'pointer';
-            storageCard.style.position = 'relative';
-            // Добавляем визуальный индикатор кликабельности
-            storageCard.style.transition = 'transform 0.2s ease, box-shadow 0.2s ease';
-            console.log('[Dashboard] Storage card event listener added');
-        }
-        // Добавляем клики на другие карточки для будущей функциональности
-        const dbCard = this.container?.querySelector('.stat-icon.database')?.closest('.stat-card');
-        console.log('[Dashboard] DB card found:', !!dbCard);
-        if (dbCard) {
-            dbCard.addEventListener('click', (e) => {
-                console.log('[Dashboard] DB card clicked!');
-                e.preventDefault();
-                e.stopPropagation();
-                this.showDatabaseDetails();
-            });
-            dbCard.style.cursor = 'pointer';
-            dbCard.style.position = 'relative';
-            dbCard.style.transition = 'transform 0.2s ease, box-shadow 0.2s ease';
-            console.log('[Dashboard] DB card event listener added');
-        }
-    }
-    showStorageDetails() {
-        const storageData = this.getDetailedStorageInfo();
-        const aiSessionCount = this.countAISessions();
-        const projectCount = this.countJSONProjects();
-        const modal = document.createElement('div');
-        modal.className = 'storage-modal-overlay';
-        modal.innerHTML = `
-      <div class="storage-modal">
-        <div class="storage-modal-header">
-          <h3>Детальная информация о хранилище</h3>
-          <button class="storage-modal-close" onclick="this.closest('.storage-modal-overlay').remove()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-        <div class="storage-modal-content">
-          <div class="storage-overview">
-            <div class="storage-chart">
-              <div class="storage-circle">
-                <div class="storage-fill" style="background: conic-gradient(var(--primary) ${storageData.percentage}%, var(--bg-secondary) ${storageData.percentage}%)"></div>
-                <div class="storage-center">
-                  <div class="storage-percentage">${storageData.percentage}%</div>
-                  <div class="storage-label">Занято</div>
-                </div>
-              </div>
-            </div>
-            <div class="storage-stats">
-              <div class="storage-stat">
-                <span class="storage-stat-label">Всего:</span>
-                <span class="storage-stat-value">10 MB</span>
-              </div>
-              <div class="storage-stat">
-                <span class="storage-stat-label">Занято:</span>
-                <span class="storage-stat-value">${storageData.usedMB} MB</span>
-              </div>
-              <div class="storage-stat">
-                <span class="storage-stat-label">Свободно:</span>
-                <span class="storage-stat-value">${storageData.freeMB} MB</span>
-              </div>
-            </div>
-          </div>
-          
-          <div class="storage-sections">
-            <!-- AI Сессии -->
-            <div class="storage-section">
-              <div class="storage-section-header" onclick="this.toggleSection('ai-section')">
-                <div class="storage-section-info">
-                  <div class="storage-section-icon ai">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <circle cx="12" cy="12" r="10"/>
-                      <polyline points="12,6 12,12 16,14"/>
-                    </svg>
-                  </div>
-                  <div class="storage-section-title">
-                    <h4>AI Сессии</h4>
-                    <p class="storage-section-count">${aiSessionCount} сессий</p>
-                  </div>
-                </div>
-                <svg class="storage-section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="6,9 12,15 18,9"/>
+        <div class="notifications-list">
+          ${notifications.map(n => `
+            <div class="notification-item unread">
+              <div class="notification-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
                 </svg>
               </div>
-              <div class="storage-section-content" id="ai-section">
-                <div class="storage-section-items">
-                  <div class="storage-section-item">
-                    <span class="item-label">Всего сессий:</span>
-                    <span class="item-value">${aiSessionCount}</span>
-                  </div>
-                  <div class="storage-section-item">
-                    <span class="item-label">Активных:</span>
-                    <span class="item-value">${this.countActiveSessions()}</span>
-                  </div>
-                  <div class="storage-section-item">
-                    <span class="item-label">Размер данных:</span>
-                    <span class="item-value">${this.formatBytes(this.getAIDataSize())}</span>
-                  </div>
-                </div>
+              <div class="notification-text">
+                <p class="notification-title">${n.title}</p>
+                <p class="notification-message">${n.message}</p>
+                <span class="notification-time">${n.time}</span>
               </div>
             </div>
-
-            <!-- XLSX Файлы -->
-            <div class="storage-section">
-              <div class="storage-section-header" onclick="this.toggleSection('xlsx-section')">
-                <div class="storage-section-info">
-                  <div class="storage-section-icon projects">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2Z"/>
-                      <polyline points="14,2 14,8 20,8"/>
-                      <line x1="8" y1="13" x2="16" y2="13"/>
-                      <line x1="8" y1="17" x2="16" y2="17"/>
-                    </svg>
-                  </div>
-                  <div class="storage-section-title">
-                    <h4>Файлы XLSX</h4>
-                    <p class="storage-section-count" id="xlsxCount">${this.countXLSXFiles()} файлов</p>
-                  </div>
-                </div>
-                <svg class="storage-section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="6,9 12,15 18,9"/>
-                </svg>
-              </div>
-              <div class="storage-section-content" id="xlsx-section">
-                <div class="storage-section-items">
-                  <div class="storage-section-item">
-                    <span class="item-label">Всего файлов:</span>
-                    <span class="item-value" id="xlsxTotalCount">${this.countXLSXFiles()}</span>
-                  </div>
-                  <div class="storage-section-item">
-                    <span class="item-label">Размер данных:</span>
-                    <span class="item-value" id="xlsxDataSize">${this.formatBytes(this.getXLSXDataSize())}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="storage-breakdown">
-            <h4>Распределение по типам данных</h4>
-            <div class="storage-items">
-              ${storageData.categories.map(category => `
-                <div class="storage-item">
-                  <div class="storage-item-info">
-                    <div class="storage-item-color" style="background: ${category.color}"></div>
-                    <span class="storage-item-name">${category.name}</span>
-                  </div>
-                  <div class="storage-item-size">${category.size}</div>
-                  <div class="storage-item-percentage">${category.percentage}%</div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-
-          <div class="storage-actions">
-            <button class="storage-btn primary" onclick="this.clearStorage()">Очистить кэш</button>
-            <button class="storage-btn secondary" onclick="this.exportStorage()">Экспорт данных</button>
-          </div>
+          `).join('')}
         </div>
       </div>
     `;
         document.body.appendChild(modal);
-        // Добавляем обработчики для кнопок
-        const clearBtn = modal.querySelector('.storage-btn.primary');
-        const exportBtn = modal.querySelector('.storage-btn.secondary');
-        if (clearBtn) {
-            clearBtn.addEventListener('click', () => this.clearStorageCache(modal));
-        }
-        if (exportBtn) {
-            exportBtn.addEventListener('click', () => this.exportStorageData());
-        }
-        // Добавляем обработчики для секций
-        this.addSectionHandlers(modal);
+        modal.querySelector('.close-notifications')?.addEventListener('click', () => {
+            modal.remove();
+        });
+        modal.querySelector('.notifications-overlay')?.addEventListener('click', () => {
+            modal.remove();
+        });
     }
-    getDetailedStorageInfo() {
-        let totalSize = 0;
-        const categories = {};
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key) {
-                const value = localStorage.getItem(key);
-                if (value) {
-                    const size = key.length + value.length;
-                    totalSize += size;
-                    // Категоризируем данные
-                    let category = 'other';
-                    if (key.includes('ai') || key.includes('chat') || key.includes('message')) {
-                        category = 'ai';
-                    }
-                    else if (key.includes('project') || key.includes('json')) {
-                        category = 'projects';
-                    }
-                    else if (key.includes('time') || key.includes('session')) {
-                        category = 'sessions';
-                    }
-                    else if (key.includes('avatar') || key.includes('theme') || key.includes('settings')) {
-                        category = 'settings';
-                    }
-                    if (!categories[category]) {
-                        categories[category] = { size: 0, count: 0 };
-                    }
-                    categories[category].size += size;
-                    categories[category].count++;
+    updateDatabaseStats() {
+        try {
+            // Получаем размер localStorage
+            let totalSize = 0;
+            for (const key in localStorage) {
+                if (localStorage.hasOwnProperty(key)) {
+                    totalSize += localStorage[key].length * 2; // UTF-16
                 }
             }
-        }
-        const usedMB = (totalSize / (1024 * 1024)).toFixed(2);
-        const freeMB = Math.max(0, 10 - parseFloat(usedMB)).toFixed(2);
-        const percentage = Math.round((parseFloat(usedMB) / 10) * 100);
-        const categoryData = [
-            { name: 'AI данные', color: '#3b82f6', size: this.formatBytes(categories.ai?.size || 0), percentage: Math.round(((categories.ai?.size || 0) / totalSize) * 100) },
-            { name: 'Проекты', color: '#10b981', size: this.formatBytes(categories.projects?.size || 0), percentage: Math.round(((categories.projects?.size || 0) / totalSize) * 100) },
-            { name: 'Сессии', color: '#f59e0b', size: this.formatBytes(categories.sessions?.size || 0), percentage: Math.round(((categories.sessions?.size || 0) / totalSize) * 100) },
-            { name: 'Настройки', color: '#8b5cf6', size: this.formatBytes(categories.settings?.size || 0), percentage: Math.round(((categories.settings?.size || 0) / totalSize) * 100) },
-            { name: 'Другое', color: '#6b7280', size: this.formatBytes(categories.other?.size || 0), percentage: Math.round(((categories.other?.size || 0) / totalSize) * 100) }
-        ];
-        return {
-            usedMB: parseFloat(usedMB),
-            freeMB: parseFloat(freeMB),
-            percentage,
-            categories: categoryData
-        };
-    }
-    formatBytes(bytes) {
-        if (bytes === 0)
-            return '0 B';
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }
-    clearStorageCache(modal) {
-        // Очищаем только кэш, сохраняя важные данные
-        const keysToKeep = [
-            'user-avatar',
-            'dashboard-theme',
-            'time_tracker_sessions',
-            'time_tracker_current_session',
-            'ai_sessions'
-        ];
-        const keysToRemove = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && !keysToKeep.includes(key)) {
-                keysToRemove.push(key);
+            const sizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+            const freeSpace = (5 - parseFloat(sizeMB)).toFixed(2); // Лимит 5MB
+            const storageSize = document.getElementById('storageSize');
+            const freeSpaceEl = document.getElementById('freeSpace');
+            if (storageSize)
+                storageSize.textContent = `${sizeMB} MB`;
+            if (freeSpaceEl)
+                freeSpaceEl.textContent = `${freeSpace} MB`;
+            // Обновляем количество документов
+            const docsCount = Object.keys(localStorage).filter(k => k.startsWith('smarttable-doc-')).length;
+            const documentsCount = document.getElementById('documentsCount');
+            if (documentsCount)
+                documentsCount.textContent = docsCount.toString();
+            // Обновляем активность
+            const activityValue = document.getElementById('activityValue');
+            if (activityValue) {
+                const today = new Date().toISOString().split('T')[0];
+                const dailyStats = timeTracker.getDailyStats(today);
+                const activity = Math.min(100, Math.round((dailyStats.total_seconds / (8 * 3600)) * 100));
+                activityValue.textContent = `${activity}%`;
             }
         }
-        keysToRemove.forEach(key => localStorage.removeItem(key));
-        // Обновляем статистику
-        this.updateDatabaseStats();
-        // Показываем уведомление
-        const notification = document.createElement('div');
-        notification.className = 'storage-notification';
-        notification.textContent = `Очищено ${keysToRemove.length} элементов кэша`;
-        document.body.appendChild(notification);
-        setTimeout(() => notification.remove(), 3000);
-    }
-    exportStorageData() {
-        const data = {};
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key) {
-                const value = localStorage.getItem(key);
-                if (value) {
-                    try {
-                        data[key] = JSON.parse(value);
-                    }
-                    catch {
-                        data[key] = value;
-                    }
-                }
-            }
-        }
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `smarttable-backup-${new Date().toISOString().split('T')[0]}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-    }
-    showDatabaseDetails() {
-        // Заглушка для будущей функциональности
-        alert('Детальная информация о базе данных будет доступна в следующем обновлении');
-    }
-    showProjectsDetails() {
-        // Заглушка для будущей функциональности
-        alert('Детальная информация о проектах будет доступна в следующем обновлении');
-    }
-    showSessionsDetails() {
-        // Заглушка для будущей функциональности
-        alert('Детальная информация о сессиях будет доступна в следующем обновлении');
-    }
-    getAIDataSize() {
-        let size = 0;
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && (key.includes('ai') || key.includes('chat') || key.includes('message') || key.includes('session'))) {
-                const value = localStorage.getItem(key);
-                if (value) {
-                    size += key.length + value.length;
-                }
-            }
-        }
-        return size;
-    }
-    getProjectsDataSize() {
-        let size = 0;
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && (key.includes('project') || key.includes('json') || key.endsWith('.json'))) {
-                const value = localStorage.getItem(key);
-                if (value) {
-                    size += key.length + value.length;
-                }
-            }
-        }
-        return size;
-    }
-    addSectionHandlers(modal) {
-        // Добавляем обработчики для переключения секций
-        const aiHeader = modal.querySelector('.storage-section-header[onclick*="ai-section"]');
-        const projectsHeader = modal.querySelector('.storage-section-header[onclick*="projects-section"]');
-        if (aiHeader) {
-            aiHeader.addEventListener('click', () => this.toggleSection('ai-section', modal));
-        }
-        if (projectsHeader) {
-            projectsHeader.addEventListener('click', () => this.toggleSection('projects-section', modal));
+        catch (e) {
+            console.error('[Dashboard] Failed to update stats:', e);
         }
     }
-    toggleSection(sectionId, modal) {
-        const section = modal.querySelector(`#${sectionId}`);
-        const arrow = modal.querySelector(`.storage-section-header[onclick*="${sectionId}"] .storage-section-arrow`);
-        if (section && arrow) {
-            const isExpanded = section.style.display !== 'none';
-            if (isExpanded) {
-                section.style.display = 'none';
-                arrow.style.transform = 'rotate(0deg)';
-            }
-            else {
-                section.style.display = 'block';
-                arrow.style.transform = 'rotate(180deg)';
-            }
-        }
+    bindStatsCardEvents() {
+        // Добавляем кликабельность для карточек
+        const statCards = document.querySelectorAll('.time-stat-card, .metric-card, .stat-card');
+        statCards.forEach(card => {
+            card.addEventListener('click', () => {
+                card.classList.add('clicked');
+                setTimeout(() => card.classList.remove('clicked'), 200);
+            });
+        });
     }
     loadSavedAvatar() {
         const savedAvatar = localStorage.getItem('user-avatar');
         if (savedAvatar) {
-            // Обновляем аватар в профиле
-            const profileAvatarLarge = document.getElementById('profileAvatarLarge');
-            if (profileAvatarLarge) {
-                profileAvatarLarge.style.backgroundImage = `url(${savedAvatar})`;
-                profileAvatarLarge.style.backgroundSize = 'cover';
-                profileAvatarLarge.style.backgroundPosition = 'center';
-                profileAvatarLarge.style.backgroundRepeat = 'no-repeat';
-                profileAvatarLarge.style.backgroundColor = 'transparent';
-                profileAvatarLarge.textContent = ''; // Убираем текст когда есть фото
-                profileAvatarLarge.classList.add('has-image'); // Добавляем класс для стилизации
-            }
-            // Обновляем аватар в шапке
             const userAvatarHeader = document.getElementById('userAvatarHeader');
             if (userAvatarHeader) {
                 userAvatarHeader.style.backgroundImage = `url(${savedAvatar})`;
@@ -1338,8 +935,8 @@ export class DashboardComponent {
                 userAvatarHeader.style.backgroundPosition = 'center';
                 userAvatarHeader.style.backgroundRepeat = 'no-repeat';
                 userAvatarHeader.style.backgroundColor = 'transparent';
-                userAvatarHeader.textContent = ''; // Убираем текст когда есть фото
-                userAvatarHeader.classList.add('has-image'); // Добавляем класс для стилизации
+                userAvatarHeader.textContent = '';
+                userAvatarHeader.classList.add('has-image');
             }
         }
     }
@@ -1349,14 +946,9 @@ export class DashboardComponent {
         this.isOpen = true;
         this.container.style.display = 'block';
         document.body.style.overflow = 'hidden';
-        // Начинаем отслеживание времени в личном кабинете
-        timeTracker.startSession('dashboard');
         // Обновляем статистику при открытии
         this.updateDatabaseStats();
-        // Устанавливаем периодическое обновление статистики каждые 5 секунд
-        this.statsUpdateInterval = setInterval(() => {
-            this.updateDatabaseStats();
-        }, 5000);
+        this.renderRecentActions();
     }
     close() {
         if (!this.isOpen || !this.container)
@@ -1364,17 +956,19 @@ export class DashboardComponent {
         this.isOpen = false;
         this.container.style.display = 'none';
         document.body.style.overflow = '';
-        // Очищаем интервал обновления статистики
-        if (this.statsUpdateInterval) {
-            clearInterval(this.statsUpdateInterval);
-            this.statsUpdateInterval = null;
+    }
+    toggle() {
+        if (this.isOpen) {
+            this.close();
         }
-        // Завершаем сессию личного кабинета
-        timeTracker.endCurrentSession();
-        // Начинаем отслеживание времени в таблицах (предполагаем, что это основная активность)
-        timeTracker.startSession('spreadsheet');
+        else {
+            this.open();
+        }
     }
     destroy() {
+        if (this.statsUpdateInterval) {
+            clearInterval(this.statsUpdateInterval);
+        }
         this.close();
         this.container?.remove();
     }
