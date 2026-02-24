@@ -3,6 +3,7 @@
  */
 
 import { themeManager, Theme } from '../core/theme-manager.js';
+import { autosaveManager } from '../core/autosave-manager.js';
 
 export class SettingsPanelComponent {
   private panel: HTMLElement | null = null;
@@ -89,6 +90,14 @@ export class SettingsPanelComponent {
                   </svg>
                   Анимации
                 </button>
+                <button class="settings-tab-child" data-tab="autosave">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                  </svg>
+                  Автосохранение
+                </button>
                 <button class="settings-tab-child" data-tab="custom">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 19l7-7 3 3-7 7-3-3z"/>
@@ -150,6 +159,65 @@ export class SettingsPanelComponent {
                     <input type="checkbox" id="toggleSelectionAnimation" checked>
                     <span class="toggle-slider"></span>
                   </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Вкладка: Автосохранение -->
+            <div class="settings-pane" id="autosavePane">
+              <div class="pane-header">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                  <polyline points="17 21 17 13 7 13 7 21"/>
+                  <polyline points="7 3 7 8 15 8"/>
+                </svg>
+                <h2>Автосохранение</h2>
+              </div>
+              <div class="settings-section">
+                <div class="setting-item">
+                  <div class="setting-item-info">
+                    <div class="setting-item-label">Включить автосохранение</div>
+                    <div class="setting-item-description">Автоматическое сохранение через заданные интервалы</div>
+                  </div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="toggleAutoSave">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-item-info">
+                    <div class="setting-item-label">Интервал автосохранения</div>
+                    <div class="setting-item-description">Периодичность автоматического сохранения (в минутах)</div>
+                  </div>
+                  <div class="autosave-interval-control">
+                    <input type="range" id="autosaveIntervalRange" min="1" max="60" value="5" class="range-slider">
+                    <div class="interval-display">
+                      <span id="autosaveIntervalValue">5</span> мин
+                    </div>
+                  </div>
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-item-info">
+                    <div class="setting-item-label">Статус автосохранения</div>
+                    <div class="setting-item-description">Информация о последнем сохранении</div>
+                  </div>
+                  <div class="autosave-status" id="autosaveStatus">
+                    <span class="status-indicator"></span>
+                    <span class="status-text">Автосохранение отключено</span>
+                  </div>
+                </div>
+
+                <div class="setting-item">
+                  <button class="btn-save-autosave" id="btnSaveAutoSaveNow">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;">
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                      <polyline points="17 21 17 13 7 13 7 21"/>
+                      <polyline points="7 3 7 8 15 8"/>
+                    </svg>
+                    Сохранить сейчас
+                  </button>
                 </div>
               </div>
             </div>
@@ -256,12 +324,122 @@ export class SettingsPanelComponent {
       if (savedValue !== null) {
         toggleAnimation.checked = savedValue === 'true';
       }
-      
+
       toggleAnimation.addEventListener('change', (e) => {
         const value = (e.target as HTMLInputElement).checked;
         localStorage.setItem('smarttable-selection-animation', value.toString());
         this.applySelectionAnimation(value);
       });
+    }
+
+    // Обработчики автосохранения
+    this.setupAutoSaveHandlers();
+  }
+
+  private setupAutoSaveHandlers(): void {
+    const config = autosaveManager.getConfig();
+    
+    // Тоггл автосохранения
+    const toggleAutoSave = document.getElementById('toggleAutoSave') as HTMLInputElement;
+    if (toggleAutoSave) {
+      toggleAutoSave.checked = config.enabled;
+      toggleAutoSave.addEventListener('change', (e) => {
+        const value = (e.target as HTMLInputElement).checked;
+        if (value) {
+          autosaveManager.enable();
+        } else {
+          autosaveManager.disable();
+        }
+        this.updateAutoSaveStatus();
+      });
+    }
+
+    // Ползунок интервала
+    const intervalRange = document.getElementById('autosaveIntervalRange') as HTMLInputElement;
+    const intervalValue = document.getElementById('autosaveIntervalValue');
+    if (intervalRange && intervalValue) {
+      intervalRange.value = config.intervalMinutes.toString();
+      intervalValue.textContent = config.intervalMinutes.toString();
+
+      intervalRange.addEventListener('input', (e) => {
+        const value = (e.target as HTMLInputElement).value;
+        intervalValue.textContent = value;
+        autosaveManager.setInterval(parseInt(value));
+      });
+    }
+
+    // Кнопка сохранения сейчас
+    document.getElementById('btnSaveAutoSaveNow')?.addEventListener('click', async () => {
+      const btn = document.getElementById('btnSaveAutoSaveNow');
+      if (btn) {
+        btn.classList.add('saving');
+        btn.textContent = 'Сохранение...';
+      }
+
+      const success = await autosaveManager.forceSave();
+      
+      if (btn) {
+        btn.classList.remove('saving');
+        btn.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+            <polyline points="7 3 7 8 15 8"/>
+          </svg>
+          Сохранить сейчас
+        `;
+      }
+
+      if (success) {
+        this.updateAutoSaveStatus();
+      }
+    });
+
+    // Слушатель события завершения автосохранения
+    window.addEventListener('autosave-completed', () => {
+      this.updateAutoSaveStatus();
+    });
+
+    // Обновление статуса при открытии панели
+    this.updateAutoSaveStatus();
+  }
+
+  private updateAutoSaveStatus(): void {
+    const statusElement = document.getElementById('autosaveStatus');
+    if (!statusElement) return;
+
+    const status = autosaveManager.getStatus();
+    const indicator = statusElement.querySelector('.status-indicator');
+    const text = statusElement.querySelector('.status-text');
+
+    if (!status.enabled) {
+      if (indicator) indicator.classList.remove('active', 'waiting');
+      if (text) text.textContent = 'Автосохранение отключено';
+    } else if (status.isDirty) {
+      if (indicator) {
+        indicator.classList.remove('active');
+        indicator.classList.add('waiting');
+      }
+      const timeUntil = autosaveManager.getTimeUntilNextSave();
+      if (timeUntil !== null) {
+        const mins = Math.floor(timeUntil / 60);
+        const secs = timeUntil % 60;
+        if (text) text.textContent = `Есть несохраненные изменения. Сохранение через ${mins}м ${secs}с`;
+      } else {
+        if (text) text.textContent = 'Есть несохраненные изменения';
+      }
+    } else {
+      if (indicator) {
+        indicator.classList.remove('waiting');
+        indicator.classList.add('active');
+      }
+      if (status.lastSaveTime) {
+        const lastSave = new Date(status.lastSaveTime);
+        const timeStr = lastSave.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        if (text) text.textContent = `Последнее сохранение: ${timeStr}`;
+      } else {
+        if (text) text.textContent = 'Автосохранение включено';
+      }
     }
   }
 
@@ -476,6 +654,8 @@ export class SettingsPanelComponent {
     }
     // Перерисовать галерею тем при открытии
     this.renderThemeGallery();
+    // Обновить статус автосохранения
+    this.updateAutoSaveStatus();
   }
 
   close(): void {

@@ -179,6 +179,10 @@ function showDropdownList(event, cell, row, col, values) {
         });
     }, 100);
 }
+/**
+ * Автосохранение данных таблицы
+ * Использует AutoSaveManager если доступен, иначе сохраняет в localStorage
+ */
 function autoSave() {
     try {
         const dataToSave = {};
@@ -186,6 +190,11 @@ function autoSave() {
         currentData.forEach((value, key) => {
             dataToSave[key] = value;
         });
+        // Помечаем как измененное для AutoSaveManager
+        if (window.markAutoSaveDirty) {
+            window.markAutoSaveDirty();
+        }
+        // Сохраняем в localStorage для резервного копирования
         localStorage.setItem('smarttable-autosave', JSON.stringify({
             sheetsData: dataToSave,
             currentSheet: state.currentSheet,
@@ -457,6 +466,23 @@ async function init() {
     updateCellReference();
     // Инициализируем UI режима ИИ
     updateModeUI();
+    // Инициализация автосохранения
+    const getTableData = () => {
+        const dataToSave = {};
+        const currentData = getCurrentData();
+        currentData.forEach((value, key) => {
+            dataToSave[key] = value;
+        });
+        return JSON.stringify({
+            sheetsData: dataToSave,
+            currentSheet: state.currentSheet,
+            timestamp: Date.now()
+        });
+    };
+    if (window.setupAutoSave) {
+        window.setupAutoSave(getTableData);
+        console.log('[Renderer] AutoSave initialized');
+    }
     console.log('[Renderer] init() completed');
 }
 // === РЕНДЕРИНГ ===
@@ -1602,7 +1628,7 @@ async function sendAiMessage() {
                     const lowerMsg = message.toLowerCase();
                     if (lowerMsg.includes('привет') || lowerMsg.includes('здравствуйте')) {
                         showQuickReplies([
-                            '📊 Заполни таблицу данными',
+                            '📊 Заполни таблицу дан��ыми',
                             '🎨 Покрась ячейки',
                             '📈 Посчитай суммы'
                         ]);
