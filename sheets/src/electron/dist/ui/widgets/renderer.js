@@ -512,8 +512,18 @@ function renderRowHeaders() {
     }
 }
 function renderCells() {
+    // Сохраняем текущее выделение
+    const selectedCells = Array.from(elements.cellGrid.querySelectorAll('.cell.selected'))
+        .map(cell => {
+        const el = cell;
+        return {
+            row: parseInt(el.dataset.row || '0'),
+            col: parseInt(el.dataset.col || '0')
+        };
+    });
     elements.cellGrid.innerHTML = '';
     elements.cellGrid.style.gridTemplateColumns = `repeat(${CONFIG.COLS}, ${CONFIG.CELL_WIDTH}px)`;
+    elements.cellGrid.style.gridTemplateRows = `repeat(${CONFIG.ROWS}, ${CONFIG.CELL_HEIGHT}px)`;
     const data = getCurrentData();
     for (let row = 0; row < CONFIG.ROWS; row++) {
         for (let col = 0; col < CONFIG.COLS; col++) {
@@ -533,8 +543,9 @@ function renderCells() {
             if (validation && validation.type === 'list') {
                 cell.style.cursor = 'pointer';
                 renderCellDropdown(cell, row, col);
-                // Клик для показа dropdown
+                // Клик для показа dropdown И выделения ячейки
                 cell.addEventListener('click', (e) => {
+                    selectCell(row, col); // Сначала выделяем ячейку
                     showDropdownList(e, cell, row, col, validation.values);
                 });
             }
@@ -546,6 +557,22 @@ function renderCells() {
             cell.addEventListener('input', handleCellInput);
             elements.cellGrid.appendChild(cell);
         }
+    }
+    // Восстанавливаем выделение
+    selectedCells.forEach(({ row, col }) => {
+        const cell = getCellElement(row, col);
+        if (cell) {
+            cell.classList.add('selected');
+        }
+    });
+    // Обновляем заголовки
+    const rowHeader = elements.rowHeaders.querySelector(`.row-header[data-row="${state.selectedCell.row}"]`);
+    if (rowHeader) {
+        rowHeader.classList.add('selected');
+    }
+    const colHeader = elements.columnHeaders.querySelector(`.column-header[data-col="${state.selectedCell.col}"]`);
+    if (colHeader) {
+        colHeader.classList.add('selected');
     }
 }
 // === ВЫДЕЛЕНИЕ ЯЧЕЕК ===
@@ -1269,6 +1296,10 @@ function setupEventListeners() {
         const event = e;
         applyColorToSelection('fill', event.detail.color);
     });
+    // Автосумма
+    document.addEventListener('auto-sum', () => {
+        autoSum();
+    });
     // Синхронизация скролла
     elements.cellGridWrapper.addEventListener('scroll', () => {
         const scrollLeft = elements.cellGridWrapper.scrollLeft;
@@ -1629,7 +1660,7 @@ function showModeSwitcher(mode) {
         const text = modeSwitcher.querySelector('.ai-mode-switcher-text');
         if (text) {
             text.textContent = mode === 'agent'
-                ? 'Это сложная задача. Переключиться в режим агента для выполнения по шагам?'
+                ? 'Это сл����жная задача. Переключиться в режим агента для выполнения по шагам?'
                 : 'Запрос простой. Переключиться в режим ассистента для быстрого ответа?';
         }
         modeSwitcher.style.display = 'flex';
@@ -1642,39 +1673,69 @@ function hideModeSwitcher() {
 }
 // === ФОРМАТИРОВАНИЕ ===
 function toggleFormatting(style) {
-    const { row, col } = state.selectedCell;
-    const cell = getCellElement(row, col);
-    if (!cell)
+    const selection = getSelectedRange();
+    if (!selection)
         return;
-    const key = getCellKey(row, col);
+    const { startRow, endRow, startCol, endCol } = selection;
     const data = getCurrentData();
-    const cellData = data.get(key) || { value: cell.textContent || '' };
-    if (!cellData.style) {
-        cellData.style = {};
+    let firstCellBold = false;
+    // Проверяем стиль первой ячейки для определения состояния
+    const firstKey = getCellKey(startRow, startCol);
+    const firstCellData = data.get(firstKey);
+    if (firstCellData && firstCellData.style) {
+        if (style === 'bold' && firstCellData.style.fontWeight === 'bold')
+            firstCellBold = true;
+        if (style === 'italic' && firstCellData.style.fontStyle === 'italic')
+            firstCellBold = true;
+        if (style === 'underline' && firstCellData.style.textDecoration === 'underline')
+            firstCellBold = true;
+        if (style === 'lineThrough' && firstCellData.style.textDecoration === 'line-through')
+            firstCellBold = true;
     }
-    switch (style) {
-        case 'bold':
-            cellData.style.fontWeight = cellData.style.fontWeight === 'bold' ? 'normal' : 'bold';
-            cell.style.fontWeight = cellData.style.fontWeight;
-            elements.btnBold.classList.toggle('active');
-            break;
-        case 'italic':
-            cellData.style.fontStyle = cellData.style.fontStyle === 'italic' ? 'normal' : 'italic';
-            cell.style.fontStyle = cellData.style.fontStyle;
-            elements.btnItalic.classList.toggle('active');
-            break;
-        case 'underline':
-            cellData.style.textDecoration = cellData.style.textDecoration === 'underline' ? 'none' : 'underline';
-            cell.style.textDecoration = cellData.style.textDecoration;
-            elements.btnUnderline.classList.toggle('active');
-            break;
-        case 'lineThrough':
-            cellData.style.textDecoration = cellData.style.textDecoration === 'line-through' ? 'none' : 'line-through';
-            cell.style.textDecoration = cellData.style.textDecoration;
-            elements.btnStrike.classList.toggle('active');
-            break;
+    // Применяем ко всем выделенным ячейкам
+    for (let row = startRow; row <= endRow; row++) {
+        for (let col = startCol; col <= endCol; col++) {
+            const key = getCellKey(row, col);
+            const cell = getCellElement(row, col);
+            if (!cell)
+                continue;
+            let cellData = data.get(key) || { value: cell.textContent || '' };
+            if (!cellData.style) {
+                cellData.style = {};
+            }
+            const newValue = !firstCellBold;
+            switch (style) {
+                case 'bold':
+                    cellData.style.fontWeight = newValue ? 'bold' : 'normal';
+                    cell.style.fontWeight = cellData.style.fontWeight;
+                    break;
+                case 'italic':
+                    cellData.style.fontStyle = newValue ? 'italic' : 'normal';
+                    cell.style.fontStyle = cellData.style.fontStyle;
+                    break;
+                case 'underline':
+                    cellData.style.textDecoration = newValue ? 'underline' : 'none';
+                    cell.style.textDecoration = cellData.style.textDecoration;
+                    break;
+                case 'lineThrough':
+                    cellData.style.textDecoration = newValue ? 'line-through' : 'none';
+                    cell.style.textDecoration = cellData.style.textDecoration;
+                    break;
+            }
+            data.set(key, cellData);
+        }
     }
-    data.set(key, cellData);
+    // Обновляем кнопки
+    if (elements.btnBold)
+        elements.btnBold.classList.toggle('active', style === 'bold' && !firstCellBold);
+    if (elements.btnItalic)
+        elements.btnItalic.classList.toggle('active', style === 'italic' && !firstCellBold);
+    if (elements.btnUnderline)
+        elements.btnUnderline.classList.toggle('active', style === 'underline' && !firstCellBold);
+    if (elements.btnStrike)
+        elements.btnStrike.classList.toggle('active', style === 'lineThrough' && !firstCellBold);
+    renderCells();
+    pushUndo('format', style);
 }
 function applyStyle(property, value) {
     const { row, col } = state.selectedCell;
@@ -2678,17 +2739,19 @@ function setupColumnResize() {
     let currentCol = -1;
     let startX = 0;
     let startWidth = 0;
+    let resizeHandle = null;
     elements.columnHeaders.addEventListener('mousedown', (e) => {
         const target = e.target;
         if (target.classList.contains('column-resize-handle')) {
             isResizing = true;
             currentCol = parseInt(target.dataset.col || '0');
+            resizeHandle = target;
             startX = e.pageX;
             const header = elements.columnHeaders.querySelector(`.column-header[data-col="${currentCol}"]`);
             startWidth = header?.offsetWidth || CONFIG.CELL_WIDTH;
             document.body.style.cursor = 'col-resize';
             document.body.style.userSelect = 'none';
-            document.body.style.webkitUserSelect = 'none';
+            resizeHandle.classList.add('resizing');
             e.preventDefault();
             e.stopPropagation();
         }
@@ -2700,22 +2763,22 @@ function setupColumnResize() {
         e.stopPropagation();
         const diff = e.pageX - startX;
         const newWidth = Math.max(30, startWidth + diff);
-        // Обновляем ЗАГОЛОВОК и ЯЧЕЙКИ одновременно
         updateColumnWidth(currentCol, newWidth);
     });
     document.addEventListener('mouseup', () => {
         if (isResizing) {
+            if (resizeHandle)
+                resizeHandle.classList.remove('resizing');
             isResizing = false;
             currentCol = -1;
+            resizeHandle = null;
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
-            document.body.style.webkitUserSelect = '';
         }
     });
     // Добавить resize handle к заголовкам столбцов
     const headers = elements.columnHeaders.querySelectorAll('.column-header');
     headers.forEach(header => {
-        // Удаляем старые handle если есть
         const oldHandle = header.querySelector('.column-resize-handle');
         if (oldHandle)
             oldHandle.remove();
@@ -2820,6 +2883,9 @@ function setupRowResize() {
     // Добавить resize handle к заголовкам строк
     const headers = elements.rowHeaders.querySelectorAll('.row-header');
     headers.forEach(header => {
+        const oldHandle = header.querySelector('.row-resize-handle');
+        if (oldHandle)
+            oldHandle.remove();
         const handle = document.createElement('div');
         handle.className = 'row-resize-handle';
         handle.dataset.row = header.dataset.row;
@@ -2833,15 +2899,17 @@ function setupFillHandle() {
         return;
     let isDragging = false;
     let startCell = null;
+    let previewCells = [];
     // Показать/скрыть fill handle при выделении ячейки
     const updateFillHandle = () => {
         const { row, col } = state.selectedCell;
         const cell = getCellElement(row, col);
         if (cell) {
             const rect = cell.getBoundingClientRect();
+            const containerRect = elements.cellGridWrapper.getBoundingClientRect();
             fillHandle.style.display = 'block';
-            fillHandle.style.left = `${rect.right - 4}px`;
-            fillHandle.style.top = `${rect.bottom - 4}px`;
+            fillHandle.style.left = `${rect.right - containerRect.left - 6}px`;
+            fillHandle.style.top = `${rect.bottom - containerRect.top - 6}px`;
         }
     };
     // Обработчик нажатия на fill handle
@@ -2851,68 +2919,164 @@ function setupFillHandle() {
         isDragging = true;
         startCell = { ...state.selectedCell };
         fillHandle.classList.add('dragging');
-        // Убрать выделение текста
+        document.body.style.cursor = 'crosshair';
         document.body.style.userSelect = 'none';
-        document.body.style.webkitUserSelect = 'none';
     });
     document.addEventListener('mousemove', (e) => {
         if (!isDragging || !startCell)
             return;
         e.preventDefault();
         e.stopPropagation();
+        // Очистка предыдущего предпросмотра
+        previewCells.forEach(cell => cell.classList.remove('fill-preview'));
+        previewCells = [];
         // Найти ячейку под курсором
         const element = document.elementFromPoint(e.clientX, e.clientY);
         const cell = element?.closest('.cell');
         if (cell) {
             const endRow = parseInt(cell.dataset.row || '0');
             const endCol = parseInt(cell.dataset.col || '0');
-            // Копировать значение от startCell до endCell
-            const data = getCurrentData();
-            const startKey = getCellKey(startCell.row, startCell.col);
-            const startData = data.get(startKey);
-            const sourceValue = startData?.value || '';
-            // Определить направление (строка или столбец)
+            // Вертикальное растягивание - показываем предпросмотр
             if (endRow !== startCell.row) {
-                // Вертикальное копирование
                 const minRow = Math.min(startCell.row, endRow);
                 const maxRow = Math.max(startCell.row, endRow);
                 for (let r = minRow; r <= maxRow; r++) {
-                    const targetCell = getCellElement(r, startCell.col);
-                    if (targetCell) {
-                        targetCell.textContent = sourceValue;
-                        data.set(getCellKey(r, startCell.col), { value: sourceValue });
+                    if (r !== startCell.row) {
+                        const targetCell = getCellElement(r, startCell.col);
+                        if (targetCell) {
+                            targetCell.classList.add('fill-preview');
+                            previewCells.push(targetCell);
+                        }
                     }
                 }
             }
             else if (endCol !== startCell.col) {
-                // Горизонтальное копирование
+                // Горизонтальное растягивание - показываем предпросмотр
                 const minCol = Math.min(startCell.col, endCol);
                 const maxCol = Math.max(startCell.col, endCol);
                 for (let c = minCol; c <= maxCol; c++) {
-                    const targetCell = getCellElement(startCell.row, c);
-                    if (targetCell) {
-                        targetCell.textContent = sourceValue;
-                        data.set(getCellKey(startCell.row, c), { value: sourceValue });
+                    if (c !== startCell.col) {
+                        const targetCell = getCellElement(startCell.row, c);
+                        if (targetCell) {
+                            targetCell.classList.add('fill-preview');
+                            previewCells.push(targetCell);
+                        }
                     }
                 }
             }
-            updateFillHandle();
         }
     });
-    document.addEventListener('mouseup', () => {
-        if (isDragging) {
-            isDragging = false;
-            startCell = null;
-            fillHandle.classList.remove('dragging');
-            // Вернуть выделение текста
-            document.body.style.userSelect = '';
-            document.body.style.webkitUserSelect = '';
+    document.addEventListener('mouseup', (e) => {
+        if (!isDragging)
+            return;
+        // Найти ячейку под курсором для применения значений
+        const element = document.elementFromPoint(e.clientX, e.clientY);
+        const cell = element?.closest('.cell');
+        if (cell && startCell) {
+            const endRow = parseInt(cell.dataset.row || '0');
+            const endCol = parseInt(cell.dataset.col || '0');
+            const data = getCurrentData();
+            const startKey = getCellKey(startCell.row, startCell.col);
+            const startData = data.get(startKey);
+            const sourceValue = startData?.value || '';
+            // Пытаемся определить паттерн для автозаполнения
+            const pattern = detectFillPattern(startCell, data);
+            // Вертикальное заполнение
+            if (endRow !== startCell.row) {
+                const minRow = Math.min(startCell.row, endRow);
+                const maxRow = Math.max(startCell.row, endRow);
+                for (let r = minRow; r <= maxRow; r++) {
+                    if (r !== startCell.row) {
+                        const value = pattern ? calculatePatternValue(pattern, r - startCell.row) : sourceValue;
+                        const targetCell = getCellElement(r, startCell.col);
+                        if (targetCell) {
+                            targetCell.textContent = String(value);
+                            data.set(getCellKey(r, startCell.col), { value: String(value) });
+                        }
+                    }
+                }
+            }
+            else if (endCol !== startCell.col) {
+                // Горизонтальное заполнение
+                const minCol = Math.min(startCell.col, endCol);
+                const maxCol = Math.max(startCell.col, endCol);
+                for (let c = minCol; c <= maxCol; c++) {
+                    if (c !== startCell.col) {
+                        const value = pattern ? calculatePatternValue(pattern, c - startCell.col) : sourceValue;
+                        const targetCell = getCellElement(startCell.row, c);
+                        if (targetCell) {
+                            targetCell.textContent = String(value);
+                            data.set(getCellKey(startCell.row, c), { value: String(value) });
+                        }
+                    }
+                }
+            }
+            renderCells();
+            pushUndo('fill', { start: startCell, end: { row: endRow, col: endCol } });
         }
+        // Очистка
+        isDragging = false;
+        startCell = null;
+        previewCells.forEach(cell => cell.classList.remove('fill-preview'));
+        previewCells = [];
+        fillHandle.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        updateFillHandle();
     });
     // Скры��ь при скр��лле
     elements.cellGridWrapper.addEventListener('scroll', () => {
         fillHandle.style.display = 'none';
     }, true);
+}
+// === PATTERNS FOR FILL HANDLE ===
+function detectFillPattern(startCell, data) {
+    const values = [];
+    for (let r = startCell.row - 1; r >= Math.max(0, startCell.row - 5); r--) {
+        const key = getCellKey(r, startCell.col);
+        const cellData = data.get(key);
+        if (cellData) {
+            const num = parseFloat(cellData.value);
+            if (!isNaN(num))
+                values.unshift(num);
+            else
+                break;
+        }
+        else
+            break;
+    }
+    if (values.length >= 2) {
+        const diff = values[values.length - 1] - values[values.length - 2];
+        let isArithmetic = true;
+        for (let i = 1; i < values.length; i++) {
+            if (values[i] - values[i - 1] !== diff) {
+                isArithmetic = false;
+                break;
+            }
+        }
+        if (isArithmetic)
+            return { type: 'arithmetic', lastValue: values[values.length - 1], diff };
+        if (values[values.length - 2] !== 0) {
+            const ratio = values[values.length - 1] / values[values.length - 2];
+            let isGeometric = true;
+            for (let i = 1; i < values.length; i++) {
+                if (values[i - 1] === 0 || Math.abs(values[i] / values[i - 1] - ratio) > 0.0001) {
+                    isGeometric = false;
+                    break;
+                }
+            }
+            if (isGeometric)
+                return { type: 'geometric', lastValue: values[values.length - 1], ratio };
+        }
+    }
+    return null;
+}
+function calculatePatternValue(pattern, step) {
+    if (pattern.type === 'arithmetic')
+        return pattern.lastValue + (pattern.diff * step);
+    if (pattern.type === 'geometric')
+        return pattern.lastValue * Math.pow(pattern.ratio, step);
+    return pattern.lastValue;
 }
 // === ЭКСПОРТ ===
 function showExportMenu() {
@@ -3046,12 +3210,125 @@ function generateAiResponse(message) {
         return 'Для суммирования диапазона ячеек используйте формулу: =SUM(A1:A10)\n\nДругие полезные функции:\n• =AVERAGE() - среднее значение\n• =MAX() / =MIN() - максимум/минимум\n• =COUNT() - количество чисел';
     }
     if (lowerMessage.includes('анализ') || lowerMessage.includes('данные')) {
-        return '📊 Я могу проанализировать ваши данные:\n\n1. Найти закономерности\n2. Выявить аномалии\n3. Построить статистику\n4. Предложить визуализацию\n\nВыделите диапазон яч��ек и попросите меня проанализировать их.';
+        return '📊 Я могу проанализировать ваши данные:\n\n1. Найти закономерности\n2. Выявить аномалии\n3. Построить статистику\n4. Предложить визуализацию\n\nВыделите ди��пазон яч��ек и попросите меня проанализировать их.';
     }
     if (lowerMessage.includes('очист') || lowerMessage.includes('удал')) {
         return '🧹 Для очистки данных я могу:\n\n• Удалить пустые строки\n• Убрать дубликаты\n• Исправить формат\n• Нормализовать текст\n\nЧто именно нужно очистить?';
     }
     return 'Я понял ваш запрос! Вот что я могу сделать:\n\n📝 **Создать формулу** - помогу с функциями\n📊 **Анализировать** - найду закономерности\n🧹 **Очистить данные** - уберу лишнее\n📈 **Визуализировать** - предложу графики\n\nЧт�� бы вы хотели сделать?';
+}
+// === ВЫДЕЛЕНИЕ И ДИАПАЗОНЫ ===
+function getSelectedRange() {
+    if (state.selectionStart && state.selectionEnd) {
+        return {
+            startRow: Math.min(state.selectionStart.row, state.selectionEnd.row),
+            endRow: Math.max(state.selectionStart.row, state.selectionEnd.row),
+            startCol: Math.min(state.selectionStart.col, state.selectionEnd.col),
+            endCol: Math.max(state.selectionStart.col, state.selectionEnd.col)
+        };
+    }
+    // Если нет диапазона, возвращаем текущую ячейку
+    return {
+        startRow: state.selectedCell.row,
+        endRow: state.selectedCell.row,
+        startCol: state.selectedCell.col,
+        endCol: state.selectedCell.col
+    };
+}
+function autoSum() {
+    const range = getSelectedRange();
+    if (!range)
+        return;
+    const { startRow, endRow, startCol, endCol } = range;
+    const data = getCurrentData();
+    // Определяем, куда вставить сумму
+    // Если выделено несколько строк - сумма в нижней ячейке
+    // Если выделено несколько столбцов - сумма в правой ячейке
+    let sumRow = endRow;
+    let sumCol = endCol;
+    // Если выделение - одна ячейка, ищем числа выше или левее
+    if (startRow === endRow && startCol === endCol) {
+        let sum = 0;
+        let count = 0;
+        // Проверяем ячейки выше
+        for (let r = endRow - 1; r >= 0; r--) {
+            const key = getCellKey(r, endCol);
+            const cellData = data.get(key);
+            if (cellData) {
+                const num = parseFloat(cellData.value);
+                if (!isNaN(num)) {
+                    sum += num;
+                    count++;
+                }
+                else {
+                    break; // Прерываем при пустой ячейке или тексте
+                }
+            }
+            else {
+                break;
+            }
+        }
+        // Если ничего не нашли выше, пробуем слева
+        if (count === 0) {
+            for (let c = endCol - 1; c >= 0; c--) {
+                const key = getCellKey(endRow, c);
+                const cellData = data.get(key);
+                if (cellData) {
+                    const num = parseFloat(cellData.value);
+                    if (!isNaN(num)) {
+                        sum += num;
+                        count++;
+                    }
+                    else {
+                        break;
+                    }
+                }
+                else {
+                    break;
+                }
+            }
+        }
+        if (count > 0) {
+            const key = getCellKey(endRow, endCol);
+            const cell = getCellElement(endRow, endCol);
+            if (cell) {
+                cell.textContent = sum.toString();
+                data.set(key, { value: sum.toString() });
+                pushUndo('autosum', { sum });
+                renderCells();
+                updateFormulaBar();
+            }
+        }
+        return;
+    }
+    // Если выделен диапазон - суммируем все числа в диапазоне
+    let sum = 0;
+    let count = 0;
+    for (let row = startRow; row <= endRow; row++) {
+        for (let col = startCol; col <= endCol; col++) {
+            const key = getCellKey(row, col);
+            const cellData = data.get(key);
+            if (cellData) {
+                const num = parseFloat(cellData.value);
+                if (!isNaN(num)) {
+                    sum += num;
+                    count++;
+                }
+            }
+        }
+    }
+    if (count > 0) {
+        // Вставляем сумму в последнюю ячейку выделения
+        const key = getCellKey(sumRow, sumCol);
+        const cell = getCellElement(sumRow, sumCol);
+        if (cell) {
+            cell.textContent = sum.toString();
+            data.set(key, { value: sum.toString() });
+            pushUndo('autosum', { sum, range: { startRow, endRow, startCol, endCol } });
+            renderCells();
+            updateFormulaBar();
+        }
+    }
 }
 function getSelectedRangeData() {
     const selectedCells = elements.cellGrid.querySelectorAll('.cell.selected');
@@ -3280,6 +3557,8 @@ function toggleFilter() {
 }
 // Экспорт глобальных функций
 window.getSelectedRangeData = getSelectedRangeData;
+window.getSelectedRange = getSelectedRange;
+window.autoSum = autoSum;
 window.mergeCells = mergeCells;
 window.insertRow = insertRow;
 window.deleteRow = deleteRow;

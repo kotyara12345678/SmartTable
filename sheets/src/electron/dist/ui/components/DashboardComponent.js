@@ -262,7 +262,7 @@ export class DashboardComponent {
         <div class="db-project-stats">
           <h3>Статистика базы данных</h3>
           <div class="stats-grid">
-            <div class="stat-card">
+            <div class="stat-card" id="storageCard" title="Управление хранилищем">
               <div class="stat-icon storage">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="3" y="11" width="18" height="10" rx="2" ry="2"/>
@@ -483,6 +483,10 @@ export class DashboardComponent {
         document.getElementById('activityMetricCard')?.addEventListener('click', () => {
             this.showActivityDetail();
         });
+        // Storage Card
+        document.getElementById('storageCard')?.addEventListener('click', () => {
+            this.openStorageManagement();
+        });
         // Clear history
         document.getElementById('btnClearHistory')?.addEventListener('click', () => this.clearHistory());
         // Profile avatar upload
@@ -612,6 +616,328 @@ export class DashboardComponent {
         }
         return count;
     }
+    openStorageManagement() {
+        // Получаем размер localStorage
+        let totalSize = 0;
+        const items = [];
+        for (const key in localStorage) {
+            if (localStorage.hasOwnProperty(key)) {
+                const size = localStorage[key].length * 2; // UTF-16
+                totalSize += size;
+                // Определяем тип данных и категорию
+                let type = 'Другое';
+                let category = 'other';
+                if (key.startsWith('cell-')) {
+                    type = 'Ячейки';
+                    category = 'cells';
+                }
+                else if (key.startsWith('formula-')) {
+                    type = 'Формулы';
+                    category = 'formulas';
+                }
+                else if (key.startsWith('smarttable-')) {
+                    type = 'Таблицы';
+                    category = 'tables';
+                }
+                else if (key.startsWith('user-')) {
+                    type = 'Пользователь';
+                    category = 'user';
+                }
+                else if (key.startsWith('dashboard-')) {
+                    type = 'Dashboard';
+                    category = 'dashboard';
+                }
+                else if (key.startsWith('ai-')) {
+                    type = 'AI';
+                    category = 'ai';
+                }
+                else if (key.startsWith('theme-')) {
+                    type = 'Темы';
+                    category = 'themes';
+                }
+                else if (key.startsWith('settings-')) {
+                    type = 'Настройки';
+                    category = 'settings';
+                }
+                else if (key.startsWith('smarttable-actions')) {
+                    type = 'История';
+                    category = 'history';
+                }
+                else if (key.startsWith('smarttable-autosave')) {
+                    type = 'Автосохранения';
+                    category = 'autosave';
+                }
+                items.push({ key, size, type, category });
+            }
+        }
+        const sizeMB = (totalSize / (1024 * 1024)).toFixed(3);
+        const freeSpace = Math.max(0, (5 - parseFloat(sizeMB))).toFixed(3);
+        const percentUsed = Math.min(100, (parseFloat(sizeMB) / 5 * 100)).toFixed(1);
+        // Группируем по категориям
+        const categories = [
+            { id: 'cells', name: 'Ячейки', icon: '📊', color: '#10b981' },
+            { id: 'formulas', name: 'Формулы', icon: '∑', color: '#3b82f6' },
+            { id: 'tables', name: 'Таблицы', icon: '📋', color: '#8b5cf6' },
+            { id: 'user', name: 'Пользователь', icon: '👤', color: '#f59e0b' },
+            { id: 'dashboard', name: 'Dashboard', icon: '📈', color: '#06b6d4' },
+            { id: 'ai', name: 'AI', icon: '🤖', color: '#ec4899' },
+            { id: 'themes', name: 'Темы', icon: '🎨', color: '#f43f5e' },
+            { id: 'settings', name: 'Настройки', icon: '⚙️', color: '#6b7280' },
+            { id: 'history', name: 'История', icon: '📜', color: '#14b8a6' },
+            { id: 'autosave', name: 'Автосохранения', icon: '💾', color: '#f97316' },
+            { id: 'other', name: 'Другое', icon: '📦', color: '#9ca3af' }
+        ];
+        const categoryStats = categories.map(cat => {
+            const catItems = items.filter(i => i.category === cat.id);
+            const catSize = catItems.reduce((sum, i) => sum + i.size, 0);
+            return { ...cat, count: catItems.length, size: catSize };
+        }).filter(c => c.count > 0);
+        // Сортируем по размеру
+        items.sort((a, b) => b.size - a.size);
+        // Создаём модальное окно
+        const modal = document.createElement('div');
+        modal.className = 'storage-detail-modal';
+        modal.innerHTML = `
+      <div class="storage-detail-overlay"></div>
+      <div class="storage-detail-panel large">
+        <div class="storage-detail-panel-header">
+          <div class="header-content">
+            <h3>🗄️ Управление хранилищем</h3>
+            <p class="header-subtitle">Контроль над данными вашего приложения</p>
+          </div>
+          <button class="close-storage-detail" title="Закрыть">×</button>
+        </div>
+
+        <div class="storage-detail-panel-content">
+          <!-- Storage Summary -->
+          <div class="storage-summary-card">
+            <div class="storage-gauge-wrapper">
+              <div class="storage-gauge-large">
+                <div class="storage-gauge-fill-large" style="width: ${percentUsed}%"></div>
+              </div>
+              <div class="storage-gauge-labels">
+                <span class="gauge-label used">${percentUsed}%</span>
+                <span class="gauge-label free">${(100 - parseFloat(percentUsed)).toFixed(1)}% свободно</span>
+              </div>
+            </div>
+
+            <div class="storage-stats-row">
+              <div class="storage-stat-card used">
+                <div class="stat-card-icon">📊</div>
+                <div class="stat-card-content">
+                  <span class="stat-card-label">Занято</span>
+                  <span class="stat-card-value">${sizeMB} MB</span>
+                </div>
+              </div>
+
+              <div class="storage-stat-card free">
+                <div class="stat-card-icon">✨</div>
+                <div class="stat-card-content">
+                  <span class="stat-card-label">Свободно</span>
+                  <span class="stat-card-value">${freeSpace} MB</span>
+                </div>
+              </div>
+
+              <div class="storage-stat-card limit">
+                <div class="stat-card-icon">📏</div>
+                <div class="stat-card-content">
+                  <span class="stat-card-label">Лимит</span>
+                  <span class="stat-card-value">5 MB</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Category Grid -->
+          <div class="storage-section-title">
+            <h4>Категории данных</h4>
+            <span class="total-items">${items.length} элементов</span>
+          </div>
+
+          <div class="category-grid">
+            ${categoryStats.map(cat => `
+              <div class="category-card" data-category="${cat.id}">
+                <div class="category-card-icon" style="background: ${cat.color}20; color: ${cat.color}">
+                  ${cat.icon}
+                </div>
+                <div class="category-card-content">
+                  <span class="category-card-name">${cat.name}</span>
+                  <span class="category-card-count">${cat.count} шт.</span>
+                </div>
+                <div class="category-card-size">
+                  ${(cat.size / 1024).toFixed(2)} KB
+                </div>
+              </div>
+            `).join('')}
+          </div>
+
+          <!-- Items List with Selection -->
+          <div class="storage-section-title">
+            <h4>Детальный просмотр</h4>
+            <div class="selection-controls">
+              <button class="select-all-btn" id="selectAllBtn">Выбрать все</button>
+              <button class="deselect-all-btn" id="deselectAllBtn">Снять все</button>
+            </div>
+          </div>
+
+          <div class="storage-items-list-scrollable">
+            ${items.slice(0, 100).map((item, index) => `
+              <div class="storage-item-selectable" data-key="${item.key}" data-size="${item.size}">
+                <label class="storage-item-checkbox">
+                  <input type="checkbox" class="item-checkbox" data-key="${item.key}">
+                  <span class="checkbox-custom"></span>
+                </label>
+                <div class="storage-item-content">
+                  <div class="storage-item-main">
+                    <span class="storage-item-category" style="color: ${categories.find(c => c.id === item.category)?.color || '#9ca3af'}">
+                      ${categories.find(c => c.id === item.category)?.icon || '📦'} ${item.type}
+                    </span>
+                    <span class="storage-item-key">${item.key}</span>
+                  </div>
+                  <div class="storage-item-meta">
+                    <span class="storage-item-size-bar">
+                      <span class="size-bar-fill" style="width: ${Math.min(100, (item.size / 10240) * 100)}%"></span>
+                    </span>
+                    <span class="storage-item-size">${(item.size / 1024).toFixed(2)} KB</span>
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+
+          ${items.length > 100 ? `<p class="storage-items-more">Показано 100 из ${items.length} элементов</p>` : ''}
+
+          <!-- Action Bar -->
+          <div class="storage-action-bar">
+            <div class="selected-info">
+              <span id="selectedCount">0</span> выбрано из <span id="totalCount">${items.length}</span>
+              <span class="selected-size" id="selectedSize">(~0 KB)</span>
+            </div>
+            <button class="delete-selected-btn" id="deleteSelectedBtn" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3,6 5,6 21,6"/>
+                <path d="M19,6v14a2,2 0 0,1-2,2H7a2,2 0 0,1-2-2V6m3,0V4a2,2 0 0,1,2-2h4a2,2 0 0,1,2,2v2"/>
+                <line x1="10" y1="11" x2="10" y2="17"/>
+                <line x1="14" y1="11" x2="14" y2="17"/>
+              </svg>
+              Удалить выбранное
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+        document.body.appendChild(modal);
+        // Закрытие
+        const closeBtn = modal.querySelector('.close-storage-detail');
+        const overlay = modal.querySelector('.storage-detail-overlay');
+        closeBtn?.addEventListener('click', () => modal.remove());
+        overlay?.addEventListener('click', () => modal.remove());
+        // Выбор элементов
+        const checkboxes = modal.querySelectorAll('.item-checkbox');
+        const selectedCountEl = document.getElementById('selectedCount');
+        const totalCountEl = document.getElementById('totalCount');
+        const selectedSizeEl = document.getElementById('selectedSize');
+        const deleteBtn = document.getElementById('deleteSelectedBtn');
+        let selectedKeys = [];
+        let selectedSize = 0;
+        const updateSelectionInfo = () => {
+            selectedCountEl.textContent = selectedKeys.length.toString();
+            selectedSizeEl.textContent = `(~${(selectedSize / 1024).toFixed(2)} KB)`;
+            deleteBtn.disabled = selectedKeys.length === 0;
+        };
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', (e) => {
+                const target = e.target;
+                const key = target.dataset.key;
+                const size = parseInt(target.dataset.size);
+                if (target.checked) {
+                    selectedKeys.push(key);
+                    selectedSize += size;
+                }
+                else {
+                    selectedKeys = selectedKeys.filter(k => k !== key);
+                    selectedSize -= size;
+                }
+                updateSelectionInfo();
+            });
+        });
+        // Выбрать все
+        document.getElementById('selectAllBtn')?.addEventListener('click', () => {
+            checkboxes.forEach(cb => {
+                cb.checked = true;
+                const key = cb.dataset.key;
+                const size = parseInt(cb.dataset.size);
+                if (!selectedKeys.includes(key)) {
+                    selectedKeys.push(key);
+                    selectedSize += size;
+                }
+            });
+            updateSelectionInfo();
+        });
+        // Снять все
+        document.getElementById('deselectAllBtn')?.addEventListener('click', () => {
+            checkboxes.forEach(cb => cb.checked = false);
+            selectedKeys = [];
+            selectedSize = 0;
+            updateSelectionInfo();
+        });
+        // Удалить выбранное
+        document.getElementById('deleteSelectedBtn')?.addEventListener('click', () => {
+            if (selectedKeys.length === 0)
+                return;
+            const confirmed = confirm(`Вы уверены, что хотите удалить ${selectedKeys.length} элементов?\n\nЭто действие нельзя отменить.`);
+            if (confirmed) {
+                // Сохраняем важные данные
+                const actions = localStorage.getItem('smarttable-actions');
+                const avatar = localStorage.getItem('user-avatar');
+                const theme = localStorage.getItem('smarttable-theme');
+                // Удаляем только выбранные
+                selectedKeys.forEach(key => {
+                    localStorage.removeItem(key);
+                });
+                // Восстанавливаем важные
+                if (actions && !selectedKeys.includes('smarttable-actions'))
+                    localStorage.setItem('smarttable-actions', actions);
+                if (avatar && !selectedKeys.includes('user-avatar'))
+                    localStorage.setItem('user-avatar', avatar);
+                if (theme && !selectedKeys.includes('smarttable-theme'))
+                    localStorage.setItem('smarttable-theme', theme);
+                modal.remove();
+                this.updateDatabaseStats();
+                this.addAction({
+                    action: `Удаление ${selectedKeys.length} элементов хранилища`,
+                    type: 'cache',
+                    status: 'success'
+                });
+                alert(`Удалено ${selectedKeys.length} элементов!`);
+            }
+        });
+        // Клик по категории - фильтрация
+        const categoryCards = modal.querySelectorAll('.category-card');
+        categoryCards.forEach(card => {
+            card.addEventListener('click', () => {
+                const categoryId = card.getAttribute('data-category');
+                const itemsList = modal.querySelector('.storage-items-list-scrollable');
+                const items = itemsList?.querySelectorAll('.storage-item-selectable');
+                items?.forEach(item => {
+                    const itemCategory = item.querySelector('.storage-item-category')?.textContent;
+                    const cardName = card.querySelector('.category-card-name')?.textContent;
+                    if (itemCategory?.includes(cardName) || categoryId === 'all') {
+                        item.style.display = 'flex';
+                    }
+                    else {
+                        item.style.display = 'none';
+                    }
+                });
+            });
+        });
+        // Добавляем действие в историю
+        this.addAction({
+            action: 'Просмотр хранилища',
+            type: 'other',
+            status: 'success'
+        });
+    }
     getDashboardOpens() {
         const saved = localStorage.getItem('dashboard-opens');
         return saved ? parseInt(saved) : 0;
@@ -713,11 +1039,15 @@ export class DashboardComponent {
             switch (section) {
                 case 'dashboard':
                     content.innerHTML = this.getDashboardContent();
-                    // Перепривязываем обработчик для карточки активности
+                    // Перепривязываем обработчики
                     setTimeout(() => {
                         document.getElementById('activityMetricCard')?.addEventListener('click', () => {
                             this.showActivityDetail();
                         });
+                        document.getElementById('storageCard')?.addEventListener('click', () => {
+                            this.openStorageManagement();
+                        });
+                        this.updateDatabaseStats();
                     }, 0);
                     document.getElementById('btnClearHistory')?.addEventListener('click', () => this.clearHistory());
                     break;
