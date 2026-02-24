@@ -82,7 +82,7 @@
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: var(--primary-color);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
   border-radius: 6px;
@@ -98,7 +98,6 @@
 }
 
 .btn-ai-top:hover {
-  background: var(--primary-hover);
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
 }
@@ -123,7 +122,7 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--primary-color);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   display: flex;
   align-items: center;
@@ -131,56 +130,21 @@
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
-.user-avatar:hover {
-  background: var(--primary-hover);
-  transform: scale(1.05);
-}
-
-/* App Context Menu */
-.app-context-menu {
-  animation: menuFadeIn 0.15s ease;
-}
-
-@keyframes menuFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.app-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.app-menu-item:hover {
-  background: var(--hover-bg);
-}
-
-.app-menu-item svg {
-  width: 18px;
-  height: 18px;
-  color: var(--text-secondary);
-}
-
-.app-menu-item span {
+.user-avatar .avatar-text {
+  color: white;
   font-size: 14px;
-  color: var(--text-primary);
+  font-weight: 600;
 }
 
-.app-menu-divider {
-  height: 1px;
-  background: var(--border-color);
-  margin: 4px 0;
+.user-avatar.has-image {
+  background-color: transparent;
+}
+
+.user-avatar.has-image .avatar-text {
+  display: none;
 }
