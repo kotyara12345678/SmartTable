@@ -1754,38 +1754,38 @@ function setupEventListeners(): void {
   });
   
   // Форматирование
-  elements.btnBold.addEventListener('click', () => toggleFormatting('bold'));
-  elements.btnItalic.addEventListener('click', () => toggleFormatting('italic'));
-  elements.btnUnderline.addEventListener('click', () => toggleFormatting('underline'));
-  elements.btnStrike.addEventListener('click', () => toggleFormatting('lineThrough'));
-  
+  elements.btnBold?.addEventListener('click', () => toggleFormatting('bold'));
+  elements.btnItalic?.addEventListener('click', () => toggleFormatting('italic'));
+  elements.btnUnderline?.addEventListener('click', () => toggleFormatting('underline'));
+  elements.btnStrike?.addEventListener('click', () => toggleFormatting('lineThrough'));
+
   // Границы
-  elements.btnBorders.addEventListener('click', () => toggleBorders());
+  elements.btnBorders?.addEventListener('click', () => toggleBorders());
 
   // Переключение видимости formula bar
-  elements.btnToggleFormulaBar.addEventListener('click', () => {
+  elements.btnToggleFormulaBar?.addEventListener('click', () => {
     const formulaBarContainer = document.getElementById('formula-bar-container');
     if (formulaBarContainer) {
       formulaBarContainer.classList.toggle('visible');
     }
   });
 
-  elements.textColor.addEventListener('input', (e) => {
+  elements.textColor?.addEventListener('input', (e) => {
     applyStyle('color', (e.target as HTMLInputElement).value);
   });
   
-  elements.fillColor.addEventListener('input', (e) => {
+  elements.fillColor?.addEventListener('input', (e) => {
     applyStyle('backgroundColor', (e.target as HTMLInputElement).value);
   });
-  
-  elements.fontFamily.addEventListener('change', (e) => {
+
+  elements.fontFamily?.addEventListener('change', (e) => {
     applyStyle('fontFamily', (e.target as HTMLSelectElement).value);
   });
-  
-  elements.fontSize.addEventListener('change', (e) => {
+
+  elements.fontSize?.addEventListener('change', (e) => {
     applyStyle('fontSize', `${(e.target as HTMLSelectElement).value}px`);
   });
-  
+
   // Глобальные горячие клавиши
   document.addEventListener('keydown', handleGlobalKeyDown);
 }
