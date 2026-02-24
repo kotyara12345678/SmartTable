@@ -13,6 +13,7 @@ import { AIChatComponent } from './ui/components/AIChatComponent.js';
 import { themeManager } from './ui/core/theme-manager.js';
 import { aiContextService } from './ui/core/ai/ai-context-service.js';
 import { timeTracker } from './ui/core/time-tracker.js';
+import { autosaveManager } from './ui/core/autosave-manager.js';
 const state = {
     zoom: 100,
     currentFile: null,
@@ -122,6 +123,11 @@ async function initApp() {
         logs.push('[App] Initializing TimeTracker...');
         window.timeTracker = timeTracker;
         logs.push('[App] TimeTracker initialized');
+        // Инициализация менеджера автосохранений
+        logs.push('[App] Initializing AutoSaveManager...');
+        await autosaveManager.init();
+        window.autosaveManager = autosaveManager;
+        logs.push('[App] AutoSaveManager initialized');
         // Начинаем отслеживание времени в таблицах при запуске
         timeTracker.startSession('spreadsheet');
         // Глобальные обработчики событий
@@ -466,6 +472,9 @@ function cleanup() {
     if (aiChat) {
         aiChat.destroy();
     }
+    if (autosaveManager) {
+        autosaveManager.destroy();
+    }
 }
 // Инициализация при загрузке DOM
 if (document.readyState === 'loading') {
@@ -476,6 +485,36 @@ else {
 }
 // Очистка при выгрузке
 window.addEventListener('beforeunload', cleanup);
+// Глобальные функции для автосохранения
+window.setupAutoSave = (getContentCallback) => {
+    if (autosaveManager) {
+        autosaveManager.setGetContentCallback(getContentCallback);
+        autosaveManager.setOnSaveCallback(async (content) => {
+            try {
+                const result = await window.electronAPI.ipcRenderer.invoke('autosave-file', {
+                    content,
+                    filePath: null
+                });
+                if (!result.success) {
+                    console.error('[App] AutoSave failed:', result.error);
+                }
+            }
+            catch (error) {
+                console.error('[App] AutoSave error:', error);
+            }
+        });
+    }
+};
+window.markAutoSaveDirty = () => {
+    if (autosaveManager) {
+        autosaveManager.markDirty();
+    }
+};
+window.markAutoSaveClean = () => {
+    if (autosaveManager) {
+        autosaveManager.markClean();
+    }
+};
 // Экспорт для глобального доступа
 window.SmartTable = {
     state,

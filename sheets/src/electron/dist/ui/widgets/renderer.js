@@ -180,6 +180,10 @@ function showDropdownList(event, cell, row, col, values) {
         });
     }, 100);
 }
+/**
+ * Автосохранение данных таблицы
+ * Использует AutoSaveManager если доступен, иначе сохраняет в localStorage
+ */
 function autoSave() {
     try {
         const dataToSave = {};
@@ -187,6 +191,11 @@ function autoSave() {
         currentData.forEach((value, key) => {
             dataToSave[key] = value;
         });
+        // Помечаем как измененное для AutoSaveManager
+        if (window.markAutoSaveDirty) {
+            window.markAutoSaveDirty();
+        }
+        // Сохраняем в localStorage для резервного копирования
         localStorage.setItem('smarttable-autosave', JSON.stringify({
             sheetsData: dataToSave,
             currentSheet: state.currentSheet,
@@ -458,6 +467,23 @@ async function init() {
     updateCellReference();
     // Инициализируем UI режима ИИ
     updateModeUI();
+    // Инициализация автосохранения
+    const getTableData = () => {
+        const dataToSave = {};
+        const currentData = getCurrentData();
+        currentData.forEach((value, key) => {
+            dataToSave[key] = value;
+        });
+        return JSON.stringify({
+            sheetsData: dataToSave,
+            currentSheet: state.currentSheet,
+            timestamp: Date.now()
+        });
+    };
+    if (window.setupAutoSave) {
+        window.setupAutoSave(getTableData);
+        console.log('[Renderer] AutoSave initialized');
+    }
     console.log('[Renderer] init() completed');
 }
 // === РЕНДЕРИНГ ===
@@ -1861,7 +1887,7 @@ async function sendAiMessage() {
                     const lowerMsg = message.toLowerCase();
                     if (lowerMsg.includes('привет') || lowerMsg.includes('здравствуйте')) {
                         showQuickReplies([
-                            '📊 Заполни таблицу данными',
+                            '📊 Заполни таблицу дан��ыми',
                             '🎨 Покрась ячейки',
                             '📈 Посчитай суммы'
                         ]);
@@ -3027,9 +3053,6 @@ function generateAiResponse(message) {
     }
     return 'Я понял ваш запрос! Вот что я могу сделать:\n\n📝 **Создать формулу** - помогу с функциями\n📊 **Анализировать** - найду закономерности\n🧹 **Очистить данные** - уберу лишнее\n📈 **Визуализировать** - предложу графики\n\nЧт�� бы вы хотели сделать?';
 }
-// ==========================================
-// === НОВЫЕ ФУНКЦИИ ДЛЯ TABLE FUNCTIONALITY ===
-// ==========================================
 function getSelectedRangeData() {
     const selectedCells = elements.cellGrid.querySelectorAll('.cell.selected');
     console.log('[Renderer] getSelectedRangeData called, selected cells:', selectedCells.length);
@@ -3275,9 +3298,6 @@ window.clearConditionalFormats = clearConditionalFormats;
 window.findAndReplace = findAndReplace;
 // Clear state
 window.clearAllState = clearAllState;
-// ==========================================
-// === FIND AND REPLACE ===
-// ==========================================
 function findAndReplace(findText, replaceText, options = {}) {
     const data = getCurrentData();
     let found = 0;
@@ -3374,9 +3394,6 @@ function applyConditionalFormatting() {
         }
     });
 }
-// ==========================================
-// === ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ DOM ===
-// ==========================================
 console.log('[Renderer] Script loaded, readyState:', document.readyState);
 async function startApp() {
     console.log('[Renderer] Starting app...');

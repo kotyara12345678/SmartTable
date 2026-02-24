@@ -206,6 +206,11 @@ function showDropdownList(event: MouseEvent, cell: HTMLElement, row: number, col
     });
   }, 100);
 }
+
+/**
+ * Автосохранение данных таблицы
+ * Использует AutoSaveManager если доступен, иначе сохраняет в localStorage
+ */
 function autoSave(): void {
   try {
     const dataToSave: any = {};
@@ -214,6 +219,12 @@ function autoSave(): void {
       dataToSave[key] = value;
     });
 
+    // Помечаем как измененное для AutoSaveManager
+    if ((window as any).markAutoSaveDirty) {
+      (window as any).markAutoSaveDirty();
+    }
+
+    // Сохраняем в localStorage для резервного копирования
     localStorage.setItem('smarttable-autosave', JSON.stringify({
       sheetsData: dataToSave,
       currentSheet: state.currentSheet,
@@ -552,6 +563,25 @@ async function init(): Promise<void> {
 
   // Инициализируем UI режима ИИ
   updateModeUI();
+
+  // Инициализация автосохранения
+  const getTableData = () => {
+    const dataToSave: any = {};
+    const currentData = getCurrentData();
+    currentData.forEach((value, key) => {
+      dataToSave[key] = value;
+    });
+    return JSON.stringify({
+      sheetsData: dataToSave,
+      currentSheet: state.currentSheet,
+      timestamp: Date.now()
+    });
+  };
+
+  if ((window as any).setupAutoSave) {
+    (window as any).setupAutoSave(getTableData);
+    console.log('[Renderer] AutoSave initialized');
+  }
 
   console.log('[Renderer] init() completed');
 }
@@ -2110,7 +2140,7 @@ async function sendAiMessage(): Promise<void> {
           const lowerMsg = message.toLowerCase();
           if (lowerMsg.includes('привет') || lowerMsg.includes('здравствуйте')) {
             showQuickReplies([
-              '📊 Заполни таблицу данными',
+              '📊 Заполни таблицу дан��ыми',
               '🎨 Покрась ячейки',
               '📈 Посчитай суммы'
             ]);
@@ -3397,9 +3427,6 @@ function generateAiResponse(message: string): string {
   return 'Я понял ваш запрос! Вот что я могу сделать:\n\n📝 **Создать формулу** - помогу с функциями\n📊 **Анализировать** - найду закономерности\n🧹 **Очистить данные** - уберу лишнее\n📈 **Визуализировать** - предложу графики\n\nЧт�� бы вы хотели сделать?';
 }
 
-// ==========================================
-// === НОВЫЕ ФУНКЦИИ ДЛЯ TABLE FUNCTIONALITY ===
-// ==========================================
 
 function getSelectedRangeData(): { labels: string[]; datasets: { label: string; data: number[] }[] } {
   const selectedCells = elements.cellGrid.querySelectorAll('.cell.selected');
@@ -3631,9 +3658,7 @@ function toggleFilter(): void {
 // Clear state
 (window as any).clearAllState = clearAllState;
 
-// ==========================================
-// === FIND AND REPLACE ===
-// ==========================================
+
 function findAndReplace(findText: string, replaceText: string, options: { matchCase?: boolean; entireCell?: boolean } = {}): { found: number; replaced: number } {
   const data = getCurrentData();
   let found = 0;
@@ -3741,9 +3766,7 @@ function applyConditionalFormatting(): void {
   });
 }
 
-// ==========================================
-// === ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ DOM ===
-// ==========================================
+
 console.log('[Renderer] Script loaded, readyState:', document.readyState);
 
 async function startApp(): Promise<void> {
