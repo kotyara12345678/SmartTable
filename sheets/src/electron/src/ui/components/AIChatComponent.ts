@@ -179,6 +179,10 @@ export class AIChatComponent {
     });
 
     try {
+      // Добавляем анимацию загрузки
+      const aiPanel = document.querySelector('.ai-panel');
+      aiPanel?.classList.add('loading');
+
       // Отправляем запрос AI
       const request: AIRequest = {
         message,
@@ -186,6 +190,9 @@ export class AIChatComponent {
       };
 
       const response: AIResponse = await aiContextService.sendMessage(request);
+
+      // Убираем анимацию загрузки
+      aiPanel?.classList.remove('loading');
 
       // Отображаем ответ AI
       this.displayMessage({
@@ -203,6 +210,10 @@ export class AIChatComponent {
     } catch (error) {
       console.error('[AI Chat] Failed to send message:', error);
       
+      // Убираем анимацию загрузки
+      const aiPanel = document.querySelector('.ai-panel');
+      aiPanel?.classList.remove('loading');
+
       // Отображаем сообщение об ошибке
       this.displayMessage({
         role: 'assistant',
@@ -241,8 +252,12 @@ export class AIChatComponent {
     const content = document.createElement('div');
     content.className = 'message-content';
     
+    // Для отладки - выводим исходное сообщение
+    console.log('[AI Chat] Raw content:', message.content);
+    
     // Преобразуем markdown в HTML (простая версия)
     const html = this.markdownToHTML(message.content);
+    console.log('[AI Chat] Processed HTML:', html);
     content.innerHTML = html;
 
     const timestamp = document.createElement('div');
@@ -278,13 +293,147 @@ export class AIChatComponent {
   }
 
   private markdownToHTML(text: string): string {
-    return text
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/`(.*?)`/g, '<code>$1</code>')
-      .replace(/\n/g, '<br>')
-      .replace(/^\d+\.\s/gm, (match) => `<span class="list-number">${match}</span>`)
-      .replace(/^-\s/gm, '<span class="list-bullet">• </span>');
+    console.log('[AI Chat] Raw message:', text);
+
+    // Сохраняем блоки кода в массиве
+    const codeBlocks: string[] = [];
+    let html = text;
+
+    // Заменяем блоки кода на плейсхолдеры
+    html = html.replace(/```(\w*)\s*\n?([\s\S]*?)\s*```/g, (match, lang, code) => {
+      console.log('[AI Chat] Found code block:', lang);
+      const language = lang || 'text';
+      const highlighted = this.highlightSyntax(code.trim(), language);
+      const placeholder = `%%CODEBLOCK_${codeBlocks.length}%%`;
+      codeBlocks.push(`<pre data-language="${language}"><code class="language-${language}">${highlighted}</code></pre>`);
+      return placeholder;
+    });
+
+    // Заменяем inline код на плейсхолдеры
+    const inlineCodes: string[] = [];
+    html = html.replace(/`([^`]+)`/g, (match, code) => {
+      const placeholder = `%%INLINECODE_${inlineCodes.length}%%`;
+      inlineCodes.push(`<code>${code}</code>`);
+      return placeholder;
+    });
+
+    // Теперь заменяем переносы строк
+    html = html.replace(/\n/g, '<br>');
+
+    // Жирный текст
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    // Курсив
+    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+    // Списки
+    html = html.replace(/^\d+\.\s/gm, '<span class="list-number">$&</span>');
+    html = html.replace(/^-\s/gm, '<span class="list-bullet">• </span>');
+
+    // Восстанавливаем блоки кода (убираем <br> вокруг)
+    codeBlocks.forEach((block, index) => {
+      html = html.replace(`<p>%%CODEBLOCK_${index}%%</p>`, block);
+      html = html.replace(`%%CODEBLOCK_${index}%%`, block);
+      // Удаляем лишние <br> вокруг блока
+      html = html.replace(`<br>${block}`, block);
+      html = html.replace(`${block}<br>`, block);
+    });
+
+    // Восстанавливаем inline код
+    inlineCodes.forEach((code, index) => {
+      html = html.replace(`%%INLINECODE_${index}%%`, code);
+    });
+
+    console.log('[AI Chat] HTML output:', html);
+    return html;
+  }
+
+  private highlightSyntax(code: string, language: string): string {
+    console.log('[AI Chat] Highlighting:', language, code);
+    
+    // Простая подсветка синтаксиса
+    let highlighted = code
+      // HTML entities
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    
+    if (language === 'javascript' || language === 'js' || language === 'typescript' || language === 'ts') {
+      highlighted = highlighted
+        // Ключевые слова
+        .replace(/\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|typeof|instanceof)\b/g, '<span class="token keyword">$1</span>')
+        // Строки
+        .replace(/(['"`])(.*?)\1/g, '<span class="token string">$1$2$1</span>')
+        // Числа
+        .replace(/\b\d+(\.\d+)?\b/g, '<span class="token number">$&</span>')
+        // Комментарии
+        .replace(/(\/\/.*$)/gm, '<span class="token comment">$1</span>')
+        // Функции
+        .replace(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)(?=\()/g, '<span class="token function">$1</span>');
+    } else if (language === 'python') {
+      highlighted = highlighted
+        // Комментарии
+        .replace(/(#.*$)/gm, '<span class="token comment">$1</span>')
+        // Строки - более точное сопоставление
+        .replace(/("[^"]*")/g, '<span class="token string">$1</span>')
+        .replace(/('[^']*')/g, '<span class="token string">$1</span>')
+        // Числа
+        .replace(/\b(\d+\.?\d*)\b/g, '<span class="token number">$1</span>')
+        // Ключевые слова Python
+        .replace(/\b(def|class|import|from|return|if|elif|else|for|while|try|except|with|as|in|not|and|or|lambda|yield|global|nonlocal|pass|break|continue|True|False|None|is|raise|assert|finally|async|await)\b/g, '<span class="token keyword">$1</span>')
+        // Функции
+        .replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?=\()/g, '<span class="token function">$1</span>');
+    } else if (language === 'html') {
+      highlighted = highlighted
+        // Теги
+        .replace(/(&lt;\/?)(\w+)(.*?)(&gt;)/g, '$1<span class="token keyword">$2</span>$3$4')
+        // Атрибуты
+        .replace(/\s(\w+)=/g, ' <span class="token operator">$1</span>=');
+    } else if (language === 'css') {
+      highlighted = highlighted
+        // Селекторы
+        .replace(/^([.#]?[\w-]+)(?=\s*\{)/gm, '<span class="token selector">$1</span>')
+        // Свойства
+        .replace(/([\w-]+)(?=:)/g, '<span class="token property">$1</span>')
+        // Значения
+        .replace(/:\s*([^;]+);/g, ': <span class="token value">$1</span>;');
+    } else if (language === 'go' || language === 'golang') {
+      highlighted = highlighted
+        // Ключевые слова Go
+        .replace(/\b(func|package|import|return|if|else|for|range|break|continue|switch|case|default|fallthrough|select|go|defer|chan|map|struct|interface|type|const|var|true|false|nil|string|int|int8|int16|int32|int64|uint|uint8|uint16|uint32|uint64|float32|float64|byte|rune|error|make|new|close|len|cap|append|copy|delete|print|println|panic|recover)\b/g, '<span class="token keyword">$1</span>')
+        // Строки
+        .replace(/(["`])(.*?)\1/g, '<span class="token string">$1$2$1</span>')
+        // Числа
+        .replace(/\b\d+(\.\d+)?\b/g, '<span class="token number">$&</span>')
+        // Комментарии
+        .replace(/(\/\/.*$)/gm, '<span class="token comment">$1</span>')
+        // Функции
+        .replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\()/g, '<span class="token function">$1</span>');
+    } else if (language === 'java') {
+      highlighted = highlighted
+        // Ключевые слова Java
+        .replace(/\b(public|private|protected|static|final|void|int|long|double|float|boolean|char|byte|short|class|interface|extends|implements|new|return|if|else|for|while|do|switch|case|break|continue|try|catch|finally|throw|throws|import|package|this|super|null|true|false)\b/g, '<span class="token keyword">$1</span>')
+        // Строки
+        .replace(/(")(.*?)\1/g, '<span class="token string">$1$2$1</span>')
+        // Числа
+        .replace(/\b\d+(\.\d+)?\b/g, '<span class="token number">$&</span>')
+        // Комментарии
+        .replace(/(\/\/.*$)/gm, '<span class="token comment">$1</span>')
+        // Аннотации
+        .replace(/(@\w+)/g, '<span class="token operator">$1</span>');
+    } else if (language === 'cpp' || language === 'c++' || language === 'c') {
+      highlighted = highlighted
+        // Ключевые слова C/C++
+        .replace(/\b(int|float|double|char|void|bool|auto|const|static|extern|register|volatile|signed|unsigned|short|long|if|else|for|while|do|switch|case|break|continue|return|goto|default|sizeof|typedef|struct|union|enum|class|public|private|protected|virtual|inline|explicit|friend|namespace|using|template|typename|try|catch|throw|new|delete|this|true|false|nullptr)\b/g, '<span class="token keyword">$1</span>')
+        // Строки
+        .replace(/(")(.*?)\1/g, '<span class="token string">$1$2$1</span>')
+        // Числа
+        .replace(/\b\d+(\.\d+)?\b/g, '<span class="token number">$&</span>')
+        // Комментарии
+        .replace(/(\/\/.*$)/gm, '<span class="token comment">$1</span>');
+    }
+    
+    return highlighted;
   }
 
   private formatTime(date: Date): string {

@@ -5,7 +5,8 @@
 import https from 'https';
 // AI API Keys
 export const OPENROUTER_KEYS = [
-    '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',
+    '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',
+    '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',
 ];
 // Системный промт для ИИ
 export const AI_SYSTEM_PROMPT = `You are SmartTable AI Assistant with TWO MODES.

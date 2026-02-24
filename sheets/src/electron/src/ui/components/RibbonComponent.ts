@@ -10,6 +10,10 @@ export class RibbonComponent extends BaseComponent {
   private btnBold: HTMLElement | null = null;
   private btnItalic: HTMLElement | null = null;
   private btnUnderline: HTMLElement | null = null;
+  private btnTextColor: HTMLElement | null = null;
+  private btnFillColor: HTMLElement | null = null;
+  private textColorInput: HTMLInputElement | null = null;
+  private fillColorInput: HTMLInputElement | null = null;
 
   // Новые кнопки
   private btnMerge: HTMLElement | null = null;
@@ -305,6 +309,12 @@ export class RibbonComponent extends BaseComponent {
     this.btnBold = this.querySelector('#btnBold');
     this.btnItalic = this.querySelector('#btnItalic');
     this.btnUnderline = this.querySelector('#btnUnderline');
+    
+    // Цвета
+    this.btnTextColor = this.querySelector('#btnTextColor');
+    this.btnFillColor = this.querySelector('#btnFillColor');
+    this.textColorInput = this.querySelector('#textColor') as HTMLInputElement;
+    this.fillColorInput = this.querySelector('#fillColor') as HTMLInputElement;
 
     // Новые кнопки
     this.btnMerge = this.querySelector('#btnMerge');
@@ -315,16 +325,16 @@ export class RibbonComponent extends BaseComponent {
     this.btnCharts = this.querySelector('#btnCharts');
     this.btnSort = this.querySelector('#btnSort');
     this.btnFilter = this.querySelector('#btnFilter');
-    
+
     // Автосумма и функции
     this.btnAutoSum = this.querySelector('#btnAutoSum');
     this.btnInsertFunction = this.querySelector('#btnInsertFunction');
-    
+
     // Выравнивание
     this.btnAlignLeft = this.querySelector('#btnAlignLeft');
     this.btnAlignCenter = this.querySelector('#btnAlignCenter');
     this.btnAlignRight = this.querySelector('#btnAlignRight');
-    
+
     // Автоподбор и перенос
     this.btnAutoFitColumn = this.querySelector('#btnAutoFitColumn');
     this.btnWrapText = this.querySelector('#btnWrapText');
@@ -337,6 +347,20 @@ export class RibbonComponent extends BaseComponent {
     this.bindEvent(this.btnItalic, 'click', () => this.handleFormat('italic'));
     this.bindEvent(this.btnUnderline, 'click', () => this.handleFormat('underline'));
 
+    // Обработчики цвета
+    if (this.textColorInput) {
+      this.textColorInput.addEventListener('change', (e) => {
+        const color = (e.target as HTMLInputElement).value;
+        document.dispatchEvent(new CustomEvent('text-color-change', { detail: { color } }));
+      });
+    }
+    if (this.fillColorInput) {
+      this.fillColorInput.addEventListener('change', (e) => {
+        const color = (e.target as HTMLInputElement).value;
+        document.dispatchEvent(new CustomEvent('fill-color-change', { detail: { color } }));
+      });
+    }
+
     // Новые обработчики
     this.bindEvent(this.btnMerge, 'click', () => this.handleAction('merge'));
     this.bindEvent(this.btnInsertRow, 'click', () => this.handleAction('insertRow'));
@@ -346,16 +370,16 @@ export class RibbonComponent extends BaseComponent {
     this.bindEvent(this.btnCharts, 'click', () => this.handleAction('charts'));
     this.bindEvent(this.btnSort, 'click', () => this.handleAction('sort'));
     this.bindEvent(this.btnFilter, 'click', () => this.handleAction('filter'));
-    
+
     // Автосумма
     this.bindEvent(this.btnAutoSum, 'click', () => this.handleAutoSum());
     this.bindEvent(this.btnInsertFunction, 'click', () => this.handleInsertFunction());
-    
+
     // Выравнивание
     this.bindEvent(this.btnAlignLeft, 'click', () => this.handleAlign('left'));
     this.bindEvent(this.btnAlignCenter, 'click', () => this.handleAlign('center'));
     this.bindEvent(this.btnAlignRight, 'click', () => this.handleAlign('right'));
-    
+
     // Автоподбор и перенос
     this.bindEvent(this.btnAutoFitColumn, 'click', () => this.handleAutoFitColumn());
     this.bindEvent(this.btnWrapText, 'click', () => this.handleWrapText());

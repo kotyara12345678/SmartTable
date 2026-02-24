@@ -482,3 +482,123 @@
   color: var(--primary);
   border-color: var(--primary);
 }
+
+/* Syntax Highlighting*/
+.message-content pre {
+  background: #1e1e1e;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin: 8px 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  white-space: pre;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  border: 1px solid #3c3c3c;
+  position: relative;
+  max-height: 120px;
+  width: 100%;
+  max-width: 100%;
+  height: 2000px;
+  box-sizing: border-box;
+}
+
+.message-content pre::before {
+  content: attr(data-language);
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 11px;
+  color: #6a6a6a;
+  text-transform: uppercase;
+}
+
+.message-content pre code {
+  background: transparent;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  display: block;
+  color: #d4d4d4;
+  white-space: pre;
+}
+
+/* Dark code block background */
+.message-content pre code.language-python,
+.message-content pre code.language-javascript,
+.message-content pre code.language-js,
+.message-content pre code.language-typescript,
+.message-content pre code.language-ts,
+.message-content pre code.language-html,
+.message-content pre code.language-css,
+.message-content pre code.language-json,
+.message-content pre code.language-sql,
+.message-content pre code.language-go,
+.message-content pre code.language-java,
+.message-content pre code.language-cpp,
+.message-content pre code.language-c {
+  background: #1e1e1e;
+  padding: 12px 16px;
+  margin: -12px -16px;
+  border-radius: 6px;
+}
+
+/* Token Colors - VS Code Dark Theme */
+.token.keyword {
+  color: #569cd6;
+}
+
+.token.string {
+  color: #ce9178;
+}
+
+.token.number {
+  color: #b5cea8;
+}
+
+.token.comment {
+  color: #6a9955;
+  font-style: italic;
+}
+
+.token.function {
+  color: #dcdcaa;
+}
+
+.token.operator {
+  color: #d4d4d4;
+}
+
+.token.property {
+  color: #9cdcfe;
+}
+
+.token.value {
+  color: #ce9178;
+}
+
+.token.selector {
+  color: #d7ba7d;
+}
+
+.token.punctuation {
+  color: #d4d4d4;
+}
+
+.token.class-name {
+  color: #4ec9b0;
+}
+
+.token.tag {
+  color: #569cd6;
+}
+
+.token.attr-name {
+  color: #9cdcfe;
+}
+
+.token.attr-value {
+  color: #ce9178;
+}
+

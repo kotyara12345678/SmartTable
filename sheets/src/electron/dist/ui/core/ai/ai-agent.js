@@ -3,7 +3,8 @@
  * Handles communication with OpenRouter API
  */
 const OPENROUTER_KEYS = [
-    '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',
+    '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',
+    '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',
 ];
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 // Системный промпт для AI

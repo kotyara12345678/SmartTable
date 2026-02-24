@@ -20,6 +20,7 @@ const state = {
     selectionEnd: null,
     isSelecting: false,
     contextMenuCell: null,
+    contextMenuSheet: null,
     aiDataCache: [],
     // Undo/Redo история
     undoStack: [],
@@ -649,6 +650,66 @@ function finishEditing() {
         autoFitColumn(state.selectedCell.col);
     }
 }
+// === ПРИМЕНЕНИЕ ЦВЕТА К ЯЧЕЙКАМ ===
+function applyColorToSelection(type, color) {
+    const data = getCurrentData();
+    const cellsToColor = [];
+    // Получаем выделенные ячейки
+    if (state.selectionStart && state.selectionEnd) {
+        // Выделен диапазон
+        const minRow = Math.min(state.selectionStart.row, state.selectionEnd.row);
+        const maxRow = Math.max(state.selectionStart.row, state.selectionEnd.row);
+        const minCol = Math.min(state.selectionStart.col, state.selectionEnd.col);
+        const maxCol = Math.max(state.selectionStart.col, state.selectionEnd.col);
+        for (let r = minRow; r <= maxRow; r++) {
+            for (let c = minCol; c <= maxCol; c++) {
+                cellsToColor.push({ row: r, col: c });
+            }
+        }
+    }
+    else {
+        // Одна ячейка
+        cellsToColor.push({ ...state.selectedCell });
+    }
+    // Применяем цвет
+    for (const cellRef of cellsToColor) {
+        const key = getCellKey(cellRef.row, cellRef.col);
+        const cellData = data.get(key);
+        const cellElement = getCellElement(cellRef.row, cellRef.col);
+        if (cellData) {
+            // Сохраняем цвет в стиле
+            const newStyle = { ...cellData.style };
+            if (type === 'text') {
+                newStyle.color = color;
+                if (cellElement)
+                    cellElement.style.color = color;
+            }
+            else {
+                newStyle.backgroundColor = color;
+                if (cellElement)
+                    cellElement.style.backgroundColor = color;
+            }
+            data.set(key, { ...cellData, style: newStyle });
+        }
+        else {
+            // Если ячейка пустая, создаём стиль
+            const newStyle = {};
+            if (type === 'text') {
+                newStyle.color = color;
+                if (cellElement)
+                    cellElement.style.color = color;
+            }
+            else {
+                newStyle.backgroundColor = color;
+                if (cellElement)
+                    cellElement.style.backgroundColor = color;
+            }
+            data.set(key, { value: '', style: newStyle });
+        }
+    }
+    updateAIDataCache();
+    autoSave();
+}
 // Автоподбор ширины колонки
 function autoFitColumn(col) {
     const data = getCurrentData();
@@ -901,6 +962,131 @@ function setupContextMenu() {
         }
     });
 }
+// === КОНТЕКСТНОЕ МЕНЮ ЛИСТОВ ===
+function setupSheetContextMenu() {
+    // ПКМ на списке листов
+    elements.sheetsList.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const tab = e.target.closest('.sheet-tab');
+        if (!tab)
+            return;
+        const sheetId = parseInt(tab.dataset.sheet || '0');
+        if (!sheetId)
+            return;
+        state.contextMenuSheet = sheetId;
+        // Показать меню
+        const menu = document.getElementById('sheetContextMenu');
+        if (menu) {
+            menu.style.display = 'block';
+            menu.style.left = `${e.pageX}px`;
+            menu.style.top = `${e.pageY}px`;
+        }
+    });
+    // Скрыть меню при клике
+    document.addEventListener('click', () => {
+        const menu = document.getElementById('sheetContextMenu');
+        if (menu) {
+            menu.style.display = 'none';
+        }
+    });
+    // Обработка действий меню листов
+    document.addEventListener('click', (e) => {
+        const item = e.target.closest('.context-menu-item');
+        if (!item || !item.closest('#sheetContextMenu'))
+            return;
+        const action = item.dataset.action;
+        handleSheetContextMenuAction(action);
+        const menu = document.getElementById('sheetContextMenu');
+        if (menu) {
+            menu.style.display = 'none';
+        }
+    });
+}
+function handleSheetContextMenuAction(action) {
+    const sheetId = state.contextMenuSheet;
+    if (!sheetId)
+        return;
+    switch (action) {
+        case 'rename-sheet':
+            {
+                const sheet = state.sheets.find(s => s.id === sheetId);
+                if (!sheet)
+                    return;
+                const newName = prompt('Введите новое название листа:', sheet.name);
+                if (newName && newName.trim()) {
+                    sheet.name = newName.trim();
+                    renderSheets();
+                }
+            }
+            break;
+        case 'duplicate-sheet':
+            {
+                const sheet = state.sheets.find(s => s.id === sheetId);
+                if (!sheet)
+                    return;
+                const newId = state.sheets.length + 1;
+                const newName = `${sheet.name} (копия)`;
+                const newSheet = { id: newId, name: newName };
+                state.sheets.push(newSheet);
+                // Копировать данные
+                const sourceData = state.sheetsData.get(sheetId);
+                if (sourceData) {
+                    const newData = new Map(sourceData);
+                    state.sheetsData.set(newId, newData);
+                }
+                else {
+                    state.sheetsData.set(newId, new Map());
+                }
+                switchSheet(newId);
+            }
+            break;
+        case 'move-sheet-left':
+            {
+                const index = state.sheets.findIndex(s => s.id === sheetId);
+                if (index <= 0)
+                    return; // Уже первый
+                const sheet = state.sheets[index];
+                state.sheets.splice(index, 1);
+                state.sheets.splice(index - 1, 0, sheet);
+                renderSheets();
+            }
+            break;
+        case 'move-sheet-right':
+            {
+                const index = state.sheets.findIndex(s => s.id === sheetId);
+                if (index < 0 || index >= state.sheets.length - 1)
+                    return; // Уже последний
+                const sheet = state.sheets[index];
+                state.sheets.splice(index, 1);
+                state.sheets.splice(index + 1, 0, sheet);
+                renderSheets();
+            }
+            break;
+        case 'delete-sheet':
+            {
+                if (state.sheets.length <= 1) {
+                    alert('Нельзя удалить последний лист');
+                    return;
+                }
+                if (!confirm('Вы уверены, что хотите удалить этот лист?'))
+                    return;
+                const index = state.sheets.findIndex(s => s.id === sheetId);
+                if (index < 0)
+                    return;
+                state.sheets.splice(index, 1);
+                state.sheetsData.delete(sheetId);
+                // Переключиться на соседний лист
+                if (state.currentSheet === sheetId) {
+                    const newSheetId = state.sheets[Math.max(0, index - 1)].id;
+                    switchSheet(newSheetId);
+                }
+                else {
+                    renderSheets();
+                }
+            }
+            break;
+    }
+}
 function handleContextMenuAction(action) {
     const cellRef = state.contextMenuCell || state.selectedCell;
     const row = cellRef.row;
@@ -1047,6 +1233,16 @@ function setupEventListeners() {
             item.classList.add('active');
         });
     });
+    // Изменение цвета текста
+    document.addEventListener('text-color-change', (e) => {
+        const event = e;
+        applyColorToSelection('text', event.detail.color);
+    });
+    // Изменение цвета фона
+    document.addEventListener('fill-color-change', (e) => {
+        const event = e;
+        applyColorToSelection('fill', event.detail.color);
+    });
     // Синхронизация скролла
     elements.cellGridWrapper.addEventListener('scroll', () => {
         const scrollLeft = elements.cellGridWrapper.scrollLeft;
@@ -1173,6 +1369,7 @@ function setupEventListeners() {
     setupRangeSelection();
     // Контекстное меню (ПКМ)
     setupContextMenu();
+    setupSheetContextMenu();
     // Формула бар
     elements.formulaInput.addEventListener('input', (e) => {
         const value = e.target.value;
@@ -2370,9 +2567,84 @@ function sleep(ms) {
 function addAiMessage(text, type) {
     const message = document.createElement('div');
     message.className = `ai-message ai-message-${type}`;
-    message.textContent = text;
+    // Обрабатываем markdown и код
+    if (type === 'assistant') {
+        const html = processMarkdown(text);
+        message.innerHTML = html;
+    }
+    else {
+        message.textContent = text;
+    }
     elements.aiChat.appendChild(message);
     elements.aiChat.scrollTop = elements.aiChat.scrollHeight;
+}
+// Обработка markdown для AI сообщений
+function processMarkdown(text) {
+    let html = text;
+    // Обработка блоков кода
+    html = html.replace(/```(\w*)\s*\n?([\s\S]*?)\s*```/g, (match, lang, code) => {
+        const language = lang || 'text';
+        const highlighted = highlightCode(code.trim(), language);
+        return `<pre data-language="${language}"><code class="language-${language}">${highlighted}</code></pre>`;
+    });
+    // Обработка inline кода
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Жирный текст
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    // Курсив
+    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    // Переносы строк
+    html = html.replace(/\n/g, '<br>');
+    return html;
+}
+// Подсветка синтаксиса для кода
+function highlightCode(code, language) {
+    // Сначала обрабатываем HTML сущности
+    let highlighted = code
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    if (language === 'python') {
+        highlighted = highlighted
+            // Комментарии
+            .replace(/(#.*$)/gm, '<span class="token comment">$1</span>')
+            // Строки
+            .replace(/("[^"]*")/g, '<span class="token string">$1</span>')
+            .replace(/('[^']*')/g, '<span class="token string">$1</span>')
+            // Числа
+            .replace(/\b(\d+\.?\d*)\b/g, '<span class="token number">$1</span>')
+            // Ключевые слова
+            .replace(/\b(def|class|import|from|return|if|elif|else|for|while|try|except|with|as|in|not|and|or|lambda|yield|global|nonlocal|pass|break|continue|True|False|None|is|raise|assert|finally|async|await)\b/g, '<span class="token keyword">$1</span>')
+            // Функции
+            .replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?=\()/g, '<span class="token function">$1</span>');
+    }
+    else if (language === 'javascript' || language === 'js') {
+        highlighted = highlighted
+            // Комментарии
+            .replace(/(\/\/.*$)/gm, '<span class="token comment">$1</span>')
+            .replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="token comment">$1</span>')
+            // Строки
+            .replace(/("(?:[^"\\]|\\.)*")/g, '<span class="token string">$1</span>')
+            .replace(/('(?:[^'\\]|\\.)*')/g, '<span class="token string">$1</span>')
+            // Числа
+            .replace(/\b(\d+\.?\d*)\b/g, '<span class="token number">$1</span>')
+            // Ключевые слова
+            .replace(/\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|typeof|instanceof|switch|case|default|break|continue)\b/g, '<span class="token keyword">$1</span>')
+            // Функции
+            .replace(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)\s*(?=\()/g, '<span class="token function">$1</span>');
+    }
+    else {
+        // Для других языков - базовая подсветка
+        highlighted = highlighted
+            // Строки
+            .replace(/("[^"]*")/g, '<span class="token string">$1</span>')
+            .replace(/('[^']*')/g, '<span class="token string">$1</span>')
+            // Числа
+            .replace(/\b(\d+\.?\d*)\b/g, '<span class="token number">$1</span>')
+            // Комментарии
+            .replace(/(\/\/.*$|#.*$)/gm, '<span class="token comment">$1</span>');
+    }
+    return highlighted;
 }
 // === ИЗМЕНЕНИЕ РАЗМЕРА СТОЛБЦОВ ===
 function setupColumnResize() {

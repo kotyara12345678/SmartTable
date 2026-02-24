@@ -11,6 +11,10 @@ export class RibbonComponent extends BaseComponent {
         this.btnBold = null;
         this.btnItalic = null;
         this.btnUnderline = null;
+        this.btnTextColor = null;
+        this.btnFillColor = null;
+        this.textColorInput = null;
+        this.fillColorInput = null;
         // Новые кнопки
         this.btnMerge = null;
         this.btnInsertRow = null;
@@ -299,6 +303,11 @@ export class RibbonComponent extends BaseComponent {
         this.btnBold = this.querySelector('#btnBold');
         this.btnItalic = this.querySelector('#btnItalic');
         this.btnUnderline = this.querySelector('#btnUnderline');
+        // Цвета
+        this.btnTextColor = this.querySelector('#btnTextColor');
+        this.btnFillColor = this.querySelector('#btnFillColor');
+        this.textColorInput = this.querySelector('#textColor');
+        this.fillColorInput = this.querySelector('#fillColor');
         // Новые кнопки
         this.btnMerge = this.querySelector('#btnMerge');
         this.btnInsertRow = this.querySelector('#btnInsertRow');
@@ -325,6 +334,19 @@ export class RibbonComponent extends BaseComponent {
         this.bindEvent(this.btnBold, 'click', () => this.handleFormat('bold'));
         this.bindEvent(this.btnItalic, 'click', () => this.handleFormat('italic'));
         this.bindEvent(this.btnUnderline, 'click', () => this.handleFormat('underline'));
+        // Обработчики цвета
+        if (this.textColorInput) {
+            this.textColorInput.addEventListener('change', (e) => {
+                const color = e.target.value;
+                document.dispatchEvent(new CustomEvent('text-color-change', { detail: { color } }));
+            });
+        }
+        if (this.fillColorInput) {
+            this.fillColorInput.addEventListener('change', (e) => {
+                const color = e.target.value;
+                document.dispatchEvent(new CustomEvent('fill-color-change', { detail: { color } }));
+            });
+        }
         // Новые обработчики
         this.bindEvent(this.btnMerge, 'click', () => this.handleAction('merge'));
         this.bindEvent(this.btnInsertRow, 'click', () => this.handleAction('insertRow'));
