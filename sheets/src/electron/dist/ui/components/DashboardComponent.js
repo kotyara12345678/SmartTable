@@ -60,13 +60,6 @@ export class DashboardComponent {
               </svg>
               <span>История</span>
             </a>
-            <a href="#" class="nav-item" data-section="settings">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-              </svg>
-              <span>Настройки</span>
-            </a>
             <a href="#" class="nav-item" data-section="support">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -139,7 +132,7 @@ export class DashboardComponent {
       <div class="dashboard-section">
         <!-- Welcome Section -->
         <div class="welcome-section">
-          <h2 class="welcome-title">Добро пожаловать обратно! 👋</h2>
+          <h2 class="welcome-title">Добро пожаловать обратно! </h2>
           <p class="welcome-subtitle">Вот ваша статистика и последние действия</p>
         </div>
 
@@ -283,8 +276,8 @@ export class DashboardComponent {
             </div>
             <div class="metric-content">
               <h3 class="metric-title">Активность</h3>
-              <p class="metric-value">87%</p>
-              <p class="metric-change positive">+12% за неделю</p>
+              <p class="metric-value" id="activityValue">0%</p>
+              <p class="metric-change positive" id="activityChange">Загрузка...</p>
             </div>
           </div>
 
@@ -297,8 +290,8 @@ export class DashboardComponent {
             </div>
             <div class="metric-content">
               <h3 class="metric-title">Документы</h3>
-              <p class="metric-value">24</p>
-              <p class="metric-change positive">+5 новых</p>
+              <p class="metric-value" id="documentsCount">0</p>
+              <p class="metric-change positive" id="documentsChange">Загрузка...</p>
             </div>
           </div>
 
@@ -316,19 +309,6 @@ export class DashboardComponent {
             </div>
           </div>
 
-          <div class="metric-card">
-            <div class="metric-icon storage">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M4 7h16v10H4z"/>
-                <path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/>
-              </svg>
-            </div>
-            <div class="metric-content">
-              <h3 class="metric-title">Хранилище</h3>
-              <p class="metric-value">2.4GB</p>
-              <p class="metric-change neutral">из 10GB</p>
-            </div>
-          </div>
         </div>
 
         <!-- Recent Actions Table -->
@@ -429,9 +409,8 @@ export class DashboardComponent {
         const reader = new FileReader();
         reader.onload = (e) => {
             const imageUrl = e.target?.result;
-            // Устанавливаем CSS переменные
-            document.documentElement.style.setProperty('--avatar-image', `url(${imageUrl})`);
-            document.documentElement.style.setProperty('--avatar-bg', 'transparent');
+            // Сохраняем в localStorage
+            localStorage.setItem('user-avatar', imageUrl);
             // Обновляем аватар в профиле
             const profileAvatarLarge = document.getElementById('profileAvatarLarge');
             if (profileAvatarLarge) {
@@ -439,6 +418,7 @@ export class DashboardComponent {
                 profileAvatarLarge.style.backgroundSize = 'cover';
                 profileAvatarLarge.style.backgroundPosition = 'center';
                 profileAvatarLarge.style.backgroundRepeat = 'no-repeat';
+                profileAvatarLarge.style.backgroundColor = 'transparent';
                 profileAvatarLarge.textContent = ''; // Убираем текст когда есть фото
                 profileAvatarLarge.classList.add('has-image'); // Добавляем класс для стилизации
             }
@@ -449,11 +429,10 @@ export class DashboardComponent {
                 userAvatarHeader.style.backgroundSize = 'cover';
                 userAvatarHeader.style.backgroundPosition = 'center';
                 userAvatarHeader.style.backgroundRepeat = 'no-repeat';
+                userAvatarHeader.style.backgroundColor = 'transparent';
                 userAvatarHeader.textContent = ''; // Убираем текст когда есть фото
                 userAvatarHeader.classList.add('has-image'); // Добавляем класс для стилизации
             }
-            // Сохраняем в localStorage
-            localStorage.setItem('user-avatar', imageUrl);
             console.log('Avatar uploaded successfully');
         };
         reader.readAsDataURL(file);
@@ -488,9 +467,6 @@ export class DashboardComponent {
                     break;
                 case 'history':
                     contentElement.innerHTML = this.getHistoryContent();
-                    break;
-                case 'settings':
-                    contentElement.innerHTML = this.getSettingsContent();
                     break;
                 case 'support':
                     contentElement.innerHTML = this.getSupportContent();
@@ -535,14 +511,6 @@ export class DashboardComponent {
       </div>
     `;
     }
-    getSettingsContent() {
-        return `
-      <div class="settings-section">
-        <h2>Настройки</h2>
-        <p>Управление настройками приложения</p>
-      </div>
-    `;
-    }
     getSupportContent() {
         return `
       <div class="support-section">
@@ -582,7 +550,95 @@ export class DashboardComponent {
         localStorage.setItem('dashboard-theme', this.currentTheme);
     }
     showNotifications() {
-        alert('Уведомления: 3 новых сообщения');
+        // Получаем список уведомлений из localStorage
+        const notifications = this.getNotifications();
+        // Создаём модальное окно
+        const modal = document.createElement('div');
+        modal.className = 'notifications-modal';
+        let notificationsHtml = '';
+        if (notifications.length > 0) {
+            notifications.forEach((n) => {
+                notificationsHtml += `
+          <div class="notification-item ${n.read ? 'read' : 'unread'}">
+            <div class="notification-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+            </div>
+            <div class="notification-text">
+              <p class="notification-title">${n.title}</p>
+              <p class="notification-message">${n.message}</p>
+              <span class="notification-time">${n.time}</span>
+            </div>
+          </div>`;
+            });
+        }
+        else {
+            notificationsHtml = `
+        <div class="no-notifications">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          <p>Нет уведомлений</p>
+        </div>`;
+        }
+        modal.innerHTML = `
+      <div class="notifications-overlay" id="notificationsOverlay"></div>
+      <div class="notifications-panel">
+        <div class="notifications-header">
+          <h3>Уведомления</h3>
+          <button class="close-btn" id="closeNotifications">&times;</button>
+        </div>
+        <div class="notifications-content">
+          ${notificationsHtml}
+        </div>
+      </div>`;
+        document.body.appendChild(modal);
+        // Обработчики закрытия
+        const overlay = document.getElementById('notificationsOverlay');
+        const closeBtn = document.getElementById('closeNotifications');
+        const closeModal = () => {
+            modal.remove();
+            // Отмечаем уведомления как прочитанные
+            this.markNotificationsAsRead();
+        };
+        overlay?.addEventListener('click', closeModal);
+        closeBtn?.addEventListener('click', closeModal);
+        // Проматываем вниз
+        setTimeout(() => {
+            const content = modal.querySelector('.notifications-content');
+            if (content) {
+                content.scrollTop = content.scrollHeight;
+            }
+        }, 100);
+    }
+    getNotifications() {
+        // Получаем уведомления из localStorage
+        try {
+            const saved = localStorage.getItem('notifications');
+            return saved ? JSON.parse(saved) : this.getDefaultNotifications();
+        }
+        catch {
+            return this.getDefaultNotifications();
+        }
+    }
+    getDefaultNotifications() {
+        return [
+            { title: 'Добро пожаловать!', message: 'Спасибо за использование SmartTable', time: 'Сегодня', read: false },
+            { title: 'Новая функция', message: 'Теперь вы можете загружать фото профиля', time: 'Вчера', read: false },
+        ];
+    }
+    markNotificationsAsRead() {
+        const notifications = this.getNotifications();
+        notifications.forEach(n => n.read = true);
+        localStorage.setItem('notifications', JSON.stringify(notifications));
+        // Скрываем badge
+        const badge = document.querySelector('.notification-badge');
+        if (badge) {
+            badge.style.display = 'none';
+        }
     }
     openAIChat() {
         const aiChat = window.aiChat;
@@ -647,6 +703,133 @@ export class DashboardComponent {
         if (totalStorageSizeElement) {
             totalStorageSizeElement.textContent = `${dbSizeMB} MB`;
         }
+        // Обновление карточки "Активность"
+        this.updateActivityStats();
+        // Обновление карточки "Документы"
+        this.updateDocumentsStats();
+        // Обновление секции XLSX файлов
+        this.updateXLSXStats();
+    }
+    updateActivityStats() {
+        const activityValueElement = document.getElementById('activityValue');
+        const activityChangeElement = document.getElementById('activityChange');
+        if (!activityValueElement || !activityChangeElement)
+            return;
+        const today = new Date().toISOString().split('T')[0];
+        const dailyStats = timeTracker.getDailyStats(today);
+        const weeklyStats = timeTracker.getWeeklyStats();
+        // Получаем статистику за вчера
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayString = yesterday.toISOString().split('T')[0];
+        const yesterdayStats = timeTracker.getDailyStats(yesterdayString);
+        // Рассчитываем процент активности (отношение времени сегодня ко времени вчера)
+        let activityPercent = 0;
+        if (yesterdayStats.total_seconds > 0) {
+            activityPercent = Math.round((dailyStats.total_seconds / yesterdayStats.total_seconds) * 100);
+        }
+        else if (dailyStats.total_seconds > 0) {
+            activityPercent = 100; // Если вчера не было активности, а сегодня есть - это 100%
+        }
+        // Рассчитываем изменение по сравнению с прошлой неделей
+        const lastWeekStart = new Date();
+        lastWeekStart.setDate(lastWeekStart.getDate() - 7 - lastWeekStart.getDay());
+        const lastWeekEnd = new Date(lastWeekStart);
+        lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+        let lastWeekTotal = 0;
+        for (let d = new Date(lastWeekStart); d <= lastWeekEnd; d.setDate(d.getDate() + 1)) {
+            const dateStr = d.toISOString().split('T')[0];
+            const dayStats = timeTracker.getDailyStats(dateStr);
+            lastWeekTotal += dayStats.total_seconds;
+        }
+        const thisWeekTotal = weeklyStats.total_seconds;
+        let weekChange = 0;
+        let weekChangeText = '';
+        let changeClass = 'neutral';
+        if (lastWeekTotal > 0) {
+            weekChange = Math.round(((thisWeekTotal - lastWeekTotal) / lastWeekTotal) * 100);
+            if (weekChange > 0) {
+                weekChangeText = `+${weekChange}% за неделю`;
+                changeClass = 'positive';
+            }
+            else if (weekChange < 0) {
+                weekChangeText = `${weekChange}% за неделю`;
+                changeClass = 'negative';
+            }
+            else {
+                weekChangeText = 'Без изменений';
+            }
+        }
+        else if (thisWeekTotal > 0) {
+            weekChangeText = 'Новая неделя';
+            changeClass = 'positive';
+        }
+        else {
+            weekChangeText = 'Нет данных';
+        }
+        // Обновляем значения
+        activityValueElement.textContent = `${activityPercent}%`;
+        activityChangeElement.textContent = weekChangeText;
+        // Обновляем класс для изменения
+        activityChangeElement.className = `metric-change ${changeClass}`;
+    }
+    updateDocumentsStats() {
+        const documentsCountElement = document.getElementById('documentsCount');
+        const documentsChangeElement = document.getElementById('documentsChange');
+        if (!documentsCountElement || !documentsChangeElement)
+            return;
+        // Подсчитываем количество файлов/проектов в localStorage
+        let totalFiles = 0;
+        let newFilesToday = 0;
+        const today = new Date().toISOString().split('T')[0];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key) {
+                // Считаем файлы SmartTable (проекты, таблицы и т.д.)
+                if (key.includes('project') || key.includes('sheet') || key.includes('table') ||
+                    key.includes('file') || key.endsWith('.json')) {
+                    totalFiles++;
+                    // Проверяем, создан ли файл сегодня
+                    try {
+                        const value = localStorage.getItem(key);
+                        if (value) {
+                            const data = JSON.parse(value);
+                            // Проверяем дату создания
+                            if (data.createdAt && data.createdAt.startsWith(today)) {
+                                newFilesToday++;
+                            }
+                        }
+                    }
+                    catch {
+                        // Игнорируем ошибки парсинга
+                    }
+                }
+            }
+        }
+        // Также считаем JSON проекты
+        totalFiles += this.countJSONProjects();
+        // Обновляем значения
+        documentsCountElement.textContent = totalFiles.toString();
+        if (newFilesToday > 0) {
+            documentsChangeElement.textContent = `+${newFilesToday} новых`;
+            documentsChangeElement.className = 'metric-change positive';
+        }
+        else {
+            documentsChangeElement.textContent = 'Нет новых';
+            documentsChangeElement.className = 'metric-change neutral';
+        }
+    }
+    updateXLSXStats() {
+        const xlsxCountElement = document.getElementById('xlsxCount');
+        const xlsxTotalCountElement = document.getElementById('xlsxTotalCount');
+        const xlsxDataSizeElement = document.getElementById('xlsxDataSize');
+        if (!xlsxCountElement || !xlsxTotalCountElement || !xlsxDataSizeElement)
+            return;
+        const xlsxCount = this.countXLSXFiles();
+        const xlsxSize = this.getXLSXDataSize();
+        xlsxCountElement.textContent = `${xlsxCount} файлов`;
+        xlsxTotalCountElement.textContent = xlsxCount.toString();
+        xlsxDataSizeElement.textContent = this.formatBytes(xlsxSize);
     }
     countJSONProjects() {
         let count = 0;
@@ -657,6 +840,33 @@ export class DashboardComponent {
             }
         }
         return count;
+    }
+    countXLSXFiles() {
+        let count = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.includes('xlsx') || key.includes('spreadsheet') ||
+                key.includes('sheet') || key.includes('excel') ||
+                key.includes('table') || key.endsWith('.xls'))) {
+                count++;
+            }
+        }
+        return count;
+    }
+    getXLSXDataSize() {
+        let size = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.includes('xlsx') || key.includes('spreadsheet') ||
+                key.includes('sheet') || key.includes('excel') ||
+                key.includes('table') || key.endsWith('.xls'))) {
+                const value = localStorage.getItem(key);
+                if (value) {
+                    size += key.length + value.length;
+                }
+            }
+        }
+        return size;
     }
     countTotalFiles() {
         let count = 0;
@@ -840,37 +1050,36 @@ export class DashboardComponent {
               </div>
             </div>
 
-            <!-- JSON Проекты -->
+            <!-- XLSX Файлы -->
             <div class="storage-section">
-              <div class="storage-section-header" onclick="this.toggleSection('projects-section')">
+              <div class="storage-section-header" onclick="this.toggleSection('xlsx-section')">
                 <div class="storage-section-info">
                   <div class="storage-section-icon projects">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                      <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2Z"/>
+                      <polyline points="14,2 14,8 20,8"/>
+                      <line x1="8" y1="13" x2="16" y2="13"/>
+                      <line x1="8" y1="17" x2="16" y2="17"/>
                     </svg>
                   </div>
                   <div class="storage-section-title">
-                    <h4>JSON Проекты</h4>
-                    <p class="storage-section-count">${projectCount} проектов</p>
+                    <h4>Файлы XLSX</h4>
+                    <p class="storage-section-count" id="xlsxCount">${this.countXLSXFiles()} файлов</p>
                   </div>
                 </div>
                 <svg class="storage-section-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="6,9 12,15 18,9"/>
                 </svg>
               </div>
-              <div class="storage-section-content" id="projects-section">
+              <div class="storage-section-content" id="xlsx-section">
                 <div class="storage-section-items">
                   <div class="storage-section-item">
-                    <span class="item-label">Всего проектов:</span>
-                    <span class="item-value">${projectCount}</span>
-                  </div>
-                  <div class="storage-section-item">
                     <span class="item-label">Всего файлов:</span>
-                    <span class="item-value">${this.countTotalFiles()}</span>
+                    <span class="item-value" id="xlsxTotalCount">${this.countXLSXFiles()}</span>
                   </div>
                   <div class="storage-section-item">
                     <span class="item-label">Размер данных:</span>
-                    <span class="item-value">${this.formatBytes(this.getProjectsDataSize())}</span>
+                    <span class="item-value" id="xlsxDataSize">${this.formatBytes(this.getXLSXDataSize())}</span>
                   </div>
                 </div>
               </div>
@@ -1087,9 +1296,6 @@ export class DashboardComponent {
     loadSavedAvatar() {
         const savedAvatar = localStorage.getItem('user-avatar');
         if (savedAvatar) {
-            // Устанавливаем CSS переменные
-            document.documentElement.style.setProperty('--avatar-image', `url(${savedAvatar})`);
-            document.documentElement.style.setProperty('--avatar-bg', 'transparent');
             // Обновляем аватар в профиле
             const profileAvatarLarge = document.getElementById('profileAvatarLarge');
             if (profileAvatarLarge) {
@@ -1097,6 +1303,7 @@ export class DashboardComponent {
                 profileAvatarLarge.style.backgroundSize = 'cover';
                 profileAvatarLarge.style.backgroundPosition = 'center';
                 profileAvatarLarge.style.backgroundRepeat = 'no-repeat';
+                profileAvatarLarge.style.backgroundColor = 'transparent';
                 profileAvatarLarge.textContent = ''; // Убираем текст когда есть фото
                 profileAvatarLarge.classList.add('has-image'); // Добавляем класс для стилизации
             }
@@ -1107,14 +1314,10 @@ export class DashboardComponent {
                 userAvatarHeader.style.backgroundSize = 'cover';
                 userAvatarHeader.style.backgroundPosition = 'center';
                 userAvatarHeader.style.backgroundRepeat = 'no-repeat';
+                userAvatarHeader.style.backgroundColor = 'transparent';
                 userAvatarHeader.textContent = ''; // Убираем текст когда есть фото
                 userAvatarHeader.classList.add('has-image'); // Добавляем класс для стилизации
             }
-        }
-        else {
-            // Сбрасываем переменные если нет фото
-            document.documentElement.style.setProperty('--avatar-image', 'none');
-            document.documentElement.style.setProperty('--avatar-bg', 'var(--bg-secondary)');
         }
     }
     open() {

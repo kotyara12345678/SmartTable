@@ -2630,9 +2630,6 @@ function generateAiResponse(message) {
     }
     return 'Я понял ваш запрос! Вот что я могу сделать:\n\n📝 **Создать формулу** - помогу с функциями\n📊 **Анализировать** - найду закономерности\n🧹 **Очистить данные** - уберу лишнее\n📈 **Визуализировать** - предложу графики\n\nЧт�� бы вы хотели сделать?';
 }
-// ==========================================
-// === НОВЫЕ ФУНКЦИИ ДЛЯ TABLE FUNCTIONALITY ===
-// ==========================================
 function getSelectedRangeData() {
     const selectedCells = elements.cellGrid.querySelectorAll('.cell.selected');
     console.log('[Renderer] getSelectedRangeData called, selected cells:', selectedCells.length);
@@ -2878,9 +2875,6 @@ window.clearConditionalFormats = clearConditionalFormats;
 window.findAndReplace = findAndReplace;
 // Clear state
 window.clearAllState = clearAllState;
-// ==========================================
-// === FIND AND REPLACE ===
-// ==========================================
 function findAndReplace(findText, replaceText, options = {}) {
     const data = getCurrentData();
     let found = 0;
@@ -2910,9 +2904,6 @@ function findAndReplace(findText, replaceText, options = {}) {
     console.log('[FindReplace] Found:', found, 'Replaced:', replaced);
     return { found, replaced };
 }
-// ==========================================
-// === CONDITIONAL FORMATTING ===
-// ==========================================
 function addConditionalFormat(range, rule, style) {
     state.conditionalFormats.push({ range, rule, style });
     applyConditionalFormatting();
@@ -2980,9 +2971,6 @@ function applyConditionalFormatting() {
         }
     });
 }
-// ==========================================
-// === ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ DOM ===
-// ==========================================
 console.log('[Renderer] Script loaded, readyState:', document.readyState);
 async function startApp() {
     console.log('[Renderer] Starting app...');
