@@ -13,3 +13,5 @@ git add .
 git commit -m "AI перенесен в python для удобства и расширения функционала"
 
 git push origin sandbox
+
+#
