@@ -15,6 +15,9 @@ export class RibbonComponent extends BaseComponent {
         this.btnFillColor = null;
         this.textColorInput = null;
         this.fillColorInput = null;
+        this.btnPaste = null;
+        this.btnCut = null;
+        this.btnCopy = null;
         // Новые кнопки
         this.btnMerge = null;
         this.btnInsertRow = null;
@@ -308,6 +311,9 @@ export class RibbonComponent extends BaseComponent {
         this.btnFillColor = this.querySelector('#btnFillColor');
         this.textColorInput = this.querySelector('#textColor');
         this.fillColorInput = this.querySelector('#fillColor');
+        this.btnPaste = this.querySelector('#btnPaste');
+        this.btnCut = this.querySelector('#btnCut');
+        this.btnCopy = this.querySelector('#btnCopy');
         // Новые кнопки
         this.btnMerge = this.querySelector('#btnMerge');
         this.btnInsertRow = this.querySelector('#btnInsertRow');
@@ -334,6 +340,11 @@ export class RibbonComponent extends BaseComponent {
         this.bindEvent(this.btnBold, 'click', () => this.handleFormat('bold'));
         this.bindEvent(this.btnItalic, 'click', () => this.handleFormat('italic'));
         this.bindEvent(this.btnUnderline, 'click', () => this.handleFormat('underline'));
+        // Кнопка Вставить
+        this.bindEvent(this.btnPaste, 'click', () => this.handlePaste());
+        // Кнопки Вырезать и Копировать
+        this.bindEvent(this.btnCut, 'click', () => this.handleCut());
+        this.bindEvent(this.btnCopy, 'click', () => this.handleCopy());
         // Обработчики цвета
         if (this.textColorInput) {
             this.textColorInput.addEventListener('change', (e) => {
@@ -366,6 +377,23 @@ export class RibbonComponent extends BaseComponent {
         // Автоподбор и перенос
         this.bindEvent(this.btnAutoFitColumn, 'click', () => this.handleAutoFitColumn());
         this.bindEvent(this.btnWrapText, 'click', () => this.handleWrapText());
+        // Переключение вкладок меню
+        document.addEventListener('ribbon-tab-change', (e) => {
+            const event = e;
+            this.showRibbonGroup(event.detail.tab);
+        });
+    }
+    showRibbonGroup(groupName) {
+        const groups = this.querySelectorAll('.ribbon-group');
+        groups.forEach(group => {
+            const groupData = group.dataset.group;
+            if (groupData === groupName || (groupName === 'home' && groupData === 'home')) {
+                group.style.display = 'block';
+            }
+            else {
+                group.style.display = 'none';
+            }
+        });
     }
     handleZoom(delta) {
         document.dispatchEvent(new CustomEvent('zoom-change', { detail: { delta } }));
@@ -400,6 +428,43 @@ export class RibbonComponent extends BaseComponent {
     handleWrapText() {
         // Отправляем событие на перенос текста
         document.dispatchEvent(new CustomEvent('wrap-text'));
+    }
+    handlePaste() {
+        // Вставляем из буфера обмена
+        navigator.clipboard.readText().then(text => {
+            // Отправляем событие в renderer для вставки в текущую ячейку
+            document.dispatchEvent(new CustomEvent('paste-from-ribbon', { detail: { text } }));
+        }).catch(err => {
+            console.error('[Ribbon] Failed to paste:', err);
+        });
+    }
+    handleCut() {
+        // Копируем и удаляем содержимое текущей ячейки
+        const { row, col } = window.getSelectedCell?.() || { row: 0, col: 0 };
+        const data = window.getCurrentData?.();
+        const key = `${row}-${col}`;
+        const cellData = data?.get(key);
+        if (cellData?.value) {
+            // Копируем в буфер
+            navigator.clipboard.writeText(cellData.value).then(() => {
+                // Удаляем из ячейки
+                data.delete(key);
+                document.dispatchEvent(new CustomEvent('cell-cleared', { detail: { row, col } }));
+                console.log('[Ribbon] Cut completed');
+            });
+        }
+    }
+    handleCopy() {
+        // Копируем содержимое текущей ячейки в буфер
+        const { row, col } = window.getSelectedCell?.() || { row: 0, col: 0 };
+        const data = window.getCurrentData?.();
+        const key = `${row}-${col}`;
+        const cellData = data?.get(key);
+        if (cellData?.value) {
+            navigator.clipboard.writeText(cellData.value).then(() => {
+                console.log('[Ribbon] Copy completed');
+            });
+        }
     }
 }
 //# sourceMappingURL=RibbonComponent.js.map

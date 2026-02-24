@@ -65,7 +65,12 @@ export class TopBarComponent extends BaseComponent {
     });
 
     const tab = clickedItem.dataset.tab;
-    this.onTabChange(tab || 'home');
+    const tabName = tab || 'home';
+    
+    // Отправляем событие для переключения ribbon
+    document.dispatchEvent(new CustomEvent('ribbon-tab-change', { detail: { tab: tabName } }));
+    
+    this.onTabChange(tabName);
   }
 
   /**
@@ -120,35 +125,23 @@ export class TopBarComponent extends BaseComponent {
     // Создаём новое меню
     const menu = document.createElement('div');
     menu.className = 'app-context-menu';
-    menu.style.cssText = `
-      position: fixed;
-      top: 50px;
-      left: 10px;
-      background: var(--surface-color);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      z-index: 100000;
-      min-width: 200px;
-      overflow: hidden;
-    `;
 
     menu.innerHTML = `
-      <div class="app-menu-item" id="menuReturnToStart">
+      <button class="app-menu-item" id="menuReturnToStart">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
           <polyline points="9 22 9 12 15 12 15 22"/>
         </svg>
         <span>Вернуться на начальный экран</span>
-      </div>
+      </button>
       <div class="app-menu-divider"></div>
-      <div class="app-menu-item" id="menuClose">
+      <button class="app-menu-item" id="menuClose">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="18" y1="6" x2="6" y2="18"/>
           <line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
         <span>Закрыть</span>
-      </div>
+      </button>
     `;
 
     document.body.appendChild(menu);

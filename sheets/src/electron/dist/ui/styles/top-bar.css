@@ -148,3 +148,66 @@
 .user-avatar.has-image .avatar-text {
   display: none;
 }
+
+/* App Context Menu */
+.app-context-menu {
+  position: fixed;
+  top: 50px;
+  left: 10px;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100000;
+  min-width: 200px;
+  overflow: hidden;
+  animation: menuFadeIn 0.15s ease;
+}
+
+@keyframes menuFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.app-menu-item:hover {
+  background: var(--hover-bg);
+}
+
+.app-menu-item svg {
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.app-menu-item span {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.app-menu-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}

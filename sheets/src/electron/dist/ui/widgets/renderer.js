@@ -328,6 +328,7 @@ function initElements() {
         btnItalic: document.getElementById('btnItalic'),
         btnUnderline: document.getElementById('btnUnderline'),
         btnStrike: document.getElementById('btnStrike'),
+        btnBorders: document.getElementById('btnBorders'),
         btnToggleFormulaBar: document.getElementById('btnToggleFormulaBar'),
         textColor: document.getElementById('textColor'),
         fillColor: document.getElementById('fillColor'),
@@ -375,6 +376,8 @@ async function init() {
         </div>
       </div>
     `;
+        // Показываем формула бар по умолчанию
+        formulaBarContainer.classList.add('visible');
         console.log('[Renderer] Formula bar HTML rendered');
     }
     // Загружаем AI панель из шаблона
@@ -537,6 +540,25 @@ function renderCells() {
             const cellData = data.get(key);
             if (cellData) {
                 cell.textContent = cellData.value;
+                // Применяем сохраненные стили
+                if (cellData.style) {
+                    Object.entries(cellData.style).forEach(([prop, value]) => {
+                        if (value !== undefined && value !== null && value !== '' &&
+                            prop !== 'merged' && prop !== 'rowspan' && prop !== 'colspan' &&
+                            prop !== 'gridColumnStart' && prop !== 'gridRowStart') {
+                            cell.style[prop] = value;
+                        }
+                    });
+                    // Если ячейка объединённая - устанавливаем grid свойства
+                    if (cellData.style.merged) {
+                        if (cellData.style.gridColumnStart && cellData.style.colspan) {
+                            cell.style.gridColumn = `${cellData.style.gridColumnStart} / span ${cellData.style.colspan}`;
+                        }
+                        if (cellData.style.gridRowStart && cellData.style.rowspan) {
+                            cell.style.gridRow = `${cellData.style.gridRowStart} / span ${cellData.style.rowspan}`;
+                        }
+                    }
+                }
             }
             // Проверка data validation
             const validation = getDataValidation(row, col);
@@ -1300,6 +1322,16 @@ function setupEventListeners() {
     document.addEventListener('auto-sum', () => {
         autoSum();
     });
+    // Вставка из ribbon
+    document.addEventListener('paste-from-ribbon', (e) => {
+        const event = e;
+        pasteToCell(event.detail.text);
+    });
+    // Очистка ячейки (для вырезания)
+    document.addEventListener('cell-cleared', (e) => {
+        const event = e;
+        clearCell(event.detail.row, event.detail.col);
+    });
     // Синхронизация скролла
     elements.cellGridWrapper.addEventListener('scroll', () => {
         const scrollLeft = elements.cellGridWrapper.scrollLeft;
@@ -1507,6 +1539,8 @@ function setupEventListeners() {
     elements.btnItalic.addEventListener('click', () => toggleFormatting('italic'));
     elements.btnUnderline.addEventListener('click', () => toggleFormatting('underline'));
     elements.btnStrike.addEventListener('click', () => toggleFormatting('lineThrough'));
+    // Границы
+    elements.btnBorders.addEventListener('click', () => toggleBorders());
     // Переключение видимости formula bar
     elements.btnToggleFormulaBar.addEventListener('click', () => {
         const formulaBarContainer = document.getElementById('formula-bar-container');
@@ -1679,7 +1713,7 @@ function toggleFormatting(style) {
     const { startRow, endRow, startCol, endCol } = selection;
     const data = getCurrentData();
     let firstCellBold = false;
-    // Проверяем стиль первой ячейки для определения состояния
+    // Проверяем стиль первой ячейки для определения состоян����я
     const firstKey = getCellKey(startRow, startCol);
     const firstCellData = data.get(firstKey);
     if (firstCellData && firstCellData.style) {
@@ -1736,6 +1770,53 @@ function toggleFormatting(style) {
         elements.btnStrike.classList.toggle('active', style === 'lineThrough' && !firstCellBold);
     renderCells();
     pushUndo('format', style);
+}
+// === ГРАНИЦЫ ===
+function toggleBorders() {
+    const selection = getSelectedRange();
+    if (!selection)
+        return;
+    const { startRow, endRow, startCol, endCol } = selection;
+    const data = getCurrentData();
+    // Проверяем состояние первой ячейки
+    const firstKey = getCellKey(startRow, startCol);
+    const firstCellData = data.get(firstKey);
+    const hasBorder = firstCellData && firstCellData.style &&
+        (firstCellData.style.border || firstCellData.style.borderTop ||
+            firstCellData.style.borderRight || firstCellData.style.borderBottom ||
+            firstCellData.style.borderLeft);
+    const newBorder = hasBorder ? '' : '1px solid #000000';
+    // Применяем ко всем выделенным ячейкам
+    for (let row = startRow; row <= endRow; row++) {
+        for (let col = startCol; col <= endCol; col++) {
+            const key = getCellKey(row, col);
+            const cell = getCellElement(row, col);
+            if (!cell)
+                continue;
+            let cellData = data.get(key) || { value: cell.textContent || '' };
+            if (!cellData.style) {
+                cellData.style = {};
+            }
+            if (newBorder) {
+                cellData.style.border = newBorder;
+            }
+            else {
+                delete cellData.style.border;
+                delete cellData.style.borderTop;
+                delete cellData.style.borderRight;
+                delete cellData.style.borderBottom;
+                delete cellData.style.borderLeft;
+            }
+            cell.style.border = cellData.style.border || '';
+            data.set(key, cellData);
+        }
+    }
+    // Обновляем кнопку
+    if (elements.btnBorders) {
+        elements.btnBorders.classList.toggle('active', !!newBorder);
+    }
+    renderCells();
+    pushUndo('format', 'borders');
 }
 function applyStyle(property, value) {
     const { row, col } = state.selectedCell;
@@ -3330,6 +3411,30 @@ function autoSum() {
         }
     }
 }
+function pasteToCell(text) {
+    const { row, col } = state.selectedCell;
+    const data = getCurrentData();
+    const key = getCellKey(row, col);
+    data.set(key, { value: text });
+    const cell = getCellElement(row, col);
+    if (cell) {
+        cell.textContent = text;
+    }
+    updateAIDataCache();
+    autoSave();
+}
+function clearCell(row, col) {
+    const data = getCurrentData();
+    const key = getCellKey(row, col);
+    data.delete(key);
+    const cell = getCellElement(row, col);
+    if (cell) {
+        cell.textContent = '';
+    }
+    updateAIDataCache();
+    autoSave();
+    updateFormulaBar();
+}
 function getSelectedRangeData() {
     const selectedCells = elements.cellGrid.querySelectorAll('.cell.selected');
     console.log('[Renderer] getSelectedRangeData called, selected cells:', selectedCells.length);
@@ -3413,27 +3518,61 @@ function mergeCells() {
         alert('Выделите несколько ячеек для объединения');
         return;
     }
+    // Собираем данные о выделенных ячейках
+    const cellsData = [];
     let mergedValue = '';
-    const cellsToMerge = [];
     selectedCells.forEach(cell => {
         const row = parseInt(cell.dataset.row || '0');
         const col = parseInt(cell.dataset.col || '0');
         const value = cell.textContent || '';
         if (value)
             mergedValue += (mergedValue ? ' ' : '') + value;
-        cellsToMerge.push({ row, col, cell });
+        cellsData.push({ row, col, cell, value });
     });
+    // Находим границы диапазона
+    const rows = cellsData.map(c => c.row);
+    const cols = cellsData.map(c => c.col);
+    const minRow = Math.min(...rows);
+    const maxRow = Math.max(...rows);
+    const minCol = Math.min(...cols);
+    const maxCol = Math.max(...cols);
+    const rowspan = maxRow - minRow + 1;
+    const colspan = maxCol - minCol + 1;
     const data = getCurrentData();
-    cellsToMerge.forEach((item, index) => {
+    // Первая ячейка становится объединённой
+    const firstKey = getCellKey(minRow, minCol);
+    const firstCell = getCellElement(minRow, minCol);
+    if (firstCell) {
+        // Устанавливаем значение
+        firstCell.textContent = mergedValue;
+        // Устанавливаем grid свойства для объединения
+        firstCell.style.gridColumn = `${minCol + 1} / span ${colspan}`;
+        firstCell.style.gridRow = `${minRow + 1} / span ${rowspan}`;
+        firstCell.style.borderRight = 'none';
+        firstCell.style.borderBottom = 'none';
+        firstCell.style.zIndex = '10';
+        data.set(firstKey, {
+            value: mergedValue,
+            style: {
+                ...data.get(firstKey)?.style,
+                merged: true,
+                rowspan,
+                colspan,
+                gridColumnStart: minCol + 1,
+                gridRowStart: minRow + 1
+            }
+        });
+    }
+    // Остальные ячейки скрываем полностью
+    cellsData.forEach((item, index) => {
+        if (index === 0)
+            return; // Пропускаем первую
         const key = getCellKey(item.row, item.col);
-        if (index === 0) {
-            data.set(key, { value: mergedValue });
-            item.cell.textContent = mergedValue;
-        }
-        else {
-            data.delete(key);
-            item.cell.textContent = '';
-        }
+        data.delete(key);
+        // Полностью скрываем ячейку
+        item.cell.style.display = 'none';
+        item.cell.style.visibility = 'hidden';
+        item.cell.style.pointerEvents = 'none';
     });
     updateAIDataCache();
     updateFormulaBar();
@@ -3558,6 +3697,8 @@ function toggleFilter() {
 // Экспорт глобальных функций
 window.getSelectedRangeData = getSelectedRangeData;
 window.getSelectedRange = getSelectedRange;
+window.getSelectedCell = () => state.selectedCell;
+window.getCurrentData = getCurrentData;
 window.autoSum = autoSum;
 window.mergeCells = mergeCells;
 window.insertRow = insertRow;

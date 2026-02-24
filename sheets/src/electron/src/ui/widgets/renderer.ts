@@ -376,6 +376,7 @@ let elements: {
   btnItalic: HTMLElement;
   btnUnderline: HTMLElement;
   btnStrike: HTMLElement;
+  btnBorders: HTMLElement;
   btnToggleFormulaBar: HTMLElement;
   textColor: HTMLInputElement;
   fillColor: HTMLInputElement;
@@ -411,6 +412,7 @@ function initElements(): void {
     btnItalic: document.getElementById('btnItalic')!,
     btnUnderline: document.getElementById('btnUnderline')!,
     btnStrike: document.getElementById('btnStrike')!,
+    btnBorders: document.getElementById('btnBorders')!,
     btnToggleFormulaBar: document.getElementById('btnToggleFormulaBar')!,
     textColor: document.getElementById('textColor')! as HTMLInputElement,
     fillColor: document.getElementById('fillColor')! as HTMLInputElement,
@@ -465,6 +467,8 @@ async function init(): Promise<void> {
         </div>
       </div>
     `;
+    // Показываем формула бар по умолчанию
+    formulaBarContainer.classList.add('visible');
     console.log('[Renderer] Formula bar HTML rendered');
   }
 
@@ -643,6 +647,27 @@ function renderCells(): void {
       const cellData = data.get(key);
       if (cellData) {
         cell.textContent = cellData.value;
+        
+        // Применяем сохраненные стили
+        if (cellData.style) {
+          Object.entries(cellData.style).forEach(([prop, value]) => {
+            if (value !== undefined && value !== null && value !== '' && 
+                prop !== 'merged' && prop !== 'rowspan' && prop !== 'colspan' &&
+                prop !== 'gridColumnStart' && prop !== 'gridRowStart') {
+              (cell.style as any)[prop] = value;
+            }
+          });
+          
+          // Если ячейка объединённая - устанавливаем grid свойства
+          if (cellData.style.merged) {
+            if (cellData.style.gridColumnStart && cellData.style.colspan) {
+              cell.style.gridColumn = `${cellData.style.gridColumnStart} / span ${cellData.style.colspan}`;
+            }
+            if (cellData.style.gridRowStart && cellData.style.rowspan) {
+              cell.style.gridRow = `${cellData.style.gridRowStart} / span ${cellData.style.rowspan}`;
+            }
+          }
+        }
       }
 
       // Проверка data validation
@@ -1480,6 +1505,18 @@ function setupEventListeners(): void {
     autoSum();
   });
 
+  // Вставка из ribbon
+  document.addEventListener('paste-from-ribbon', (e: Event) => {
+    const event = e as CustomEvent<{ text: string }>;
+    pasteToCell(event.detail.text);
+  });
+
+  // Очистка ячейки (для вырезания)
+  document.addEventListener('cell-cleared', (e: Event) => {
+    const event = e as CustomEvent<{ row: number; col: number }>;
+    clearCell(event.detail.row, event.detail.col);
+  });
+
   // Синхронизация скролла
   elements.cellGridWrapper.addEventListener('scroll', () => {
     const scrollLeft = elements.cellGridWrapper.scrollLeft;
@@ -1721,6 +1758,9 @@ function setupEventListeners(): void {
   elements.btnItalic.addEventListener('click', () => toggleFormatting('italic'));
   elements.btnUnderline.addEventListener('click', () => toggleFormatting('underline'));
   elements.btnStrike.addEventListener('click', () => toggleFormatting('lineThrough'));
+  
+  // Границы
+  elements.btnBorders.addEventListener('click', () => toggleBorders());
 
   // Переключение видимости formula bar
   elements.btnToggleFormulaBar.addEventListener('click', () => {
@@ -1908,7 +1948,7 @@ function toggleFormatting(style: string): void {
   const data = getCurrentData();
   let firstCellBold = false;
 
-  // Проверяем стиль первой ячейки для определения состояния
+  // Проверяем стиль первой ячейки для определения состоян����я
   const firstKey = getCellKey(startRow, startCol);
   const firstCellData = data.get(firstKey);
   if (firstCellData && firstCellData.style) {
@@ -1963,6 +2003,61 @@ function toggleFormatting(style: string): void {
 
   renderCells();
   pushUndo('format', style);
+}
+
+// === ГРАНИЦЫ ===
+function toggleBorders(): void {
+  const selection = getSelectedRange();
+  if (!selection) return;
+
+  const { startRow, endRow, startCol, endCol } = selection;
+  const data = getCurrentData();
+
+  // Проверяем состояние первой ячейки
+  const firstKey = getCellKey(startRow, startCol);
+  const firstCellData = data.get(firstKey);
+  const hasBorder = firstCellData && firstCellData.style && 
+    (firstCellData.style.border || firstCellData.style.borderTop || 
+     firstCellData.style.borderRight || firstCellData.style.borderBottom || 
+     firstCellData.style.borderLeft);
+
+  const newBorder = hasBorder ? '' : '1px solid #000000';
+
+  // Применяем ко всем выделенным ячейкам
+  for (let row = startRow; row <= endRow; row++) {
+    for (let col = startCol; col <= endCol; col++) {
+      const key = getCellKey(row, col);
+      const cell = getCellElement(row, col);
+      if (!cell) continue;
+
+      let cellData = data.get(key) || { value: cell.textContent || '' };
+      if (!cellData.style) {
+        cellData.style = {};
+      }
+
+      if (newBorder) {
+        cellData.style.border = newBorder;
+      } else {
+        delete cellData.style.border;
+        delete cellData.style.borderTop;
+        delete cellData.style.borderRight;
+        delete cellData.style.borderBottom;
+        delete cellData.style.borderLeft;
+      }
+      
+      cell.style.border = cellData.style.border || '';
+
+      data.set(key, cellData);
+    }
+  }
+
+  // Обновляем кнопку
+  if (elements.btnBorders) {
+    elements.btnBorders.classList.toggle('active', !!newBorder);
+  }
+
+  renderCells();
+  pushUndo('format', 'borders');
 }
 
 function applyStyle(property: string, value: string): void {
@@ -3701,6 +3796,38 @@ function autoSum(): void {
   }
 }
 
+function pasteToCell(text: string): void {
+  const { row, col } = state.selectedCell;
+  const data = getCurrentData();
+  const key = getCellKey(row, col);
+
+  data.set(key, { value: text });
+
+  const cell = getCellElement(row, col);
+  if (cell) {
+    cell.textContent = text;
+  }
+
+  updateAIDataCache();
+  autoSave();
+}
+
+function clearCell(row: number, col: number): void {
+  const data = getCurrentData();
+  const key = getCellKey(row, col);
+
+  data.delete(key);
+
+  const cell = getCellElement(row, col);
+  if (cell) {
+    cell.textContent = '';
+  }
+
+  updateAIDataCache();
+  autoSave();
+  updateFormulaBar();
+}
+
 function getSelectedRangeData(): { labels: string[]; datasets: { label: string; data: number[] }[] } {
   const selectedCells = elements.cellGrid.querySelectorAll('.cell.selected');
   console.log('[Renderer] getSelectedRangeData called, selected cells:', selectedCells.length);
@@ -3784,25 +3911,78 @@ function getSelectedRangeData(): { labels: string[]; datasets: { label: string; 
 }
 
 function mergeCells(): void {
-  const selectedCells = elements.cellGrid.querySelectorAll('.cell.selected');
-  if (selectedCells.length <= 1) { alert('Выделите несколько ячеек для объединения'); return; }
-  
+  const selectedCells = elements.cellGrid.querySelectorAll('.cell.selected') as NodeListOf<HTMLElement>;
+  if (selectedCells.length <= 1) {
+    alert('Выделите несколько ячеек для объединения');
+    return;
+  }
+
+  // Собираем данные о выделенных ячейках
+  const cellsData: Array<{ row: number; col: number; cell: HTMLElement; value: string }> = [];
   let mergedValue = '';
-  const cellsToMerge: { row: number; col: number; cell: Element }[] = [];
+  
   selectedCells.forEach(cell => {
     const row = parseInt((cell as HTMLElement).dataset.row || '0');
     const col = parseInt((cell as HTMLElement).dataset.col || '0');
     const value = cell.textContent || '';
     if (value) mergedValue += (mergedValue ? ' ' : '') + value;
-    cellsToMerge.push({ row, col, cell });
+    cellsData.push({ row, col, cell, value });
   });
+
+  // Находим границы диапазона
+  const rows = cellsData.map(c => c.row);
+  const cols = cellsData.map(c => c.col);
+  const minRow = Math.min(...rows);
+  const maxRow = Math.max(...rows);
+  const minCol = Math.min(...cols);
+  const maxCol = Math.max(...cols);
   
+  const rowspan = maxRow - minRow + 1;
+  const colspan = maxCol - minCol + 1;
+
   const data = getCurrentData();
-  cellsToMerge.forEach((item, index) => {
+  
+  // Первая ячейка становится объединённой
+  const firstKey = getCellKey(minRow, minCol);
+  const firstCell = getCellElement(minRow, minCol);
+  
+  if (firstCell) {
+    // Устанавливаем значение
+    firstCell.textContent = mergedValue;
+    
+    // Устанавливаем grid свойства для объединения
+    firstCell.style.gridColumn = `${minCol + 1} / span ${colspan}`;
+    firstCell.style.gridRow = `${minRow + 1} / span ${rowspan}`;
+    firstCell.style.borderRight = 'none';
+    firstCell.style.borderBottom = 'none';
+    firstCell.style.zIndex = '10';
+    
+    data.set(firstKey, {
+      value: mergedValue,
+      style: {
+        ...data.get(firstKey)?.style,
+        merged: true,
+        rowspan,
+        colspan,
+        gridColumnStart: minCol + 1,
+        gridRowStart: minRow + 1
+      }
+    });
+  }
+
+  // Остальные ячейки скрываем полностью
+  cellsData.forEach((item, index) => {
+    if (index === 0) return; // Пропускаем первую
+
     const key = getCellKey(item.row, item.col);
-    if (index === 0) { data.set(key, { value: mergedValue }); (item.cell as HTMLElement).textContent = mergedValue; }
-    else { data.delete(key); (item.cell as HTMLElement).textContent = ''; }
+    data.delete(key);
+
+    // Полностью скрываем ячейку
+    item.cell.style.display = 'none';
+    item.cell.style.visibility = 'hidden';
+    item.cell.style.pointerEvents = 'none';
   });
+
   updateAIDataCache();
   updateFormulaBar();
 }
@@ -3913,6 +4093,8 @@ function toggleFilter(): void {
 // Экспорт глобальных функций
 (window as any).getSelectedRangeData = getSelectedRangeData;
 (window as any).getSelectedRange = getSelectedRange;
+(window as any).getSelectedCell = () => state.selectedCell;
+(window as any).getCurrentData = getCurrentData;
 (window as any).autoSum = autoSum;
 (window as any).mergeCells = mergeCells;
 (window as any).insertRow = insertRow;
