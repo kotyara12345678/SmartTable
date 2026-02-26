@@ -2828,7 +2828,7 @@ async function executeSingleCommand(action: string, params: any): Promise<void> 
   }
 
   // Проверяем что column и row существуют для команд которые их требуют
-  const requiresColumnRow = ['set_cell', 'set_cell_color', 'set_formula', 'color_column', 'color_row'];
+  const requiresColumnRow = ['set_cell', 'set_cell_color', 'set_formula', 'color_row'];
   if (requiresColumnRow.includes(action)) {
     if (params.column === undefined || params.column === null) {
       console.error('[DEBUG] Command', action, 'requires column but got:', params);
@@ -2837,6 +2837,14 @@ async function executeSingleCommand(action: string, params: any): Promise<void> 
     if (params.row === undefined || params.row === null) {
       console.error('[DEBUG] Command', action, 'requires row but got:', params);
       throw new Error(`Command ${action} requires row parameter`);
+    }
+  }
+  
+  // color_column требует только column
+  if (action === 'color_column') {
+    if (params.column === undefined || params.column === null) {
+      console.error('[DEBUG] Command color_column requires column but got:', params);
+      throw new Error(`Command color_column requires column parameter`);
     }
   }
 
@@ -3951,6 +3959,52 @@ function getSelectedRange(): { startRow: number; endRow: number; startCol: numbe
   };
 }
 
+// Вычисление формул
+function evaluateFormulaLocal(formula: string, getCellValue: (ref: string) => string): { value: string | number } {
+  try {
+    let expr = formula.substring(1).toUpperCase(); // Убираем '=' и переводим в верхний регистр
+    
+    // Заменяем ссылки на ячейки (A1, B2 и т.д.) на значения
+    expr = expr.replace(/([A-Z]+)(\d+)/g, (match) => {
+      const val = getCellValue(match);
+      const num = parseFloat(val);
+      return isNaN(num) ? `"${val}"` : val.toString();
+    });
+    
+    // Заменяем функции
+    expr = expr.replace(/SUM\(([^)]+)\)/g, (_, args) => {
+      const nums = args.split(',').map((x: string) => parseFloat(x.trim())).filter((x: number) => !isNaN(x));
+      return nums.reduce((a: number, b: number) => a + b, 0).toString();
+    });
+    
+    expr = expr.replace(/AVERAGE\(([^)]+)\)/g, (_, args) => {
+      const nums = args.split(',').map((x: string) => parseFloat(x.trim())).filter((x: number) => !isNaN(x));
+      return nums.length > 0 ? (nums.reduce((a: number, b: number) => a + b, 0) / nums.length).toString() : '0';
+    });
+    
+    expr = expr.replace(/MAX\(([^)]+)\)/g, (_, args) => {
+      const nums = args.split(',').map((x: string) => parseFloat(x.trim())).filter((x: number) => !isNaN(x));
+      return nums.length > 0 ? Math.max(...nums).toString() : '0';
+    });
+    
+    expr = expr.replace(/MIN\(([^)]+)\)/g, (_, args) => {
+      const nums = args.split(',').map((x: string) => parseFloat(x.trim())).filter((x: number) => !isNaN(x));
+      return nums.length > 0 ? Math.min(...nums).toString() : '0';
+    });
+    
+    expr = expr.replace(/COUNT\(([^)]+)\)/g, (_, args) => {
+      const nums = args.split(',').map((x: string) => parseFloat(x.trim())).filter((x: number) => !isNaN(x));
+      return nums.length.toString();
+    });
+    
+    // Вычисляем выражение (безопасно)
+    const result = Function('"use strict";return (' + expr + ')')();
+    return { value: typeof result === 'number' ? result : String(result) };
+  } catch (e) {
+    return { value: '#ERROR!' };
+  }
+}
+
 function autoSum(): void {
   const range = getSelectedRange();
   if (!range) return;
@@ -4497,6 +4551,164 @@ if (document.readyState === 'loading') {
   console.log('[Renderer] DOM already ready - calling init()');
   startApp();
 }
+
+// ==================== ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ AI ====================
+// Делаем функции доступными для AI Context Service
+
+function globalSetCell(col: string, row: number, value: string): void {
+  const colIndex = col.toUpperCase().charCodeAt(0) - 65;
+  const rowIndex = row - 1;
+  const key = getCellKey(rowIndex, colIndex);
+  const data = getCurrentData();
+  
+  // Вычисляем формулу если есть
+  let finalValue = value;
+  if (value.startsWith('=')) {
+    const getCellValue = (cellRef: string): string => {
+      const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
+      if (!match) return '';
+      const c = match[1].toUpperCase().charCodeAt(0) - 65;
+      const r = parseInt(match[2]) - 1;
+      const cellKey = getCellKey(r, c);
+      const cellData = data.get(cellKey);
+      return cellData?.value || '';
+    };
+    const result = evaluateFormulaLocal(value, getCellValue);
+    finalValue = String(result.value);
+  }
+  
+  data.set(key, { value: finalValue });
+  renderCells();
+  updateAIDataCache();
+  autoSave();
+  console.log(`[Global] Set ${col}${row} = ${finalValue}`);
+}
+
+function globalFillTable(data: string[][]): void {
+  const tableData = getCurrentData();
+  tableData.clear();
+  
+  for (let r = 0; r < data.length; r++) {
+    for (let c = 0; c < data[r].length; c++) {
+      const key = getCellKey(r, c);
+      let value = data[r][c];
+      
+      // Вычисляем формулы
+      if (value.startsWith('=')) {
+        const getCellValue = (cellRef: string): string => {
+          const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
+          if (!match) return '';
+          const colIdx = match[1].toUpperCase().charCodeAt(0) - 65;
+          const rowIdx = parseInt(match[2]) - 1;
+          const cellKey = getCellKey(rowIdx, colIdx);
+          const cellData = tableData.get(cellKey);
+          return cellData?.value || '';
+        };
+        const result = evaluateFormulaLocal(value, getCellValue);
+        value = String(result.value);
+      }
+      
+      tableData.set(key, { value });
+    }
+  }
+  
+  renderCells();
+  updateAIDataCache();
+  autoSave();
+  console.log(`[Global] Filled table with ${data.length} rows`);
+}
+
+function globalColorCells(cells: any[]): void {
+  const data = getCurrentData();
+
+  cells.forEach(cellRef => {
+    const { column, row, bg_color, text_color } = cellRef;
+    const colIndex = column.toUpperCase().charCodeAt(0) - 65;
+    const rowIndex = typeof row === 'string' ? parseInt(row) - 1 : row - 1;
+    const key = getCellKey(rowIndex, colIndex);
+    const cellData = data.get(key) || { value: '' };
+    cellData.style = cellData.style || {};
+    
+    if (bg_color) cellData.style.backgroundColor = bg_color;
+    if (text_color) cellData.style.color = text_color;
+    
+    data.set(key, cellData);
+  });
+  
+  renderCells();
+  updateAIDataCache();
+  autoSave();
+}
+
+function globalBoldColumn(col: string): void {
+  const colIndex = col.toUpperCase().charCodeAt(0) - 65;
+  const data = getCurrentData();
+  
+  for (let r = 0; r < CONFIG.ROWS; r++) {
+    const key = getCellKey(r, colIndex);
+    const cellData = data.get(key) || { value: '' };
+    cellData.style = cellData.style || {};
+    cellData.style.fontWeight = 'bold';
+    data.set(key, cellData);
+  }
+  
+  renderCells();
+  updateAIDataCache();
+  autoSave();
+}
+
+function globalSortColumn(col: string, order: string): void {
+  console.log('[Global] Sort column', col, order);
+  // TODO: реализовать сортировку
+}
+
+function globalClearCell(col: string, row: number): void {
+  const colIndex = col.toUpperCase().charCodeAt(0) - 65;
+  const rowIndex = row - 1;
+  const key = getCellKey(rowIndex, colIndex);
+  const data = getCurrentData();
+  data.delete(key);
+  renderCells();
+  updateAIDataCache();
+  autoSave();
+}
+
+function globalClearColumn(col: string): void {
+  const colIndex = col.toUpperCase().charCodeAt(0) - 65;
+  const data = getCurrentData();
+  
+  for (let r = 0; r < CONFIG.ROWS; r++) {
+    const key = getCellKey(r, colIndex);
+    data.delete(key);
+  }
+  
+  renderCells();
+  updateAIDataCache();
+  autoSave();
+}
+
+function globalClearAll(): void {
+  const data = getCurrentData();
+  data.clear();
+  renderCells();
+  updateAIDataCache();
+  autoSave();
+}
+
+// Регистрируем глобальные функции
+(window as any).setCell = globalSetCell;
+(window as any).fillTable = globalFillTable;
+(window as any).colorCells = globalColorCells;
+(window as any).boldColumn = globalBoldColumn;
+(window as any).sortColumn = globalSortColumn;
+(window as any).clearCell = globalClearCell;
+(window as any).clearColumn = globalClearColumn;
+(window as any).clearAll = globalClearAll;
+
+// Функция для получения данных таблицы (для AI контекста)
+(window as any).getTableData = () => getCurrentData();
+
+console.log('[Renderer] Global AI functions registered');
 
 // Экспорт для ES module
 export {};

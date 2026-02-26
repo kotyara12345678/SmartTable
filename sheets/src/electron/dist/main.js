@@ -131,11 +131,6 @@ app.whenReady().then(() => {
     registerFileSaveHandler();
     // Создаем окно (оно пока скрыто)
     createWindow();
-    app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
-        }
-    });
 });
 /**
  * Закрытие приложения
@@ -145,6 +140,12 @@ app.on('window-all-closed', () => {
     cleanupIPCHandlers();
     if (process.platform !== 'darwin') {
         app.quit();
+    }
+});
+app.on('activate', () => {
+    // На macOS - создаём окно только если нет окон
+    if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
     }
 });
 /**

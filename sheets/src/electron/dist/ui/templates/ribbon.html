@@ -226,229 +226,195 @@
   <!-- ==================== ВКЛАДКА: ВСТАВКА ==================== -->
   <div class="ribbon-group" data-group="insert" style="display:none;">
     <!-- Группа: Таблицы -->
-    <div class="ribbon-group">
-      <button class="ribbon-btn-lg" id="btnInsertTable">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <rect x="3" y="3" width="18" height="18" rx="2"/>
-          <line x1="3" y1="9" x2="21" y2="9"/>
-          <line x1="3" y1="15" x2="21" y2="15"/>
-          <line x1="9" y1="3" x2="9" y2="21"/>
-          <line x1="15" y1="3" x2="15" y2="21"/>
-        </svg>
-        <span>Таблица</span>
-      </button>
-    </div>
+    <button class="ribbon-btn-lg" id="btnInsertTable">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <line x1="3" y1="9" x2="21" y2="9"/>
+        <line x1="3" y1="15" x2="21" y2="15"/>
+        <line x1="9" y1="3" x2="9" y2="21"/>
+        <line x1="15" y1="3" x2="15" y2="21"/>
+      </svg>
+      <span>Таблица</span>
+    </button>
 
     <div class="ribbon-divider"></div>
 
     <!-- Группа: Строки и столбцы -->
-    <div class="ribbon-group">
-      <button class="ribbon-btn-sm" title="Вставить строку сверху" id="btnInsertRowAbove">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 5v14M5 12h14M5 19h14M5 5h14"/>
-        </svg>
-      </button>
-      <button class="ribbon-btn-sm" title="Вставить строку снизу" id="btnInsertRowBelow">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 5v14M5 12h14M5 19h14M5 5h14"/>
-        </svg>
-      </button>
-      <button class="ribbon-btn-sm" title="Вставить столбец слева" id="btnInsertColLeft">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M5 12h14M12 5v14M19 5v14M5 5v14"/>
-        </svg>
-      </button>
-      <button class="ribbon-btn-sm" title="Вставить столбец справа" id="btnInsertColRight">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M5 12h14M12 5v14M19 5v14M5 5v14"/>
-        </svg>
-      </button>
-    </div>
+    <button class="ribbon-btn-sm" title="Вставить строку сверху" id="btnInsertRowAbove">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 5v14M5 12h14M5 19h14M5 5h14"/>
+      </svg>
+    </button>
+    <button class="ribbon-btn-sm" title="Вставить строку снизу" id="btnInsertRowBelow">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 5v14M5 12h14M5 19h14M5 5h14"/>
+      </svg>
+    </button>
+    <button class="ribbon-btn-sm" title="Вставить столбец слева" id="btnInsertColLeft">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M5 12h14M12 5v14M19 5v14M5 5v14"/>
+      </svg>
+    </button>
+    <button class="ribbon-btn-sm" title="Вставить столбец справа" id="btnInsertColRight">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M5 12h14M12 5v14M19 5v14M5 5v14"/>
+      </svg>
+    </button>
 
     <div class="ribbon-divider"></div>
 
     <!-- Группа: Изображения -->
-    <div class="ribbon-group">
-      <button class="ribbon-btn-lg" id="btnInsertImage">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <rect x="3" y="3" width="18" height="18" rx="2"/>
-          <circle cx="8.5" cy="8.5" r="1.5"/>
-          <path d="M21 15l-5-5L5 21"/>
-        </svg>
-        <span>Рисунок</span>
-      </button>
-    </div>
+    <button class="ribbon-btn-lg" id="btnInsertImage">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <path d="M21 15l-5-5L5 21"/>
+      </svg>
+      <span>Рисунок</span>
+    </button>
 
     <div class="ribbon-divider"></div>
 
     <!-- Группа: Ссылки -->
-    <div class="ribbon-group">
-      <button class="ribbon-btn-lg" id="btnInsertLink">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/>
-          <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
-        </svg>
-        <span>Ссылка</span>
-      </button>
-    </div>
+    <button class="ribbon-btn-lg" id="btnInsertLink">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/>
+        <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
+      </svg>
+      <span>Ссылка</span>
+    </button>
 
     <div class="ribbon-divider"></div>
 
     <!-- Группа: Комментарии -->
-    <div class="ribbon-group">
-      <button class="ribbon-btn-lg" id="btnInsertComment">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-        </svg>
-        <span>Комментарий</span>
-      </button>
-    </div>
+    <button class="ribbon-btn-lg" id="btnInsertComment">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+      </svg>
+      <span>Комментарий</span>
+    </button>
 
     <div class="ribbon-divider"></div>
 
     <!-- Группа: Символы -->
-    <div class="ribbon-group">
-      <button class="ribbon-btn-lg" id="btnInsertSymbol">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M8 12h8M12 8v8"/>
-        </svg>
-        <span>Символ</span>
-      </button>
-    </div>
+    <button class="ribbon-btn-lg" id="btnInsertSymbol">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M8 12h8M12 8v8"/>
+      </svg>
+      <span>Символ</span>
+    </button>
   </div>
 
   <!-- ==================== ВКЛАДКА: ФОРМУЛЫ ==================== -->
   <div class="ribbon-group" data-group="formulas" style="display:none;">
-    <div class="ribbon-group">
-      <button class="ribbon-btn-lg" id="btnCalcNow">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M12 6v6l4 2"/>
-        </svg>
-        <span>Вычислить</span>
-      </button>
-    </div>
+    <button class="ribbon-btn-lg" id="btnCalcNow">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 6v6l4 2"/>
+      </svg>
+      <span>Вычислить</span>
+    </button>
 
     <div class="ribbon-divider"></div>
 
-    <div class="ribbon-group">
-      <select class="ribbon-select" id="formulaCategory">
-        <option value="financial">Финансовые</option>
-        <option value="logical">Логические</option>
-        <option value="text">Текстовые</option>
-        <option value="date">Дата и время</option>
-        <option value="lookup">Ссылки и массивы</option>
-        <option value="math">Математические</option>
-        <option value="statistical">Статистические</option>
-      </select>
-    </div>
+    <select class="ribbon-select" id="formulaCategory">
+      <option value="financial">Финансовые</option>
+      <option value="logical">Логические</option>
+      <option value="text">Текстовые</option>
+      <option value="date">Дата и время</option>
+      <option value="lookup">Ссылки и массивы</option>
+      <option value="math">Математические</option>
+      <option value="statistical">Статистические</option>
+    </select>
   </div>
 
   <!-- ==================== ВКЛАДКА: ДАННЫЕ ==================== -->
   <div class="ribbon-group" data-group="data" style="display:none;">
-    <div class="ribbon-group">
-      <button class="ribbon-btn-lg" id="btnSortAZ">
-        <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M4 6h16v2H4zm0 5h12v2H4zm0 5h8v2H4z"/>
-        </svg>
-        <span>Сортировка A-Z</span>
-      </button>
-    </div>
+    <button class="ribbon-btn-lg" id="btnSortAZ">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M4 6h16v2H4zm0 5h12v2H4zm0 5h8v2H4z"/>
+      </svg>
+      <span>Сортировка A-Z</span>
+    </button>
 
     <div class="ribbon-divider"></div>
 
-    <div class="ribbon-group">
-      <button class="ribbon-btn-lg" id="btnFilterData">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <polygon points="22,3 2,3 10,12.46 10,19 14,21 14,12.46"/>
-        </svg>
-        <span>Фильтр</span>
-      </button>
-    </div>
+    <button class="ribbon-btn-lg" id="btnFilterData">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <polygon points="22,3 2,3 10,12.46 10,19 14,21 14,12.46"/>
+      </svg>
+      <span>Фильтр</span>
+    </button>
 
     <div class="ribbon-divider"></div>
 
-    <div class="ribbon-group">
-      <button class="ribbon-btn-lg" id="btnRemoveDuplicates">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <rect x="3" y="3" width="18" height="18" rx="2"/>
-          <line x1="9" y1="9" x2="15" y2="15"/>
-          <line x1="15" y1="9" x2="9" y2="15"/>
-        </svg>
-        <span>Удалить дубликаты</span>
-      </button>
-    </div>
+    <button class="ribbon-btn-lg" id="btnRemoveDuplicates">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <line x1="9" y1="9" x2="15" y2="15"/>
+        <line x1="15" y1="9" x2="9" y2="15"/>
+      </svg>
+      <span>Удалить дубликаты</span>
+    </button>
   </div>
 
   <!-- ==================== ВКЛАДКА: ВИД ==================== -->
   <div class="ribbon-group" data-group="view" style="display:none;">
-    <div class="ribbon-group">
-      <button class="ribbon-btn-lg" id="btnZoomToFit">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <rect x="3" y="3" width="18" height="18" rx="2"/>
-          <path d="M9 12l2 2 4-4"/>
-        </svg>
-        <span>По размеру окна</span>
-      </button>
-    </div>
+    <button class="ribbon-btn-lg" id="btnZoomToFit">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <path d="M9 12l2 2 4-4"/>
+      </svg>
+      <span>По размеру окна</span>
+    </button>
 
     <div class="ribbon-divider"></div>
 
-    <div class="ribbon-group">
-      <button class="ribbon-btn-lg" id="btnFreezePanes">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <rect x="3" y="3" width="18" height="18"/>
-          <line x1="3" y1="9" x2="21" y2="9"/>
-          <line x1="9" y1="3" x2="9" y2="21"/>
-        </svg>
-        <span>Закрепить области</span>
-      </button>
-    </div>
+    <button class="ribbon-btn-lg" id="btnFreezePanes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="3" y="3" width="18" height="18"/>
+        <line x1="3" y1="9" x2="21" y2="9"/>
+        <line x1="9" y1="3" x2="9" y2="21"/>
+      </svg>
+      <span>Закрепить области</span>
+    </button>
 
     <div class="ribbon-divider"></div>
 
-    <div class="ribbon-group">
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
-        <input type="checkbox" id="chkGridlines" checked>
-        Сетка
-      </label>
-    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+      <input type="checkbox" id="chkGridlines" checked>
+      Сетка
+    </label>
 
     <div class="ribbon-divider"></div>
 
-    <div class="ribbon-group">
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
-        <input type="checkbox" id="chkHeaders" checked>
-        Заголовки
-      </label>
-    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+      <input type="checkbox" id="chkHeaders" checked>
+      Заголовки
+    </label>
   </div>
 
   <!-- ==================== ВКЛАДКА: СПРАВКА ==================== -->
   <div class="ribbon-group" data-group="help" style="display:none;">
-    <div class="ribbon-group">
-      <button class="ribbon-btn-lg" id="btnHelp">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/>
-          <line x1="12" y1="17" x2="12.01" y2="17"/>
-        </svg>
-        <span>Справка</span>
-      </button>
-    </div>
+    <button class="ribbon-btn-lg" id="btnHelp">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      <span>Справка</span>
+    </button>
 
     <div class="ribbon-divider"></div>
 
-    <div class="ribbon-group">
-      <button class="ribbon-btn-lg" id="btnAbout">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-          <path d="M2 17l10 5 10-5"/>
-          <path d="M2 12l10 5 10-5"/>
-        </svg>
-        <span>О программе</span>
-      </button>
-    </div>
+    <button class="ribbon-btn-lg" id="btnAbout">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/>
+        <path d="M2 12l10 5 10-5"/>
+      </svg>
+      <span>О программе</span>
+    </button>
   </div>
 </div>

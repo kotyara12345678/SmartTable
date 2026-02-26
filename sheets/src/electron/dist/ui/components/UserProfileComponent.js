@@ -35,6 +35,10 @@ export class UserProfileComponent {
         }
     }
     createUserAvatar() {
+        // Предотвращаем повторное создание
+        if (this._avatarCreated)
+            return;
+        this._avatarCreated = true;
         this.userAvatar = document.querySelector('#userAvatar');
         if (this.userAvatar) {
             this.userAvatar.style.cursor = 'pointer';

@@ -483,6 +483,10 @@ export class DashboardComponent {
   }
 
   private bindEvents(): void {
+    // Предотвращаем повторное добавление обработчиков
+    if ((this as any)._eventsBound) return;
+    (this as any)._eventsBound = true;
+
     // Close dashboard
     const overlay = document.getElementById('dashboardOverlay');
     overlay?.addEventListener('click', () => this.close());

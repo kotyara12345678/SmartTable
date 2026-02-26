@@ -453,6 +453,10 @@ export class DashboardComponent {
         return Math.round((value / total) * 100);
     }
     bindEvents() {
+        // Предотвращаем повторное добавление обработчиков
+        if (this._eventsBound)
+            return;
+        this._eventsBound = true;
         // Close dashboard
         const overlay = document.getElementById('dashboardOverlay');
         overlay?.addEventListener('click', () => this.close());

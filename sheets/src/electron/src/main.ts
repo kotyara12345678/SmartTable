@@ -144,19 +144,13 @@ function registerFileSaveHandler(): void {
 app.whenReady().then(() => {
   // Показываем splash screen
   createSplashScreen();
-  
+
   // Регистрируем IPC обработчики
   registerIPCHandlers();
   registerFileSaveHandler();
 
   // Создаем окно (оно пока скрыто)
   createWindow();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
 });
 
 /**
@@ -165,9 +159,16 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   // Очищаем IPC обработчики
   cleanupIPCHandlers();
-  
+
   if (process.platform !== 'darwin') {
     app.quit();
+  }
+});
+
+app.on('activate', () => {
+  // На macOS - создаём окно только если нет окон
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
   }
 });
 
