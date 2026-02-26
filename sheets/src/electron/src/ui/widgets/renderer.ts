@@ -1102,7 +1102,9 @@ function updateFormulaBar(): void {
   const key = getCellKey(row, col);
   const data = getCurrentData();
   const cellData = data.get(key);
-  elements.formulaInput.value = cellData?.value || '';
+  // Показываем в формула баре только формулы (начинающиеся с =)
+  const value = cellData?.value || '';
+  elements.formulaInput.value = value.startsWith('=') ? value : '';
 }
 
 // === ОБНОВЛЕНИЕ ССЫЛКИ НА ЯЧЕЙКУ ===
