@@ -49,6 +49,16 @@ export class RibbonComponent extends BaseComponent {
   // Элементы вкладки Формулы
   private btnCalcNow: HTMLElement | null = null;
   private formulaCategory: HTMLSelectElement | null = null;
+  
+  // Быстрые формулы
+  private btnQuickSum: HTMLElement | null = null;
+  private btnQuickAverage: HTMLElement | null = null;
+  private btnQuickMin: HTMLElement | null = null;
+  private btnQuickMax: HTMLElement | null = null;
+  private btnQuickCount: HTMLElement | null = null;
+  private btnQuickCountCols: HTMLElement | null = null;
+  private btnQuickSqrt: HTMLElement | null = null;
+  private btnQuickSquare: HTMLElement | null = null;
 
   // Элементы вкладки Данные
   private btnSortAZ: HTMLElement | null = null;
@@ -120,6 +130,16 @@ export class RibbonComponent extends BaseComponent {
     // Вкладка Формулы
     this.btnCalcNow = this.querySelector('#btnCalcNow');
     this.formulaCategory = this.querySelector('#formulaCategory') as HTMLSelectElement;
+    
+    // Быстрые формулы
+    this.btnQuickSum = this.querySelector('#btnQuickSum');
+    this.btnQuickAverage = this.querySelector('#btnQuickAverage');
+    this.btnQuickMin = this.querySelector('#btnQuickMin');
+    this.btnQuickMax = this.querySelector('#btnQuickMax');
+    this.btnQuickCount = this.querySelector('#btnQuickCount');
+    this.btnQuickCountCols = this.querySelector('#btnQuickCountCols');
+    this.btnQuickSqrt = this.querySelector('#btnQuickSqrt');
+    this.btnQuickSquare = this.querySelector('#btnQuickSquare');
 
     // Вкладка Данные
     this.btnSortAZ = this.querySelector('#btnSortAZ');
@@ -208,6 +228,16 @@ export class RibbonComponent extends BaseComponent {
 
     // ==================== ВКЛАДКА: ФОРМУЛЫ ====================
     this.bindEvent(this.btnCalcNow, 'click', () => this.handleCalcNow());
+    
+    // Быстрые формулы
+    this.bindEvent(this.btnQuickSum, 'click', () => this.handleQuickSum());
+    this.bindEvent(this.btnQuickAverage, 'click', () => this.handleQuickAverage());
+    this.bindEvent(this.btnQuickMin, 'click', () => this.handleQuickMin());
+    this.bindEvent(this.btnQuickMax, 'click', () => this.handleQuickMax());
+    this.bindEvent(this.btnQuickCount, 'click', () => this.handleQuickCount());
+    this.bindEvent(this.btnQuickCountCols, 'click', () => this.handleQuickCountCols());
+    this.bindEvent(this.btnQuickSqrt, 'click', () => this.handleQuickSqrt());
+    this.bindEvent(this.btnQuickSquare, 'click', () => this.handleQuickSquare());
 
     // ==================== ВКЛАДКА: ДАННЫЕ ====================
     this.bindEvent(this.btnSortAZ, 'click', () => this.handleSortAZ());
@@ -394,6 +424,39 @@ export class RibbonComponent extends BaseComponent {
   // ==================== ОБРАБОТЧИКИ: ФОРМУЛЫ ====================
   private handleCalcNow(): void {
     document.dispatchEvent(new CustomEvent('calc-now'));
+  }
+
+  // Быстрые формулы
+  private handleQuickSum(): void {
+    document.dispatchEvent(new CustomEvent('quick-formula', { detail: { formula: 'SUM' } }));
+  }
+
+  private handleQuickAverage(): void {
+    document.dispatchEvent(new CustomEvent('quick-formula', { detail: { formula: 'AVERAGE' } }));
+  }
+
+  private handleQuickMin(): void {
+    document.dispatchEvent(new CustomEvent('quick-formula', { detail: { formula: 'MIN' } }));
+  }
+
+  private handleQuickMax(): void {
+    document.dispatchEvent(new CustomEvent('quick-formula', { detail: { formula: 'MAX' } }));
+  }
+
+  private handleQuickCount(): void {
+    document.dispatchEvent(new CustomEvent('quick-formula', { detail: { formula: 'COUNT' } }));
+  }
+
+  private handleQuickCountCols(): void {
+    document.dispatchEvent(new CustomEvent('quick-formula', { detail: { formula: 'COUNTCOLS' } }));
+  }
+
+  private handleQuickSqrt(): void {
+    document.dispatchEvent(new CustomEvent('quick-formula', { detail: { formula: 'SQRT' } }));
+  }
+
+  private handleQuickSquare(): void {
+    document.dispatchEvent(new CustomEvent('quick-formula', { detail: { formula: 'SQUARE' } }));
   }
 
   // ==================== ОБРАБОТЧИКИ: ДАННЫЕ ====================

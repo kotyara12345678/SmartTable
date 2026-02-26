@@ -20,6 +20,12 @@
   align-items: flex-start;
 }
 
+.quick-formulas-group {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
 .font-row {
   display: flex;
   gap: 4px;

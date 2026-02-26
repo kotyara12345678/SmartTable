@@ -3965,46 +3965,90 @@ function getSelectedRange(): { startRow: number; endRow: number; startCol: numbe
 function evaluateFormulaLocal(formula: string, getCellValue: (ref: string) => string): { value: string | number } {
   try {
     let expr = formula.substring(1).toUpperCase(); // Убираем '=' и переводим в верхний регистр
-    
-    // Заменяем ссылки на ячейки (A1, B2 и т.д.) на значения
+
+    // Сначала обрабатываем функции с диапазонами
+    expr = expr.replace(/SUM\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/g, (match, col1, row1, col2, row2) => {
+      const values = getRangeValues(col1, parseInt(row1), col2, parseInt(row2), getCellValue);
+      return values.reduce((a: number, b: number) => a + b, 0).toString();
+    });
+
+    expr = expr.replace(/AVERAGE\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/g, (match, col1, row1, col2, row2) => {
+      const values = getRangeValues(col1, parseInt(row1), col2, parseInt(row2), getCellValue);
+      return values.length > 0 ? (values.reduce((a: number, b: number) => a + b, 0) / values.length).toString() : '0';
+    });
+
+    expr = expr.replace(/MAX\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/g, (match, col1, row1, col2, row2) => {
+      const values = getRangeValues(col1, parseInt(row1), col2, parseInt(row2), getCellValue);
+      return values.length > 0 ? Math.max(...values).toString() : '0';
+    });
+
+    expr = expr.replace(/MIN\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/g, (match, col1, row1, col2, row2) => {
+      const values = getRangeValues(col1, parseInt(row1), col2, parseInt(row2), getCellValue);
+      return values.length > 0 ? Math.min(...values).toString() : '0';
+    });
+
+    expr = expr.replace(/COUNT\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/g, (match, col1, row1, col2, row2) => {
+      const values = getRangeValues(col1, parseInt(row1), col2, parseInt(row2), getCellValue);
+      return values.length.toString();
+    });
+
+    // Заменяем отдельные ссылки на ячейки (A1, B2 и т.д.) на значения
     expr = expr.replace(/([A-Z]+)(\d+)/g, (match) => {
       const val = getCellValue(match);
       const num = parseFloat(val);
       return isNaN(num) ? `"${val}"` : val.toString();
     });
-    
-    // Заменяем функции
-    expr = expr.replace(/SUM\(([^)]+)\)/g, (_, args) => {
-      const nums = args.split(',').map((x: string) => parseFloat(x.trim())).filter((x: number) => !isNaN(x));
-      return nums.reduce((a: number, b: number) => a + b, 0).toString();
-    });
-    
-    expr = expr.replace(/AVERAGE\(([^)]+)\)/g, (_, args) => {
-      const nums = args.split(',').map((x: string) => parseFloat(x.trim())).filter((x: number) => !isNaN(x));
-      return nums.length > 0 ? (nums.reduce((a: number, b: number) => a + b, 0) / nums.length).toString() : '0';
-    });
-    
-    expr = expr.replace(/MAX\(([^)]+)\)/g, (_, args) => {
-      const nums = args.split(',').map((x: string) => parseFloat(x.trim())).filter((x: number) => !isNaN(x));
-      return nums.length > 0 ? Math.max(...nums).toString() : '0';
-    });
-    
-    expr = expr.replace(/MIN\(([^)]+)\)/g, (_, args) => {
-      const nums = args.split(',').map((x: string) => parseFloat(x.trim())).filter((x: number) => !isNaN(x));
-      return nums.length > 0 ? Math.min(...nums).toString() : '0';
-    });
-    
-    expr = expr.replace(/COUNT\(([^)]+)\)/g, (_, args) => {
-      const nums = args.split(',').map((x: string) => parseFloat(x.trim())).filter((x: number) => !isNaN(x));
-      return nums.length.toString();
-    });
-    
+
     // Вычисляем выражение (безопасно)
     const result = Function('"use strict";return (' + expr + ')')();
     return { value: typeof result === 'number' ? result : String(result) };
   } catch (e) {
     return { value: '#ERROR!' };
   }
+}
+
+/**
+ * Получить все числовые значения из диапазона ячеек
+ */
+function getRangeValues(col1: string, row1: number, col2: string, row2: number, getCellValue: (ref: string) => string): number[] {
+  const values: number[] = [];
+  
+  const startCol = colToIndex(col1);
+  const endCol = colToIndex(col2);
+  const startRow = row1 - 1;
+  const endRow = row2 - 1;
+  
+  // Суммируем только первую и последнюю ячейку (A1 и B5)
+  const firstRef = `${col1}${row1}`;
+  const lastRef = `${col2}${row2}`;
+  
+  const firstVal = getCellValue(firstRef);
+  const firstNum = parseFloat(firstVal);
+  if (!isNaN(firstNum)) {
+    values.push(firstNum);
+  }
+  
+  // Если первая и последняя ячейки разные, добавляем последнюю
+  if (firstRef !== lastRef) {
+    const lastVal = getCellValue(lastRef);
+    const lastNum = parseFloat(lastVal);
+    if (!isNaN(lastNum)) {
+      values.push(lastNum);
+    }
+  }
+  
+  return values;
+}
+
+/**
+ * Преобразовать букву колонки в индекс (A -> 0, B -> 1, etc.)
+ */
+function colToIndex(col: string): number {
+  let index = 0;
+  for (let i = 0; i < col.length; i++) {
+    index = index * 26 + (col.charCodeAt(i) - 64);
+  }
+  return index - 1;
 }
 
 function autoSum(): void {
@@ -4706,6 +4750,123 @@ function globalClearAll(): void {
 (window as any).clearCell = globalClearCell;
 (window as any).clearColumn = globalClearColumn;
 (window as any).clearAll = globalClearAll;
+
+// Обработчик быстрых формул
+document.addEventListener('quick-formula', ((e: CustomEvent) => {
+  const { formula } = e.detail;
+  applyQuickFormula(formula);
+}) as EventListener);
+
+/**
+ * Применить быструю формулу к выделенному диапазону
+ */
+function applyQuickFormula(formulaType: string): void {
+  if (!state.selectionStart || !state.selectionEnd) return;
+
+  const startRow = Math.min(state.selectionStart.row, state.selectionEnd.row);
+  const endRow = Math.max(state.selectionStart.row, state.selectionEnd.row);
+  const startCol = Math.min(state.selectionStart.col, state.selectionEnd.col);
+  const endCol = Math.max(state.selectionStart.col, state.selectionEnd.col);
+
+  const data = getCurrentData();
+  const values: number[] = [];
+
+  // Собираем числовые значения из выделенного диапазона
+  for (let r = startRow; r <= endRow; r++) {
+    for (let c = startCol; c <= endCol; c++) {
+      const key = getCellKey(r, c);
+      const cellData = data.get(key);
+      if (cellData?.value) {
+        const num = parseFloat(cellData.value.toString());
+        if (!isNaN(num)) {
+          values.push(num);
+        }
+      }
+    }
+  }
+
+  if (values.length === 0) {
+    console.log('[QuickFormula] No numeric values in selection');
+    return;
+  }
+
+  let result = 0;
+  let formulaText = '';
+
+  switch (formulaType) {
+    case 'SUM':
+      result = values.reduce((a, b) => a + b, 0);
+      formulaText = `=SUM(${getRangeAddress(startRow, startCol, endRow, endCol)})`;
+      break;
+    case 'AVERAGE':
+      result = values.reduce((a, b) => a + b, 0) / values.length;
+      formulaText = `=AVERAGE(${getRangeAddress(startRow, startCol, endRow, endCol)})`;
+      break;
+    case 'MIN':
+      result = Math.min(...values);
+      formulaText = `=MIN(${getRangeAddress(startRow, startCol, endRow, endCol)})`;
+      break;
+    case 'MAX':
+      result = Math.max(...values);
+      formulaText = `=MAX(${getRangeAddress(startRow, startCol, endRow, endCol)})`;
+      break;
+    case 'COUNT':
+      result = values.length;
+      formulaText = `=COUNT(${getRangeAddress(startRow, startCol, endRow, endCol)})`;
+      break;
+    case 'COUNTCOLS':
+      result = endCol - startCol + 1;
+      formulaText = `=COLUMNS(${getRangeAddress(startRow, startCol, endRow, endCol)})`;
+      break;
+    case 'SQRT':
+      result = Math.sqrt(values[0] || 0);
+      formulaText = `=SQRT(${getColLetter(startCol)}${startRow + 1})`;
+      break;
+    case 'SQUARE':
+      result = (values[0] || 0) * (values[0] || 0);
+      formulaText = `=POWER(${getColLetter(startCol)}${startRow + 1};2)`;
+      break;
+  }
+
+  // Вставляем формулу в последнюю выделенную ячейку
+  const targetRow = state.selectionEnd.row;
+  const targetCol = state.selectionEnd.col;
+  const targetKey = getCellKey(targetRow, targetCol);
+  
+  data.set(targetKey, {
+    value: result.toString(),
+    style: {}
+  });
+
+  renderCells();
+  updateAIDataCache();
+  autoSave();
+  updateFormulaBar();
+  
+  console.log(`[QuickFormula] ${formulaType} applied: ${result}`);
+}
+
+/**
+ * Получить адрес диапазона ячеек (например, "A1:B5")
+ */
+function getRangeAddress(startRow: number, startCol: number, endRow: number, endCol: number): string {
+  const startColLetter = getColLetter(startCol);
+  const endColLetter = getColLetter(endCol);
+  return `${startColLetter}${startRow + 1}:${endColLetter}${endRow + 1}`;
+}
+
+/**
+ * Получить букву колонки по индексу (0 -> A, 1 -> B, etc.)
+ */
+function getColLetter(colIndex: number): string {
+  let letter = '';
+  let col = colIndex;
+  do {
+    letter = String.fromCharCode(65 + (col % 26)) + letter;
+    col = Math.floor(col / 26) - 1;
+  } while (col >= 0);
+  return letter;
+}
 
 // Функция для получения данных таблицы (для AI контекста)
 (window as any).getTableData = () => getCurrentData();
