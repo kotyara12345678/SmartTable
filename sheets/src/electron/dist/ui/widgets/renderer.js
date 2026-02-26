@@ -560,23 +560,13 @@ function renderCells() {
                     }
                 }
             }
-            // Проверка data validation
+            // Проверка data validation - только устанавливаем флаг, обработчик через делегирование
             const validation = getDataValidation(row, col);
             if (validation && validation.type === 'list') {
                 cell.style.cursor = 'pointer';
+                cell.dataset.hasDropdown = 'true';
                 renderCellDropdown(cell, row, col);
-                // Клик для показа dropdown И выделения ячейки
-                cell.addEventListener('click', (e) => {
-                    selectCell(row, col); // Сначала выделяем ячейку
-                    showDropdownList(e, cell, row, col, validation.values);
-                });
             }
-            else {
-                cell.addEventListener('click', () => selectCell(row, col));
-            }
-            cell.addEventListener('dblclick', () => editCell(row, col));
-            cell.addEventListener('keydown', handleCellKeyDown);
-            cell.addEventListener('input', handleCellInput);
             elements.cellGrid.appendChild(cell);
         }
     }
@@ -785,6 +775,51 @@ function applyColorToSelection(type, color) {
     updateAIDataCache();
     autoSave();
 }
+// Применение выравнивания текста
+function applyTextAlign(align) {
+    const data = getCurrentData();
+    const cellsToAlign = [];
+    // Получаем выделенные ячейки
+    if (state.selectionStart && state.selectionEnd) {
+        // Выделен диапазон
+        const minRow = Math.min(state.selectionStart.row, state.selectionEnd.row);
+        const maxRow = Math.max(state.selectionStart.row, state.selectionEnd.row);
+        const minCol = Math.min(state.selectionStart.col, state.selectionEnd.col);
+        const maxCol = Math.max(state.selectionStart.col, state.selectionEnd.col);
+        for (let r = minRow; r <= maxRow; r++) {
+            for (let c = minCol; c <= maxCol; c++) {
+                cellsToAlign.push({ row: r, col: c });
+            }
+        }
+    }
+    else {
+        // Одна ячейка
+        cellsToAlign.push({ ...state.selectedCell });
+    }
+    // Применяем выравнивание
+    for (const cellRef of cellsToAlign) {
+        const key = getCellKey(cellRef.row, cellRef.col);
+        const cellData = data.get(key);
+        const cellElement = getCellElement(cellRef.row, cellRef.col);
+        if (cellData) {
+            // Сохраняем выравнивание в стиле
+            const newStyle = { ...cellData.style };
+            newStyle.textAlign = align;
+            if (cellElement)
+                cellElement.style.textAlign = align;
+            data.set(key, { ...cellData, style: newStyle });
+        }
+        else {
+            // Если ячейка пустая, создаём стиль
+            const newStyle = { textAlign: align };
+            if (cellElement)
+                cellElement.style.textAlign = align;
+            data.set(key, { value: '', style: newStyle });
+        }
+    }
+    updateAIDataCache();
+    autoSave();
+}
 // Автоподбор ширины колонки
 function autoFitColumn(col) {
     const data = getCurrentData();
@@ -963,6 +998,51 @@ function setupRangeSelection() {
     });
     document.addEventListener('mouseup', () => {
         state.isSelecting = false;
+    });
+}
+// === ДЕЛЕГИРОВАНИЕ СОБЫТИЙ ЯЧЕЕК ===
+function setupCellEventListeners() {
+    // Клик по ячейке (выделение)
+    elements.cellGrid.addEventListener('click', (e) => {
+        const cell = e.target.closest('.cell');
+        if (!cell)
+            return;
+        const row = parseInt(cell.dataset.row || '0');
+        const col = parseInt(cell.dataset.col || '0');
+        // Проверка на dropdown ячейку
+        if (cell.dataset.hasDropdown === 'true') {
+            selectCell(row, col);
+            const validation = getDataValidation(row, col);
+            if (validation && validation.type === 'list') {
+                showDropdownList(e, cell, row, col, validation.values);
+            }
+        }
+        else {
+            selectCell(row, col);
+        }
+    });
+    // Двойной клик (редактирование)
+    elements.cellGrid.addEventListener('dblclick', (e) => {
+        const cell = e.target.closest('.cell');
+        if (!cell)
+            return;
+        const row = parseInt(cell.dataset.row || '0');
+        const col = parseInt(cell.dataset.col || '0');
+        editCell(row, col);
+    });
+    // Обработка клавиатуры для ячеек
+    elements.cellGrid.addEventListener('keydown', (e) => {
+        const cell = e.target;
+        if (!cell.classList.contains('cell'))
+            return;
+        handleCellKeyDown(e);
+    });
+    // Обработка ввода для ячеек
+    elements.cellGrid.addEventListener('input', (e) => {
+        const cell = e.target;
+        if (!cell.classList.contains('cell'))
+            return;
+        handleCellInput(e);
     });
 }
 function updateRangeSelection() {
@@ -1300,6 +1380,25 @@ function deleteColumnAt(col) {
     });
     colsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
 }
+// Вставка изображения в ячейку
+function insertImage(imageSrc) {
+    const { row, col } = state.selectedCell;
+    const key = getCellKey(row, col);
+    const data = getCurrentData();
+    data.set(key, {
+        value: '[Изображение]',
+        style: {
+            backgroundImage: `url(${imageSrc})`,
+            backgroundSize: 'contain',
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'center',
+            minHeight: '100px'
+        }
+    });
+    renderCells();
+    updateAIDataCache();
+    autoSave();
+}
 function setupEventListeners() {
     // Переключение вкладок меню
     document.querySelectorAll('.menu-item').forEach(item => {
@@ -1318,6 +1417,11 @@ function setupEventListeners() {
         const event = e;
         applyColorToSelection('fill', event.detail.color);
     });
+    // Выравнивание текста
+    document.addEventListener('align-change', (e) => {
+        const event = e;
+        applyTextAlign(event.detail.align);
+    });
     // Автосумма
     document.addEventListener('auto-sum', () => {
         autoSum();
@@ -1331,6 +1435,129 @@ function setupEventListeners() {
     document.addEventListener('cell-cleared', (e) => {
         const event = e;
         clearCell(event.detail.row, event.detail.col);
+    });
+    // ==================== ВКЛАДКА: ВСТАВКА ====================
+    // Вставка строки сверху
+    document.addEventListener('insert-row-above', () => {
+        insertRowAboveAt(state.selectedCell.row);
+        renderCells();
+        autoSave();
+    });
+    // Вставка строки снизу
+    document.addEventListener('insert-row-below', () => {
+        insertRowBelowAt(state.selectedCell.row);
+        renderCells();
+        autoSave();
+    });
+    // Вставка столбца слева
+    document.addEventListener('insert-col-left', () => {
+        insertColumnLeftAt(state.selectedCell.col);
+        renderCells();
+        autoSave();
+    });
+    // Вставка столбца справа
+    document.addEventListener('insert-col-right', () => {
+        insertColumnRightAt(state.selectedCell.col);
+        renderCells();
+        autoSave();
+    });
+    // Вставка изображения
+    document.addEventListener('insert-image', () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = (e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const result = event.target?.result;
+                    insertImage(result);
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+        input.click();
+    });
+    // Вставка ссылки
+    document.addEventListener('insert-link', () => {
+        const url = prompt('Введите URL ссылки:');
+        if (url) {
+            const { row, col } = state.selectedCell;
+            const key = getCellKey(row, col);
+            const data = getCurrentData();
+            const cellData = data.get(key) || { value: '' };
+            cellData.style = cellData.style || {};
+            cellData.style.hyperlink = url;
+            data.set(key, cellData);
+            const cell = getCellElement(row, col);
+            if (cell) {
+                cell.style.color = '#0066cc';
+                cell.style.textDecoration = 'underline';
+                cell.style.cursor = 'pointer';
+                cell.addEventListener('click', () => {
+                    window.open(url, '_blank');
+                });
+            }
+            updateAIDataCache();
+            autoSave();
+        }
+    });
+    // Вставка комментария
+    document.addEventListener('insert-comment', () => {
+        const { row, col } = state.selectedCell;
+        const key = getCellKey(row, col);
+        const data = getCurrentData();
+        const cellData = data.get(key) || { value: '' };
+        const comment = prompt('Введите комментарий:');
+        if (comment) {
+            cellData.style = cellData.style || {};
+            cellData.style.comment = comment;
+            data.set(key, cellData);
+            const cell = getCellElement(row, col);
+            if (cell) {
+                cell.style.backgroundColor = '#ffeb3b';
+                cell.title = comment;
+            }
+            updateAIDataCache();
+            autoSave();
+        }
+    });
+    // Вставка символа
+    document.addEventListener('insert-symbol', () => {
+        const symbols = ['©', '®', '™', '±', '×', '÷', '≠', '≤', '≥', '∞', '√', '°', '€', '£', '¥'];
+        const symbol = prompt('Введите символ или выберите из: ' + symbols.join(', '));
+        if (symbol) {
+            pasteToCell(symbol);
+        }
+    });
+    // Вставка таблицы
+    document.addEventListener('insert-table', () => {
+        const rows = prompt('Количество строк:', '3');
+        const cols = prompt('Количество столбцов:', '3');
+        if (rows && cols) {
+            const numRows = parseInt(rows);
+            const numCols = parseInt(cols);
+            const startRow = state.selectedCell.row;
+            const startCol = state.selectedCell.col;
+            const data = getCurrentData();
+            for (let r = 0; r < numRows; r++) {
+                for (let c = 0; c < numCols; c++) {
+                    const key = getCellKey(startRow + r, startCol + c);
+                    const value = c === 0 ? `Строка ${r + 1}` : `Ячейка ${r + 1}-${c + 1}`;
+                    data.set(key, {
+                        value,
+                        style: {
+                            backgroundColor: r % 2 === 0 ? '#f0f0f0' : 'white',
+                            border: '1px solid #ccc'
+                        }
+                    });
+                }
+            }
+            renderCells();
+            updateAIDataCache();
+            autoSave();
+        }
     });
     // Синхронизация скролла
     elements.cellGridWrapper.addEventListener('scroll', () => {
@@ -1456,6 +1683,8 @@ function setupEventListeners() {
     // elements.btnExport удалена из UI
     // Выделение диапазона мышью
     setupRangeSelection();
+    // Делегирование событий для ячеек (вместо навешивания на каждую ячейку)
+    setupCellEventListeners();
     // Контекстное меню (ПКМ)
     setupContextMenu();
     setupSheetContextMenu();

@@ -255,13 +255,6 @@
   border-color: var(--selected-border);
 }
 
-.cell.fill-preview {
-  background: rgba(16, 185, 129, 0.2);
-  border-color: var(--primary-color);
-  outline: 2px dashed var(--primary-color);
-  outline-offset: -2px;
-}
-
 .cell.editing {
   white-space: normal;
   word-break: break-word;
@@ -269,6 +262,8 @@
   z-index: 10;
   position: relative;
   background: var(--surface-color);
+  user-select: text;
+  cursor: text;
 }
 
 /* Sheets Bar */
