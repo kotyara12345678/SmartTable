@@ -1,5 +1,6 @@
 /* Top Bar Component Styles */
 .top-bar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -7,6 +8,7 @@
   background: var(--surface-color);
   border-bottom: 1px solid var(--border-color);
   height: 44px;
+  z-index: 1000;
 }
 
 .top-bar-left {

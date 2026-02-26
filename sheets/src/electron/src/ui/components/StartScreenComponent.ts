@@ -199,17 +199,17 @@ export class StartScreenComponent {
 
   show(): void {
     if (this.container) {
-      this.container.style.display = 'flex';
+      this.container.classList.add('visible');
     }
   }
 
   hide(): void {
     if (this.container) {
-      this.container.style.display = 'none';
+      this.container.classList.remove('visible');
     }
   }
 
   isVisible(): boolean {
-    return this.container?.style.display !== 'none';
+    return this.container?.classList.contains('visible') || false;
   }
 }

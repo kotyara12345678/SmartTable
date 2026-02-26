@@ -248,9 +248,31 @@ export class RibbonComponent extends BaseComponent {
     groups.forEach(group => {
       const groupData = (group as HTMLElement).dataset.group;
       if (groupData === groupName) {
-        (group as HTMLElement).style.display = 'block';
+        (group as HTMLElement).style.display = 'flex';
       } else {
         (group as HTMLElement).style.display = 'none';
+      }
+    });
+    
+    // Показываем/скрываем ribbon-spacer для соответствующей вкладки
+    const spacers = this.querySelectorAll('.ribbon-spacer[data-group]');
+    spacers.forEach(spacer => {
+      const spacerGroup = (spacer as HTMLElement).dataset.group;
+      if (spacerGroup === groupName) {
+        (spacer as HTMLElement).style.display = 'flex';
+      } else {
+        (spacer as HTMLElement).style.display = 'none';
+      }
+    });
+    
+    // Показываем/скрываем ribbon-divider для соответствующей вкладки
+    const dividers = this.querySelectorAll('.ribbon-divider[data-group]');
+    dividers.forEach(divider => {
+      const dividerGroup = (divider as HTMLElement).dataset.group;
+      if (dividerGroup === groupName) {
+        (divider as HTMLElement).style.display = 'block';
+      } else {
+        (divider as HTMLElement).style.display = 'none';
       }
     });
   }
