@@ -34,6 +34,8 @@ export class RibbonComponent extends BaseComponent {
   private fontFamily: HTMLSelectElement | null = null;
   private fontSize: HTMLSelectElement | null = null;
   private numberFormat: HTMLSelectElement | null = null;
+  private btnIncreaseDecimal: HTMLElement | null = null;
+  private btnDecreaseDecimal: HTMLElement | null = null;
 
   // Элементы вкладки Вставка
   private btnInsertTable: HTMLElement | null = null;
@@ -115,6 +117,8 @@ export class RibbonComponent extends BaseComponent {
     this.fontFamily = this.querySelector('#fontFamily') as HTMLSelectElement;
     this.fontSize = this.querySelector('#fontSize') as HTMLSelectElement;
     this.numberFormat = this.querySelector('#numberFormat') as HTMLSelectElement;
+    this.btnIncreaseDecimal = this.querySelector('#btnIncreaseDecimal');
+    this.btnDecreaseDecimal = this.querySelector('#btnDecreaseDecimal');
 
     // Вкладка Вставка
     this.btnInsertTable = this.querySelector('#btnInsertTable');
@@ -214,6 +218,10 @@ export class RibbonComponent extends BaseComponent {
     // Зум
     this.bindEvent(this.btnZoomIn, 'click', () => this.handleZoom(10));
     this.bindEvent(this.btnZoomOut, 'click', () => this.handleZoom(-10));
+
+    // Разрядность чисел
+    this.bindEvent(this.btnIncreaseDecimal, 'click', () => this.handleIncreaseDecimal());
+    this.bindEvent(this.btnDecreaseDecimal, 'click', () => this.handleDecreaseDecimal());
 
     // ==================== ВКЛАДКА: ВСТАВКА ====================
     this.bindEvent(this.btnInsertTable, 'click', () => this.handleInsertTable());
@@ -382,6 +390,14 @@ export class RibbonComponent extends BaseComponent {
 
   private handleZoom(delta: number): void {
     document.dispatchEvent(new CustomEvent('zoom-change', { detail: { delta } }));
+  }
+
+  private handleIncreaseDecimal(): void {
+    document.dispatchEvent(new CustomEvent('increase-decimal'));
+  }
+
+  private handleDecreaseDecimal(): void {
+    document.dispatchEvent(new CustomEvent('decrease-decimal'));
   }
 
   // ==================== ОБРАБОТЧИКИ: ВСТАВКА ====================

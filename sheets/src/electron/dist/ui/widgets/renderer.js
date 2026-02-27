@@ -588,6 +588,9 @@ function renderCells() {
     }
 }
 // === ВЫДЕЛЕНИЕ ЯЧЕЕК ===
+// Для отслеживания повторного клика по той же ячейке
+let lastSelectedCell = null;
+let lastSelectTime = 0;
 function selectCell(row, col) {
     // Не снимать выделение если идет выделение диапазона
     if (!state.isSelecting) {
@@ -603,6 +606,10 @@ function selectCell(row, col) {
     if (prevColHeader) {
         prevColHeader.classList.remove('selected');
     }
+    // Проверяем, кликнули ли по той же ячейке второй раз подряд
+    const now = Date.now();
+    const isSameCell = lastSelectedCell && lastSelectedCell.row === row && lastSelectedCell.col === col;
+    const isQuickClick = now - lastSelectTime < 300; // 300мс между кликами
     // Выделить новую ячейку
     state.selectedCell = { row, col };
     const cell = getCellElement(row, col);
@@ -631,6 +638,15 @@ function selectCell(row, col) {
             fillHandle.style.top = `${rect.bottom - 4}px`;
         }
     }
+    // Если кликнули по той же ячейке второй раз — начинаем редактирование
+    if (isSameCell && isQuickClick) {
+        editCell(row, col);
+        lastSelectedCell = null; // Сбрасываем
+    }
+    else {
+        lastSelectedCell = { row, col };
+        lastSelectTime = now;
+    }
 }
 function selectRow(row) {
     for (let col = 0; col < CONFIG.COLS; col++) {
@@ -658,6 +674,8 @@ function editCell(row, col) {
         return;
     state.isEditing = true;
     cell.classList.add('editing');
+    // Убираем класс has-content, курсор не будет виден в пустой ячейке
+    cell.classList.remove('has-content');
     cell.contentEditable = 'true';
     cell.focus();
     // Выделить весь текст
@@ -673,6 +691,7 @@ function finishEditing() {
         return;
     state.isEditing = false;
     cell.classList.remove('editing');
+    cell.classList.remove('has-content');
     cell.contentEditable = 'false';
     // Сохранить данные
     const key = getCellKey(state.selectedCell.row, state.selectedCell.col);
@@ -820,6 +839,54 @@ function applyTextAlign(align) {
     updateAIDataCache();
     autoSave();
 }
+// Изменение разрядности чисел
+function changeDecimalPlaces(delta) {
+    const data = getCurrentData();
+    const cellsToFormat = [];
+    // Получаем выделенные ячейки
+    if (state.selectionStart && state.selectionEnd) {
+        // Выделен диапазон
+        const minRow = Math.min(state.selectionStart.row, state.selectionEnd.row);
+        const maxRow = Math.max(state.selectionStart.row, state.selectionEnd.row);
+        const minCol = Math.min(state.selectionStart.col, state.selectionEnd.col);
+        const maxCol = Math.max(state.selectionStart.col, state.selectionEnd.col);
+        for (let r = minRow; r <= maxRow; r++) {
+            for (let c = minCol; c <= maxCol; c++) {
+                cellsToFormat.push({ row: r, col: c });
+            }
+        }
+    }
+    else {
+        // Одна ячейка
+        cellsToFormat.push({ ...state.selectedCell });
+    }
+    // Применяем разрядность
+    for (const cellRef of cellsToFormat) {
+        const key = getCellKey(cellRef.row, cellRef.col);
+        const cellData = data.get(key);
+        const cellElement = getCellElement(cellRef.row, cellRef.col);
+        if (cellData && cellData.value) {
+            // Проверяем, является ли значение числом
+            const numValue = parseFloat(cellData.value);
+            if (!isNaN(numValue)) {
+                // Получаем текущую разрядность из стиля
+                const currentDecimals = cellData.style?.decimals ?? 2;
+                const newDecimals = Math.max(0, Math.min(10, currentDecimals + delta));
+                // Форматируем число
+                const formattedValue = numValue.toFixed(newDecimals);
+                // Сохраняем разрядность в стиле
+                const newStyle = { ...cellData.style };
+                newStyle.decimals = newDecimals;
+                data.set(key, { value: formattedValue, style: newStyle });
+                if (cellElement) {
+                    cellElement.textContent = formattedValue;
+                }
+            }
+        }
+    }
+    updateAIDataCache();
+    autoSave();
+}
 // Автоподбор ширины колонки
 function autoFitColumn(col) {
     const data = getCurrentData();
@@ -929,12 +996,48 @@ function handleCellKeyDown(e) {
                 updateFormulaBar();
             }
             break;
+        case 'F2':
+            e.preventDefault();
+            editCell(row, col);
+            break;
         default:
-            // Начать редактирование при вводе символа
-            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-                editCell(row, col);
+            // Начать редактирование при вводе символа (буква, цифра, знак)
+            // Не реагируем на модификаторы и специальные клавиши
+            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                e.preventDefault();
+                editCellWithChar(row, col, e.key);
             }
+            break;
     }
+}
+// Редактирование ячейки с автоматическим вводом символа
+function editCellWithChar(row, col, char) {
+    const cell = getCellElement(row, col);
+    if (!cell)
+        return;
+    state.isEditing = true;
+    cell.classList.add('editing');
+    cell.contentEditable = 'true';
+    cell.focus();
+    // Устанавливаем символ и выделяем его для замены
+    cell.textContent = char;
+    // Добавляем класс для показа курсора
+    cell.classList.add('has-content');
+    // Сохраняем данные
+    const key = getCellKey(row, col);
+    const data = getCurrentData();
+    const existingCellData = data.get(key);
+    const existingStyle = existingCellData?.style || {};
+    data.set(key, { value: char, style: existingStyle });
+    // Выделяем весь текст (символ) для последующей замены
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    updateAIDataCache();
+    updateFormulaBar();
+    autoSave();
 }
 function handleCellInput(e) {
     // Авто-увеличение высоты ячейки при многострочном тексте
@@ -946,11 +1049,23 @@ function handleCellInput(e) {
         const key = getCellKey(row, col);
         const data = getCurrentData();
         const value = cell.textContent || '';
+        // Показываем/скрываем курсор в зависимости от наличия текста
         if (value) {
-            data.set(key, { value });
+            cell.classList.add('has-content');
         }
         else {
-            data.delete(key);
+            cell.classList.remove('has-content');
+        }
+        // Получаем существующий стиль ячейки
+        const existingCellData = data.get(key);
+        const existingStyle = existingCellData?.style || {};
+        if (value) {
+            // Сохраняем значение и стиль
+            data.set(key, { value, style: existingStyle });
+        }
+        else {
+            // Если значение пустое, сохраняем стиль с пустым значением
+            data.set(key, { value: '', style: existingStyle });
         }
         updateAIDataCache();
     }
@@ -961,7 +1076,9 @@ function updateFormulaBar() {
     const key = getCellKey(row, col);
     const data = getCurrentData();
     const cellData = data.get(key);
-    elements.formulaInput.value = cellData?.value || '';
+    // Показываем в формула баре только формулы (начинающиеся с =)
+    const value = cellData?.value || '';
+    elements.formulaInput.value = value.startsWith('=') ? value : '';
 }
 // === ОБНОВЛЕНИЕ ССЫЛКИ НА ЯЧЕЙКУ ===
 function updateCellReference() {
@@ -1021,7 +1138,8 @@ function setupCellEventListeners() {
             selectCell(row, col);
         }
     });
-    // Двойной клик (редактирование)
+    // Двойной клик (редактирование) - теперь не нужен, т.к. редактирование начинается по клику или клавише
+    // Оставлен для совместимости, если пользователь привык к двойному клику
     elements.cellGrid.addEventListener('dblclick', (e) => {
         const cell = e.target.closest('.cell');
         if (!cell)
@@ -1421,6 +1539,14 @@ function setupEventListeners() {
     document.addEventListener('align-change', (e) => {
         const event = e;
         applyTextAlign(event.detail.align);
+    });
+    // Увеличение разрядности чисел
+    document.addEventListener('increase-decimal', () => {
+        changeDecimalPlaces(1);
+    });
+    // Уменьшение разрядности чисел
+    document.addEventListener('decrease-decimal', () => {
+        changeDecimalPlaces(-1);
     });
     // Автосумма
     document.addEventListener('auto-sum', () => {
@@ -3105,7 +3231,7 @@ function setupColumnResize() {
         header.appendChild(handle);
     });
 }
-// Функция обновления ширины колонки
+// Функ��ия обновления ширины колонки
 function updateColumnWidth(col, width) {
     // Обновляем заголовок
     const header = elements.columnHeaders.querySelector(`.column-header[data-col="${col}"]`);
@@ -3146,7 +3272,7 @@ function updateRowHeight(row, height) {
         cell.style.minHeight = `${height}px`;
         cell.style.maxHeight = `${height}px`;
     });
-    // Обновляем grid-template-rows для правильного позиционирования
+    // Обновляем grid-template-rows для правильног�� позиционирования
     const rowHeights = [];
     for (let r = 0; r < CONFIG.ROWS; r++) {
         const rowHeader = elements.rowHeaders.querySelector(`.row-header[data-row="${r}"]`);
@@ -3556,32 +3682,32 @@ function getSelectedRange() {
 function evaluateFormulaLocal(formula, getCellValue) {
     try {
         let expr = formula.substring(1).toUpperCase(); // Убираем '=' и переводим в верхний регистр
-        // Заменяем ссылки на ячейки (A1, B2 и т.д.) на значения
+        // Сначала обрабатываем функции с диапазонами
+        expr = expr.replace(/SUM\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/g, (match, col1, row1, col2, row2) => {
+            const values = getRangeValues(col1, parseInt(row1), col2, parseInt(row2), getCellValue);
+            return values.reduce((a, b) => a + b, 0).toString();
+        });
+        expr = expr.replace(/AVERAGE\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/g, (match, col1, row1, col2, row2) => {
+            const values = getRangeValues(col1, parseInt(row1), col2, parseInt(row2), getCellValue);
+            return values.length > 0 ? (values.reduce((a, b) => a + b, 0) / values.length).toString() : '0';
+        });
+        expr = expr.replace(/MAX\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/g, (match, col1, row1, col2, row2) => {
+            const values = getRangeValues(col1, parseInt(row1), col2, parseInt(row2), getCellValue);
+            return values.length > 0 ? Math.max(...values).toString() : '0';
+        });
+        expr = expr.replace(/MIN\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/g, (match, col1, row1, col2, row2) => {
+            const values = getRangeValues(col1, parseInt(row1), col2, parseInt(row2), getCellValue);
+            return values.length > 0 ? Math.min(...values).toString() : '0';
+        });
+        expr = expr.replace(/COUNT\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/g, (match, col1, row1, col2, row2) => {
+            const values = getRangeValues(col1, parseInt(row1), col2, parseInt(row2), getCellValue);
+            return values.length.toString();
+        });
+        // Заменяем отдельные ссылки на ячейки (A1, B2 и т.д.) на значения
         expr = expr.replace(/([A-Z]+)(\d+)/g, (match) => {
             const val = getCellValue(match);
             const num = parseFloat(val);
             return isNaN(num) ? `"${val}"` : val.toString();
-        });
-        // Заменяем функции
-        expr = expr.replace(/SUM\(([^)]+)\)/g, (_, args) => {
-            const nums = args.split(',').map((x) => parseFloat(x.trim())).filter((x) => !isNaN(x));
-            return nums.reduce((a, b) => a + b, 0).toString();
-        });
-        expr = expr.replace(/AVERAGE\(([^)]+)\)/g, (_, args) => {
-            const nums = args.split(',').map((x) => parseFloat(x.trim())).filter((x) => !isNaN(x));
-            return nums.length > 0 ? (nums.reduce((a, b) => a + b, 0) / nums.length).toString() : '0';
-        });
-        expr = expr.replace(/MAX\(([^)]+)\)/g, (_, args) => {
-            const nums = args.split(',').map((x) => parseFloat(x.trim())).filter((x) => !isNaN(x));
-            return nums.length > 0 ? Math.max(...nums).toString() : '0';
-        });
-        expr = expr.replace(/MIN\(([^)]+)\)/g, (_, args) => {
-            const nums = args.split(',').map((x) => parseFloat(x.trim())).filter((x) => !isNaN(x));
-            return nums.length > 0 ? Math.min(...nums).toString() : '0';
-        });
-        expr = expr.replace(/COUNT\(([^)]+)\)/g, (_, args) => {
-            const nums = args.split(',').map((x) => parseFloat(x.trim())).filter((x) => !isNaN(x));
-            return nums.length.toString();
         });
         // Вычисляем выражение (безопасно)
         const result = Function('"use strict";return (' + expr + ')')();
@@ -3590,6 +3716,43 @@ function evaluateFormulaLocal(formula, getCellValue) {
     catch (e) {
         return { value: '#ERROR!' };
     }
+}
+/**
+ * Получить все числовые значения из диапазона ячеек
+ */
+function getRangeValues(col1, row1, col2, row2, getCellValue) {
+    const values = [];
+    const startCol = colToIndex(col1);
+    const endCol = colToIndex(col2);
+    const startRow = row1 - 1;
+    const endRow = row2 - 1;
+    // Суммируем только первую и последнюю ячейку (A1 и B5)
+    const firstRef = `${col1}${row1}`;
+    const lastRef = `${col2}${row2}`;
+    const firstVal = getCellValue(firstRef);
+    const firstNum = parseFloat(firstVal);
+    if (!isNaN(firstNum)) {
+        values.push(firstNum);
+    }
+    // Если первая и последняя ячейки разные, добавляем последнюю
+    if (firstRef !== lastRef) {
+        const lastVal = getCellValue(lastRef);
+        const lastNum = parseFloat(lastVal);
+        if (!isNaN(lastNum)) {
+            values.push(lastNum);
+        }
+    }
+    return values;
+}
+/**
+ * Преобразовать букву колонки в индекс (A -> 0, B -> 1, etc.)
+ */
+function colToIndex(col) {
+    let index = 0;
+    for (let i = 0; i < col.length; i++) {
+        index = index * 26 + (col.charCodeAt(i) - 64);
+    }
+    return index - 1;
 }
 function autoSum() {
     const range = getSelectedRange();
@@ -3690,7 +3853,10 @@ function pasteToCell(text) {
     const { row, col } = state.selectedCell;
     const data = getCurrentData();
     const key = getCellKey(row, col);
-    data.set(key, { value: text });
+    // Сохраняем существующий стиль ячейки
+    const existingCellData = data.get(key);
+    const existingStyle = existingCellData?.style || {};
+    data.set(key, { value: text, style: existingStyle });
     const cell = getCellElement(row, col);
     if (cell) {
         cell.textContent = text;
@@ -3701,7 +3867,11 @@ function pasteToCell(text) {
 function clearCell(row, col) {
     const data = getCurrentData();
     const key = getCellKey(row, col);
-    data.delete(key);
+    // Сохраняем стиль ячейки (не удаляем его полностью)
+    const existingCellData = data.get(key);
+    const existingStyle = existingCellData?.style || {};
+    // Очищаем только значение, стиль сохраняем
+    data.set(key, { value: '', style: existingStyle });
     const cell = getCellElement(row, col);
     if (cell) {
         cell.textContent = '';
@@ -4239,6 +4409,110 @@ window.sortColumn = globalSortColumn;
 window.clearCell = globalClearCell;
 window.clearColumn = globalClearColumn;
 window.clearAll = globalClearAll;
+// Обработчик быстрых формул
+document.addEventListener('quick-formula', ((e) => {
+    const { formula } = e.detail;
+    applyQuickFormula(formula);
+}));
+/**
+ * Применить быструю формулу к выделенному диапазону
+ */
+function applyQuickFormula(formulaType) {
+    if (!state.selectionStart || !state.selectionEnd)
+        return;
+    const startRow = Math.min(state.selectionStart.row, state.selectionEnd.row);
+    const endRow = Math.max(state.selectionStart.row, state.selectionEnd.row);
+    const startCol = Math.min(state.selectionStart.col, state.selectionEnd.col);
+    const endCol = Math.max(state.selectionStart.col, state.selectionEnd.col);
+    const data = getCurrentData();
+    const values = [];
+    // Собираем числовые значения из выделенного диапазона
+    for (let r = startRow; r <= endRow; r++) {
+        for (let c = startCol; c <= endCol; c++) {
+            const key = getCellKey(r, c);
+            const cellData = data.get(key);
+            if (cellData?.value) {
+                const num = parseFloat(cellData.value.toString());
+                if (!isNaN(num)) {
+                    values.push(num);
+                }
+            }
+        }
+    }
+    if (values.length === 0) {
+        console.log('[QuickFormula] No numeric values in selection');
+        return;
+    }
+    let result = 0;
+    let formulaText = '';
+    switch (formulaType) {
+        case 'SUM':
+            result = values.reduce((a, b) => a + b, 0);
+            formulaText = `=SUM(${getRangeAddress(startRow, startCol, endRow, endCol)})`;
+            break;
+        case 'AVERAGE':
+            result = values.reduce((a, b) => a + b, 0) / values.length;
+            formulaText = `=AVERAGE(${getRangeAddress(startRow, startCol, endRow, endCol)})`;
+            break;
+        case 'MIN':
+            result = Math.min(...values);
+            formulaText = `=MIN(${getRangeAddress(startRow, startCol, endRow, endCol)})`;
+            break;
+        case 'MAX':
+            result = Math.max(...values);
+            formulaText = `=MAX(${getRangeAddress(startRow, startCol, endRow, endCol)})`;
+            break;
+        case 'COUNT':
+            result = values.length;
+            formulaText = `=COUNT(${getRangeAddress(startRow, startCol, endRow, endCol)})`;
+            break;
+        case 'COUNTCOLS':
+            result = endCol - startCol + 1;
+            formulaText = `=COLUMNS(${getRangeAddress(startRow, startCol, endRow, endCol)})`;
+            break;
+        case 'SQRT':
+            result = Math.sqrt(values[0] || 0);
+            formulaText = `=SQRT(${getColLetter(startCol)}${startRow + 1})`;
+            break;
+        case 'SQUARE':
+            result = (values[0] || 0) * (values[0] || 0);
+            formulaText = `=POWER(${getColLetter(startCol)}${startRow + 1};2)`;
+            break;
+    }
+    // Вставляем формулу в последнюю выделенную ячейку
+    const targetRow = state.selectionEnd.row;
+    const targetCol = state.selectionEnd.col;
+    const targetKey = getCellKey(targetRow, targetCol);
+    data.set(targetKey, {
+        value: result.toString(),
+        style: {}
+    });
+    renderCells();
+    updateAIDataCache();
+    autoSave();
+    updateFormulaBar();
+    console.log(`[QuickFormula] ${formulaType} applied: ${result}`);
+}
+/**
+ * Получить адрес диапазона ячеек (например, "A1:B5")
+ */
+function getRangeAddress(startRow, startCol, endRow, endCol) {
+    const startColLetter = getColLetter(startCol);
+    const endColLetter = getColLetter(endCol);
+    return `${startColLetter}${startRow + 1}:${endColLetter}${endRow + 1}`;
+}
+/**
+ * Получить букву колонки по индексу (0 -> A, 1 -> B, etc.)
+ */
+function getColLetter(colIndex) {
+    let letter = '';
+    let col = colIndex;
+    do {
+        letter = String.fromCharCode(65 + (col % 26)) + letter;
+        col = Math.floor(col / 26) - 1;
+    } while (col >= 0);
+    return letter;
+}
 // Функция для получения данных таблицы (для AI контекста)
 window.getTableData = () => getCurrentData();
 console.log('[Renderer] Global AI functions registered');

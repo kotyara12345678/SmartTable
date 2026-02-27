@@ -264,6 +264,11 @@
   background: var(--surface-color);
   user-select: text;
   cursor: text;
+  caret-color: transparent;
+}
+
+.cell.editing.has-content {
+  caret-color: auto;
 }
 
 /* Sheets Bar */

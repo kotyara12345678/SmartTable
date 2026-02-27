@@ -702,6 +702,11 @@ function renderCells(): void {
 }
 
 // === ВЫДЕЛЕНИЕ ЯЧЕЕК ===
+
+// Для отслеживания повторного клика по той же ячейке
+let lastSelectedCell: { row: number; col: number } | null = null;
+let lastSelectTime: number = 0;
+
 function selectCell(row: number, col: number): void {
   // Не снимать выделение если идет выделение диапазона
   if (!state.isSelecting) {
@@ -720,10 +725,15 @@ function selectCell(row: number, col: number): void {
     prevColHeader.classList.remove('selected');
   }
 
+  // Проверяем, кликнули ли по той же ячейке второй раз подряд
+  const now = Date.now();
+  const isSameCell = lastSelectedCell && lastSelectedCell.row === row && lastSelectedCell.col === col;
+  const isQuickClick = now - lastSelectTime < 300; // 300мс между кликами
+
   // Выделить новую ячейку
   state.selectedCell = { row, col };
   const cell = getCellElement(row, col);
-  
+
   if (cell) {
     cell.classList.add('selected');
     cell.focus();
@@ -753,6 +763,15 @@ function selectCell(row: number, col: number): void {
       fillHandle.style.top = `${rect.bottom - 4}px`;
     }
   }
+
+  // Если кликнули по той же ячейке второй раз — начинаем редактирование
+  if (isSameCell && isQuickClick) {
+    editCell(row, col);
+    lastSelectedCell = null; // Сбрасываем
+  } else {
+    lastSelectedCell = { row, col };
+    lastSelectTime = now;
+  }
 }
 
 function selectRow(row: number): void {
@@ -781,12 +800,14 @@ function getCellElement(row: number, col: number): HTMLDivElement | null {
 function editCell(row: number, col: number): void {
   const cell = getCellElement(row, col);
   if (!cell) return;
-  
+
   state.isEditing = true;
   cell.classList.add('editing');
+  // Убираем класс has-content, курсор не будет виден в пустой ячейке
+  cell.classList.remove('has-content');
   cell.contentEditable = 'true';
   cell.focus();
-  
+
   // Выделить весь текст
   const range = document.createRange();
   range.selectNodeContents(cell);
@@ -801,6 +822,7 @@ function finishEditing(): void {
 
   state.isEditing = false;
   cell.classList.remove('editing');
+  cell.classList.remove('has-content');
   cell.contentEditable = 'false';
 
   // Сохранить данные
@@ -957,6 +979,62 @@ function applyTextAlign(align: string): void {
   autoSave();
 }
 
+// Изменение разрядности чисел
+function changeDecimalPlaces(delta: number): void {
+  const data = getCurrentData();
+  const cellsToFormat: Array<{ row: number; col: number }> = [];
+
+  // Получаем выделенные ячейки
+  if (state.selectionStart && state.selectionEnd) {
+    // Выделен диапазон
+    const minRow = Math.min(state.selectionStart.row, state.selectionEnd.row);
+    const maxRow = Math.max(state.selectionStart.row, state.selectionEnd.row);
+    const minCol = Math.min(state.selectionStart.col, state.selectionEnd.col);
+    const maxCol = Math.max(state.selectionStart.col, state.selectionEnd.col);
+
+    for (let r = minRow; r <= maxRow; r++) {
+      for (let c = minCol; c <= maxCol; c++) {
+        cellsToFormat.push({ row: r, col: c });
+      }
+    }
+  } else {
+    // Одна ячейка
+    cellsToFormat.push({ ...state.selectedCell });
+  }
+
+  // Применяем разрядность
+  for (const cellRef of cellsToFormat) {
+    const key = getCellKey(cellRef.row, cellRef.col);
+    const cellData = data.get(key);
+    const cellElement = getCellElement(cellRef.row, cellRef.col);
+
+    if (cellData && cellData.value) {
+      // Проверяем, является ли значение числом
+      const numValue = parseFloat(cellData.value);
+      if (!isNaN(numValue)) {
+        // Получаем текущую разрядность из стиля
+        const currentDecimals = cellData.style?.decimals ?? 2;
+        const newDecimals = Math.max(0, Math.min(10, currentDecimals + delta));
+
+        // Форматируем число
+        const formattedValue = numValue.toFixed(newDecimals);
+
+        // Сохраняем разрядность в стиле
+        const newStyle = { ...cellData.style };
+        newStyle.decimals = newDecimals;
+        data.set(key, { value: formattedValue, style: newStyle });
+
+        if (cellElement) {
+          cellElement.textContent = formattedValue;
+        }
+      }
+    }
+  }
+
+  updateAIDataCache();
+  autoSave();
+}
+
 // Автоподбор ширины колонки
 function autoFitColumn(col: number): void {
   const data = getCurrentData();
@@ -1068,12 +1146,53 @@ function handleCellKeyDown(e: KeyboardEvent): void {
         updateFormulaBar();
       }
       break;
+    case 'F2':
+      e.preventDefault();
+      editCell(row, col);
+      break;
     default:
-      // Начать редактирование при вводе символа
-      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-        editCell(row, col);
+      // Начать редактирование при вводе символа (буква, цифра, знак)
+      // Не реагируем на модификаторы и специальные клавиши
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        editCellWithChar(row, col, e.key);
       }
+      break;
   }
+}
+
+// Редактирование ячейки с автоматическим вводом символа
+function editCellWithChar(row: number, col: number, char: string): void {
+  const cell = getCellElement(row, col);
+  if (!cell) return;
+
+  state.isEditing = true;
+  cell.classList.add('editing');
+  cell.contentEditable = 'true';
+  cell.focus();
+
+  // Устанавливаем символ и выделяем его для замены
+  cell.textContent = char;
+  // Добавляем класс для показа курсора
+  cell.classList.add('has-content');
+  
+  // Сохраняем данные
+  const key = getCellKey(row, col);
+  const data = getCurrentData();
+  const existingCellData = data.get(key);
+  const existingStyle = existingCellData?.style || {};
+  data.set(key, { value: char, style: existingStyle });
+
+  // Выделяем весь текст (символ) для последующей замены
+  const range = document.createRange();
+  range.selectNodeContents(cell);
+  const sel = window.getSelection();
+  sel?.removeAllRanges();
+  sel?.addRange(range);
+  
+  updateAIDataCache();
+  updateFormulaBar();
+  autoSave();
 }
 
 function handleCellInput(e: Event): void {
@@ -1086,11 +1205,24 @@ function handleCellInput(e: Event): void {
     const key = getCellKey(row, col);
     const data = getCurrentData();
     const value = cell.textContent || '';
-    
+
+    // Показываем/скрываем курсор в зависимости от наличия текста
     if (value) {
-      data.set(key, { value });
+      cell.classList.add('has-content');
     } else {
-      data.delete(key);
+      cell.classList.remove('has-content');
+    }
+
+    // Получаем существующий стиль ячейки
+    const existingCellData = data.get(key);
+    const existingStyle = existingCellData?.style || {};
+
+    if (value) {
+      // Сохраняем значение и стиль
+      data.set(key, { value, style: existingStyle });
+    } else {
+      // Если значение пустое, сохраняем стиль с пустым значением
+      data.set(key, { value: '', style: existingStyle });
     }
     updateAIDataCache();
   }
@@ -1174,7 +1306,8 @@ function setupCellEventListeners(): void {
     }
   });
 
-  // Двойной клик (редактирование)
+  // Двойной клик (редактирование) - теперь не нужен, т.к. редактирование начинается по клику или клавише
+  // Оставлен для совместимости, если пользователь привык к двойному клику
   elements.cellGrid.addEventListener('dblclick', (e: MouseEvent) => {
     const cell = (e.target as HTMLElement).closest('.cell') as HTMLElement;
     if (!cell) return;
@@ -1613,6 +1746,16 @@ function setupEventListeners(): void {
   document.addEventListener('align-change', (e: Event) => {
     const event = e as CustomEvent<{ align: string }>;
     applyTextAlign(event.detail.align);
+  });
+
+  // Увеличение разрядности чисел
+  document.addEventListener('increase-decimal', () => {
+    changeDecimalPlaces(1);
+  });
+
+  // Уменьшение разрядности чисел
+  document.addEventListener('decrease-decimal', () => {
+    changeDecimalPlaces(-1);
   });
 
   // Автосумма
@@ -3479,7 +3622,7 @@ function setupColumnResize(): void {
   });
 }
 
-// Функция обновления ширины колонки
+// Функ��ия обновления ширины колонки
 function updateColumnWidth(col: number, width: number): void {
   // Обновляем заголовок
   const header = elements.columnHeaders.querySelector(`.column-header[data-col="${col}"]`) as HTMLElement;
@@ -3525,7 +3668,7 @@ function updateRowHeight(row: number, height: number): void {
     (cell as HTMLElement).style.maxHeight = `${height}px`;
   });
   
-  // Обновляем grid-template-rows для правильного позиционирования
+  // Обновляем grid-template-rows для правильног�� позиционирования
   const rowHeights: string[] = [];
   for (let r = 0; r < CONFIG.ROWS; r++) {
     const rowHeader = elements.rowHeaders.querySelector(`.row-header[data-row="${r}"]`) as HTMLElement;
@@ -4156,7 +4299,11 @@ function pasteToCell(text: string): void {
   const data = getCurrentData();
   const key = getCellKey(row, col);
 
-  data.set(key, { value: text });
+  // Сохраняем существующий стиль ячейки
+  const existingCellData = data.get(key);
+  const existingStyle = existingCellData?.style || {};
+
+  data.set(key, { value: text, style: existingStyle });
 
   const cell = getCellElement(row, col);
   if (cell) {
@@ -4171,7 +4318,12 @@ function clearCell(row: number, col: number): void {
   const data = getCurrentData();
   const key = getCellKey(row, col);
 
-  data.delete(key);
+  // Сохраняем стиль ячейки (не удаляем его полностью)
+  const existingCellData = data.get(key);
+  const existingStyle = existingCellData?.style || {};
+
+  // Очищаем только значение, стиль сохраняем
+  data.set(key, { value: '', style: existingStyle });
 
   const cell = getCellElement(row, col);
   if (cell) {

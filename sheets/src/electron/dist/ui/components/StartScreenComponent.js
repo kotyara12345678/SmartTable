@@ -177,16 +177,16 @@ export class StartScreenComponent {
     }
     show() {
         if (this.container) {
-            this.container.style.display = 'flex';
+            this.container.classList.add('visible');
         }
     }
     hide() {
         if (this.container) {
-            this.container.style.display = 'none';
+            this.container.classList.remove('visible');
         }
     }
     isVisible() {
-        return this.container?.style.display !== 'none';
+        return this.container?.classList.contains('visible') || false;
     }
 }
 //# sourceMappingURL=StartScreenComponent.js.map

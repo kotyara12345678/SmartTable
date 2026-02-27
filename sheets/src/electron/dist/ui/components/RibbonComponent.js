@@ -35,6 +35,8 @@ export class RibbonComponent extends BaseComponent {
         this.fontFamily = null;
         this.fontSize = null;
         this.numberFormat = null;
+        this.btnIncreaseDecimal = null;
+        this.btnDecreaseDecimal = null;
         // Элементы вкладки Вставка
         this.btnInsertTable = null;
         this.btnInsertRowAbove = null;
@@ -48,6 +50,15 @@ export class RibbonComponent extends BaseComponent {
         // Элементы вкладки Формулы
         this.btnCalcNow = null;
         this.formulaCategory = null;
+        // Быстрые формулы
+        this.btnQuickSum = null;
+        this.btnQuickAverage = null;
+        this.btnQuickMin = null;
+        this.btnQuickMax = null;
+        this.btnQuickCount = null;
+        this.btnQuickCountCols = null;
+        this.btnQuickSqrt = null;
+        this.btnQuickSquare = null;
         // Элементы вкладки Данные
         this.btnSortAZ = null;
         this.btnFilterData = null;
@@ -96,6 +107,8 @@ export class RibbonComponent extends BaseComponent {
         this.fontFamily = this.querySelector('#fontFamily');
         this.fontSize = this.querySelector('#fontSize');
         this.numberFormat = this.querySelector('#numberFormat');
+        this.btnIncreaseDecimal = this.querySelector('#btnIncreaseDecimal');
+        this.btnDecreaseDecimal = this.querySelector('#btnDecreaseDecimal');
         // Вкладка Вставка
         this.btnInsertTable = this.querySelector('#btnInsertTable');
         this.btnInsertRowAbove = this.querySelector('#btnInsertRowAbove');
@@ -109,6 +122,15 @@ export class RibbonComponent extends BaseComponent {
         // Вкладка Формулы
         this.btnCalcNow = this.querySelector('#btnCalcNow');
         this.formulaCategory = this.querySelector('#formulaCategory');
+        // Быстрые формулы
+        this.btnQuickSum = this.querySelector('#btnQuickSum');
+        this.btnQuickAverage = this.querySelector('#btnQuickAverage');
+        this.btnQuickMin = this.querySelector('#btnQuickMin');
+        this.btnQuickMax = this.querySelector('#btnQuickMax');
+        this.btnQuickCount = this.querySelector('#btnQuickCount');
+        this.btnQuickCountCols = this.querySelector('#btnQuickCountCols');
+        this.btnQuickSqrt = this.querySelector('#btnQuickSqrt');
+        this.btnQuickSquare = this.querySelector('#btnQuickSquare');
         // Вкладка Данные
         this.btnSortAZ = this.querySelector('#btnSortAZ');
         this.btnFilterData = this.querySelector('#btnFilterData');
@@ -170,6 +192,9 @@ export class RibbonComponent extends BaseComponent {
         // Зум
         this.bindEvent(this.btnZoomIn, 'click', () => this.handleZoom(10));
         this.bindEvent(this.btnZoomOut, 'click', () => this.handleZoom(-10));
+        // Разрядность чисел
+        this.bindEvent(this.btnIncreaseDecimal, 'click', () => this.handleIncreaseDecimal());
+        this.bindEvent(this.btnDecreaseDecimal, 'click', () => this.handleDecreaseDecimal());
         // ==================== ВКЛАДКА: ВСТАВКА ====================
         this.bindEvent(this.btnInsertTable, 'click', () => this.handleInsertTable());
         this.bindEvent(this.btnInsertRowAbove, 'click', () => this.handleInsertRowAbove());
@@ -182,6 +207,15 @@ export class RibbonComponent extends BaseComponent {
         this.bindEvent(this.btnInsertSymbol, 'click', () => this.handleInsertSymbol());
         // ==================== ВКЛАДКА: ФОРМУЛЫ ====================
         this.bindEvent(this.btnCalcNow, 'click', () => this.handleCalcNow());
+        // Быстрые формулы
+        this.bindEvent(this.btnQuickSum, 'click', () => this.handleQuickSum());
+        this.bindEvent(this.btnQuickAverage, 'click', () => this.handleQuickAverage());
+        this.bindEvent(this.btnQuickMin, 'click', () => this.handleQuickMin());
+        this.bindEvent(this.btnQuickMax, 'click', () => this.handleQuickMax());
+        this.bindEvent(this.btnQuickCount, 'click', () => this.handleQuickCount());
+        this.bindEvent(this.btnQuickCountCols, 'click', () => this.handleQuickCountCols());
+        this.bindEvent(this.btnQuickSqrt, 'click', () => this.handleQuickSqrt());
+        this.bindEvent(this.btnQuickSquare, 'click', () => this.handleQuickSquare());
         // ==================== ВКЛАДКА: ДАННЫЕ ====================
         this.bindEvent(this.btnSortAZ, 'click', () => this.handleSortAZ());
         this.bindEvent(this.btnFilterData, 'click', () => this.handleFilterData());
@@ -215,10 +249,32 @@ export class RibbonComponent extends BaseComponent {
         groups.forEach(group => {
             const groupData = group.dataset.group;
             if (groupData === groupName) {
-                group.style.display = 'block';
+                group.style.display = 'flex';
             }
             else {
                 group.style.display = 'none';
+            }
+        });
+        // Показываем/скрываем ribbon-spacer для соответствующей вкладки
+        const spacers = this.querySelectorAll('.ribbon-spacer[data-group]');
+        spacers.forEach(spacer => {
+            const spacerGroup = spacer.dataset.group;
+            if (spacerGroup === groupName) {
+                spacer.style.display = 'flex';
+            }
+            else {
+                spacer.style.display = 'none';
+            }
+        });
+        // Показываем/скрываем ribbon-divider для соответствующей вкладки
+        const dividers = this.querySelectorAll('.ribbon-divider[data-group]');
+        dividers.forEach(divider => {
+            const dividerGroup = divider.dataset.group;
+            if (dividerGroup === groupName) {
+                divider.style.display = 'block';
+            }
+            else {
+                divider.style.display = 'none';
             }
         });
     }
@@ -284,6 +340,12 @@ export class RibbonComponent extends BaseComponent {
     handleZoom(delta) {
         document.dispatchEvent(new CustomEvent('zoom-change', { detail: { delta } }));
     }
+    handleIncreaseDecimal() {
+        document.dispatchEvent(new CustomEvent('increase-decimal'));
+    }
+    handleDecreaseDecimal() {
+        document.dispatchEvent(new CustomEvent('decrease-decimal'));
+    }
     // ==================== ОБРАБОТЧИКИ: ВСТАВКА ====================
     handleInsertTable() {
         document.dispatchEvent(new CustomEvent('insert-table'));
@@ -315,6 +377,31 @@ export class RibbonComponent extends BaseComponent {
     // ==================== ОБРАБОТЧИКИ: ФОРМУЛЫ ====================
     handleCalcNow() {
         document.dispatchEvent(new CustomEvent('calc-now'));
+    }
+    // Быстрые формулы
+    handleQuickSum() {
+        document.dispatchEvent(new CustomEvent('quick-formula', { detail: { formula: 'SUM' } }));
+    }
+    handleQuickAverage() {
+        document.dispatchEvent(new CustomEvent('quick-formula', { detail: { formula: 'AVERAGE' } }));
+    }
+    handleQuickMin() {
+        document.dispatchEvent(new CustomEvent('quick-formula', { detail: { formula: 'MIN' } }));
+    }
+    handleQuickMax() {
+        document.dispatchEvent(new CustomEvent('quick-formula', { detail: { formula: 'MAX' } }));
+    }
+    handleQuickCount() {
+        document.dispatchEvent(new CustomEvent('quick-formula', { detail: { formula: 'COUNT' } }));
+    }
+    handleQuickCountCols() {
+        document.dispatchEvent(new CustomEvent('quick-formula', { detail: { formula: 'COUNTCOLS' } }));
+    }
+    handleQuickSqrt() {
+        document.dispatchEvent(new CustomEvent('quick-formula', { detail: { formula: 'SQRT' } }));
+    }
+    handleQuickSquare() {
+        document.dispatchEvent(new CustomEvent('quick-formula', { detail: { formula: 'SQUARE' } }));
     }
     // ==================== ОБРАБОТЧИКИ: ДАННЫЕ ====================
     handleSortAZ() {

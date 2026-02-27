@@ -20,6 +20,12 @@
   align-items: flex-start;
 }
 
+.quick-formulas-group {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
 .font-row {
   display: flex;
   gap: 4px;
@@ -39,8 +45,25 @@
   margin: 0 8px;
 }
 
+.ribbon-divider[data-group] {
+  display: none;
+}
+
+.ribbon-divider[data-group="home"] {
+  display: block;
+}
+
 .ribbon-spacer {
   flex: 1;
+}
+
+.ribbon-spacer[data-group] {
+  display: none;
+  flex: 1;
+}
+
+.ribbon-spacer[data-group="home"] {
+  display: flex;
 }
 
 .ribbon-btn-lg {
