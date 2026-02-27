@@ -1469,11 +1469,11 @@ function handleSheetContextMenuAction(action: string): void {
       {
         const sheet = state.sheets.find(s => s.id === sheetId);
         if (!sheet) return;
-        const newName = prompt('Введите новое название листа:', sheet.name);
-        if (newName && newName.trim()) {
+        showPromptModal('Введите новое название листа:', (newName) => {
+          if (!newName || !newName.trim()) return;
           sheet.name = newName.trim();
           renderSheets();
-        }
+        }, sheet.name);
       }
       break;
       
@@ -1587,13 +1587,14 @@ function handleContextMenuAction(action: string): void {
 
     case 'bg-color':
       {
-        const color = prompt('Введите цвет фона (hex, например #FFEBEE):', '#FFEBEE');
-        if (color) {
+        showPromptModal('Введите цвет фона (hex, например #FFEBEE):', (color) => {
+          if (!color) return;
+          
           const cell = getCellElement(row, col);
           if (cell) {
             cell.style.backgroundColor = color;
           }
-        }
+        }, '#FFEBEE');
       }
       break;
 
@@ -1825,8 +1826,9 @@ function setupEventListeners(): void {
 
   // Вставка ссылки
   document.addEventListener('insert-link', () => {
-    const url = prompt('Введите URL ссылки:');
-    if (url) {
+    showPromptModal('Введите URL ссылки:', (url) => {
+      if (!url) return;
+      
       const { row, col } = state.selectedCell;
       const key = getCellKey(row, col);
       const data = getCurrentData();
@@ -1834,7 +1836,7 @@ function setupEventListeners(): void {
       cellData.style = cellData.style || {};
       cellData.style.hyperlink = url;
       data.set(key, cellData);
-      
+
       const cell = getCellElement(row, col);
       if (cell) {
         cell.style.color = '#0066cc';
@@ -1847,7 +1849,7 @@ function setupEventListeners(): void {
       
       updateAIDataCache();
       autoSave();
-    }
+    });
   });
 
   // Вставка комментария
@@ -1856,62 +1858,67 @@ function setupEventListeners(): void {
     const key = getCellKey(row, col);
     const data = getCurrentData();
     const cellData = data.get(key) || { value: '' };
-    
-    const comment = prompt('Введите комментарий:');
-    if (comment) {
+
+    showPromptModal('Введите комментарий:', (comment) => {
+      if (!comment) return;
+      
       cellData.style = cellData.style || {};
       cellData.style.comment = comment;
       data.set(key, cellData);
-      
+
       const cell = getCellElement(row, col);
       if (cell) {
         cell.style.backgroundColor = '#ffeb3b';
         cell.title = comment;
       }
-      
+
       updateAIDataCache();
       autoSave();
-    }
+    });
   });
 
   // Вставка символа
   document.addEventListener('insert-symbol', () => {
     const symbols = ['©', '®', '™', '±', '×', '÷', '≠', '≤', '≥', '∞', '√', '°', '€', '£', '¥'];
-    const symbol = prompt('Введите символ или выберите из: ' + symbols.join(', '));
-    if (symbol) {
+    showPromptModal('Введите символ или выберите из: ' + symbols.join(', '), (symbol) => {
+      if (!symbol) return;
       pasteToCell(symbol);
-    }
+    });
   });
 
   // Вставка таблицы
   document.addEventListener('insert-table', () => {
-    const rows = prompt('Количество строк:', '3');
-    const cols = prompt('Количество столбцов:', '3');
-    if (rows && cols) {
-      const numRows = parseInt(rows);
-      const numCols = parseInt(cols);
-      const startRow = state.selectedCell.row;
-      const startCol = state.selectedCell.col;
-      const data = getCurrentData();
-      
-      for (let r = 0; r < numRows; r++) {
-        for (let c = 0; c < numCols; c++) {
-          const key = getCellKey(startRow + r, startCol + c);
-          const value = c === 0 ? `Строка ${r + 1}` : `Ячейка ${r + 1}-${c + 1}`;
-          data.set(key, { 
-            value,
-            style: {
-              backgroundColor: r % 2 === 0 ? '#f0f0f0' : 'white',
-              border: '1px solid #ccc'
-            }
-          });
+    showPromptModal('Количество строк:', (rows) => {
+      if (!rows) return;
+
+      showPromptModal('Количество столбцов:', (cols) => {
+        if (!cols) return;
+
+        const numRows = parseInt(rows);
+        const numCols = parseInt(cols);
+        const startRow = state.selectedCell.row;
+        const startCol = state.selectedCell.col;
+        const data = getCurrentData();
+
+        for (let r = 0; r < numRows; r++) {
+          for (let c = 0; c < numCols; c++) {
+            const key = getCellKey(startRow + r, startCol + c);
+            const value = c === 0 ? `Строка ${r + 1}` : `Ячейка ${r + 1}-${c + 1}`;
+            data.set(key, {
+              value,
+              style: {
+                backgroundColor: r % 2 === 0 ? '#f0f0f0' : 'white',
+                border: '1px solid #ccc'
+              }
+            });
+          }
         }
-      }
-      
-      renderCells();
-      updateAIDataCache();
-      autoSave();
-    }
+
+        renderCells();
+        updateAIDataCache();
+        autoSave();
+      });
+    });
   });
 
   // Синхронизация скролла
@@ -5024,6 +5031,75 @@ function getColLetter(colIndex: number): string {
 (window as any).getTableData = () => getCurrentData();
 
 console.log('[Renderer] Global AI functions registered');
+
+/**
+ * Показать модальное окно с prompt (замена prompt())
+ */
+function showPromptModal(message: string, callback: (value: string | null) => void, defaultValue: string = ''): void {
+  // Удаляем старое модальное окно если есть
+  const oldModal = document.querySelector('.prompt-modal-overlay');
+  if (oldModal) oldModal.remove();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'prompt-modal-overlay';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  `;
+
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    background: var(--surface-color, #fff);
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    min-width: 400px;
+    max-width: 90vw;
+  `;
+
+  modal.innerHTML = `
+    <div style="margin-bottom: 16px; font-size: 16px; font-weight: 500; color: var(--text-primary, #000);">${message}</div>
+    <input type="text" class="prompt-modal-input" value="${defaultValue}" 
+      style="width: 100%; padding: 10px 12px; border: 2px solid var(--border-color, #ddd); border-radius: 6px; font-size: 14px; margin-bottom: 16px; box-sizing: border-box;">
+    <div style="display: flex; gap: 12px; justify-content: flex-end;">
+      <button class="prompt-modal-cancel" 
+        style="padding: 10px 20px; border: 1px solid var(--border-color, #ddd); background: var(--hover-bg, #f5f5f5); border-radius: 6px; cursor: pointer; font-size: 14px;">Отмена</button>
+      <button class="prompt-modal-ok" 
+        style="padding: 10px 20px; border: none; background: var(--primary-color, #10b981); color: white; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;">OK</button>
+    </div>
+  `;
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  const input = modal.querySelector('.prompt-modal-input') as HTMLInputElement;
+  const okBtn = modal.querySelector('.prompt-modal-ok');
+  const cancelBtn = modal.querySelector('.prompt-modal-cancel');
+
+  const close = (value: string | null) => {
+    overlay.remove();
+    callback(value);
+  };
+
+  okBtn?.addEventListener('click', () => close(input.value || null));
+  cancelBtn?.addEventListener('click', () => close(null));
+  
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') close(input.value || null);
+    if (e.key === 'Escape') close(null);
+  });
+
+  input.focus();
+  input.select();
+}
 
 // Экспорт для ES module
 export {};
