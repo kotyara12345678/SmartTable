@@ -110,44 +110,14 @@ function createWindow(): void {
 }
 
 /**
- * IPC обработчик для сохранения файла
- */
-function registerFileSaveHandler(): void {
-  ipcMain.handle('save-file', async (event, { content, mimeType, extension, defaultName }) => {
-    // Получаем папку Документы по умолчанию
-    const documentsPath = app.getPath('documents');
-    const defaultPath = path.join(documentsPath, `${defaultName}.${extension}`);
-
-    const result = await dialog.showSaveDialog(mainWindow!, {
-      title: 'Сохранить таблицу',
-      defaultPath: defaultPath,
-      filters: [
-        { name: 'Excel Files', extensions: [extension] },
-        { name: 'All Files', extensions: ['*'] }
-      ]
-    });
-
-    if (!result.canceled && result.filePath) {
-      const fs = await import('fs');
-      fs.writeFileSync(result.filePath, content, 'utf8');
-      console.log('[Main] File saved:', result.filePath);
-      return { success: true, filePath: result.filePath };
-    }
-
-    return { success: false };
-  });
-}
-
-/**
  * Инициализация приложения
  */
 app.whenReady().then(() => {
   // Показываем splash screen
   createSplashScreen();
 
-  // Регистрируем IPC обработчики
+  // Регистрируем IPC обработчики (включая save-file)
   registerIPCHandlers();
-  registerFileSaveHandler();
 
   // Создаем окно (оно пока скрыто)
   createWindow();

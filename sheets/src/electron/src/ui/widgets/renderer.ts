@@ -1885,7 +1885,7 @@ function setupEventListeners(): void {
     const data = getCurrentData();
     const cellData = data.get(key) || { value: '' };
 
-    showPromptModal('Вв��дите комментарий:', (comment) => {
+    showPromptModal('Вв����дите комментарий:', (comment) => {
       if (!comment) return;
       
       cellData.style = cellData.style || {};
@@ -5357,10 +5357,57 @@ ${row.map(cell => `          <table:table-cell><text:p>${escapeXml(cell)}</text:
 // Глобальная функция для получения списка листов
 (window as any).getSheets = () => state.sheets;
 
+// Глобальная функция для импорта листов
+(window as any).importSheets = (sheets: Array<{ name: string; data: string[][] }>) => {
+  importSheetsImpl(sheets);
+};
+
+// Импорт листов из файла
+function importSheetsImpl(sheets: Array<{ name: string; data: string[][] }>): void {
+  console.log('[Renderer] Importing sheets:', sheets.length);
+  
+  // Очищаем текущие данные
+  state.sheetsData.clear();
+  state.sheets = [];
+  
+  // Создаём листы из импортированных данных
+  sheets.forEach((sheet, index) => {
+    const id = index + 1;
+    const name = sheet.name || `Лист ${id}`;
+    state.sheets.push({ id, name });
+    
+    // Создаём данные для листа
+    const sheetData = new Map<string, { value: string; style?: any }>();
+    
+    // Заполняем данными из импортированного файла
+    sheet.data.forEach((row, rowIndex) => {
+      row.forEach((cellValue, colIndex) => {
+        if (cellValue && cellValue.trim() !== '') {
+          const key = getCellKey(rowIndex, colIndex);
+          sheetData.set(key, { value: cellValue });
+        }
+      });
+    });
+    
+    state.sheetsData.set(id, sheetData);
+  });
+  
+  // Переключаемся на первый лист
+  state.currentSheet = state.sheets[0]?.id || 1;
+  
+  // Перерисовываем таблицу
+  renderCells();
+  renderSheets();
+  updateFormulaBar();
+  
+  console.log('[Renderer] Import completed, sheets:', state.sheets.length);
+}
+
 // Делаем showExportMenu и exportData глобальными функциями
 (window as any).showExportMenu = showExportMenu;
 (window as any).exportData = exportData;
 (window as any).exportDataWithSheets = exportDataWithSheets;
+(window as any).importSheets = (window as any).importSheets;
 
 // Экспорт для ES module
 export {};

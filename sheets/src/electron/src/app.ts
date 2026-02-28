@@ -86,16 +86,31 @@ async function initApp(): Promise<void> {
     // Инициализация начального экрана
     logs.push('[App] Creating StartScreenComponent...');
     startScreen = new StartScreenComponent();
-    await startScreen.init((projectName: string) => {
-      // Callback при создании проекта
-      logs.push('[App] Project created: ' + projectName);
-      // Обновляем заголовок в TopBar
-      if (topBar) {
-        topBar.setProjectName(projectName);
+    await startScreen.init(
+      (projectName: string) => {
+        // Callback при создании проекта
+        logs.push('[App] Project created: ' + projectName);
+        // Обновляем заголовок в TopBar
+        if (topBar) {
+          topBar.setProjectName(projectName);
+        }
+        // Скрываем начальный экран
+        startScreen?.hide();
+      },
+      (sheets: Array<{ name: string; data: string[][] }>) => {
+        // Callback при открытии файла/папки
+        logs.push('[App] Importing sheets: ' + sheets.length);
+        
+        // Импортируем листы в таблицу
+        importSheets(sheets);
+        
+        // Скрываем начальный экран
+        startScreen?.hide();
+        if (topBar) {
+          topBar.setProjectName('Импортированный файл');
+        }
       }
-      // Скрываем начальный экран
-      startScreen?.hide();
-    });
+    );
     (window as any).startScreen = startScreen;
     logs.push('[App] StartScreenComponent initialized');
     
@@ -390,7 +405,7 @@ function saveSettings(): void {
  */
 function handleRibbonAction(action: string): void {
   console.log('[App] Ribbon action:', action);
-  
+
   switch (action) {
     case 'charts':
       createChartFromSelection();
@@ -416,6 +431,21 @@ function handleRibbonAction(action: string): void {
     case 'filter':
       toggleFilter();
       break;
+  }
+}
+
+/**
+ * Импорт листов из XLSX/CSV файла
+ */
+function importSheets(sheets: Array<{ name: string; data: string[][] }>): void {
+  console.log('[App] Importing sheets:', sheets);
+  
+  const importFunc = (window as any).importSheets;
+  if (typeof importFunc === 'function') {
+    importFunc(sheets);
+  } else {
+    console.error('[App] importSheets function not found');
+    alert('Ошибка импорта: функция импорта недоступна');
   }
 }
 
