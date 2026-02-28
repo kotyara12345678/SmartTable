@@ -2286,3 +2286,219 @@
 .dark-theme .support-link:hover {
   background: var(--bg-primary);
 }
+
+/* Sheet Export Dialog Styles */
+.sheet-export-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100000;
+  animation: fadeIn 0.3s ease;
+}
+
+.sheet-export-modal {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+.sheet-export-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--ribbon-bg);
+}
+
+.sheet-export-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sheet-export-close {
+  background: none;
+  border: none;
+  padding: 8px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sheet-export-close:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.sheet-export-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sheet-export-content {
+  padding: 24px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.sheet-export-content p {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.sheet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+}
+
+.sheet-item:hover {
+  background: var(--hover-bg);
+  border-color: var(--border-color);
+}
+
+.sheet-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary-color);
+  flex-shrink: 0;
+}
+
+.sheet-item-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-color);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.sheet-item-icon svg {
+  width: 20px;
+  height: 20px;
+  color: var(--text-secondary);
+}
+
+.sheet-item span {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+  flex: 1;
+}
+
+.sheet-item.selected {
+  background: var(--primary-light);
+  border-color: var(--primary-color);
+}
+
+.sheet-item.selected .sheet-item-icon svg {
+  color: var(--primary-color);
+}
+
+.sheet-export-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.sheet-export-actions .btn-cancel,
+.sheet-export-actions .btn-export {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sheet-export-actions .btn-cancel {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.sheet-export-actions .btn-cancel:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.sheet-export-actions .btn-export {
+  background: var(--primary-color);
+  color: white;
+}
+
+.sheet-export-actions .btn-export:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.sheet-export-actions .btn-export svg {
+  width: 16px;
+  height: 16px;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

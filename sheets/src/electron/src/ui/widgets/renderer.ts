@@ -1425,21 +1425,42 @@ function setupSheetContextMenu(): void {
   // ПКМ на списке листов
   elements.sheetsList.addEventListener('contextmenu', (e: MouseEvent) => {
     e.preventDefault();
-    
+
     const tab = (e.target as HTMLElement).closest('.sheet-tab') as HTMLElement;
     if (!tab) return;
-    
+
     const sheetId = parseInt(tab.dataset.sheet || '0');
     if (!sheetId) return;
-    
+
     state.contextMenuSheet = sheetId;
-    
+
     // Показать меню
     const menu = document.getElementById('sheetContextMenu');
     if (menu) {
       menu.style.display = 'block';
-      menu.style.left = `${e.pageX}px`;
-      menu.style.top = `${e.pageY}px`;
+      
+      // Получаем размеры меню и окна
+      const menuRect = menu.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+      
+      let left = e.pageX;
+      let top = e.pageY;
+      
+      // Проверяем, помещается ли меню по вертикали
+      if (top + menuRect.height > viewportHeight) {
+        // Если не помещается внизу - показываем выше курсора
+        top = e.pageY - menuRect.height;
+      }
+      
+      // Проверяем, помещается ли меню по горизонтали
+      if (left + menuRect.width > viewportWidth) {
+        // Если не помещается справа - показываем слева от курсора
+        left = e.pageX - menuRect.width;
+      }
+      
+      menu.style.left = `${left}px`;
+      menu.style.top = `${top}px`;
     }
   });
   
@@ -1864,7 +1885,7 @@ function setupEventListeners(): void {
     const data = getCurrentData();
     const cellData = data.get(key) || { value: '' };
 
-    showPromptModal('Введите комментарий:', (comment) => {
+    showPromptModal('Вв��дите комментарий:', (comment) => {
       if (!comment) return;
       
       cellData.style = cellData.style || {};
@@ -5155,7 +5176,7 @@ function showPromptModal(message: string, callback: (value: string | null) => vo
 
   okBtn?.addEventListener('click', () => close(input.value || null));
   cancelBtn?.addEventListener('click', () => close(null));
-  
+
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') close(input.value || null);
     if (e.key === 'Escape') close(null);
@@ -5165,9 +5186,181 @@ function showPromptModal(message: string, callback: (value: string | null) => vo
   input.select();
 }
 
+/**
+ * Экспорт данных с выбором листов
+ */
+async function exportDataWithSheets(format: string, sheetIds: number[]): Promise<void> {
+  console.log('[Export] Exporting sheets:', sheetIds, 'format:', format);
+  
+  // Собрать данные из выбранных листов
+  const sheetsData: Array<{name: string, data: string[][]}> = [];
+  
+  sheetIds.forEach(sheetId => {
+    const sheet = state.sheets.find(s => s.id === sheetId);
+    if (!sheet) return;
+    
+    const sheetData = state.sheetsData.get(sheetId) || new Map();
+    const rowData: string[][] = [];
+    
+    // Собрать данные из таблицы
+    for (let row = 0; row < CONFIG.ROWS; row++) {
+      const rowDataArray: string[] = [];
+      for (let col = 0; col < CONFIG.COLS; col++) {
+        const key = getCellKey(row, col);
+        const cellData = sheetData.get(key);
+        rowDataArray.push(cellData?.value || '');
+      }
+      rowData.push(rowDataArray);
+    }
+    
+    sheetsData.push({ name: sheet.name, data: rowData });
+  });
+  
+  let content = '';
+  let mimeType = 'text/plain';
+  let extension: string = format;
+  
+  switch (format) {
+    case 'xlsx':
+      // XML Spreadsheet с несколькими листами
+      content = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet">
+${sheetsData.map(sheet => `  <Worksheet ss:Name="${escapeXml(sheet.name)}">
+    <Table>
+${sheet.data.map(row => `      <Row>
+${row.map(cell => `        <Cell><Data ss:Type="String">${escapeXml(cell)}</Data></Cell>`).join('\n')}
+      </Row>`).join('\n')}
+    </Table>
+  </Worksheet>`).join('\n')}
+</Workbook>`;
+      mimeType = 'application/vnd.ms-excel';
+      extension = 'xls';
+      break;
+      
+    case 'csv':
+      // CSV экспортирует только первый выбранный лист
+      if (sheetsData.length > 0) {
+        content = sheetsData[0].data.map(row => row.map(cell => {
+          if (cell.includes(',') || cell.includes('"') || cell.includes('\n')) {
+            return `"${cell.replace(/"/g, '""')}"`;
+          }
+          return cell;
+        }).join(',')).join('\n');
+      }
+      mimeType = 'text/csv;charset=utf-8';
+      break;
+      
+    case 'json':
+      // JSON со всеми листами
+      content = JSON.stringify(sheetsData.map(s => ({ sheetName: s.name, data: s.data })), null, 2);
+      mimeType = 'application/json';
+      break;
+      
+    case 'html':
+      // HTML с несколькими листами как таблицы
+      content = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>SmartTable Export</title></head>
+<body>
+${sheetsData.map(sheet => `<h2>Sheet: ${escapeXml(sheet.name)}</h2>
+<table border="1">
+${sheet.data.map(row => `  <tr>${row.map(cell => `<td>${escapeXml(cell)}</td>`).join('')}</tr>`).join('\n')}
+</table>`).join('\n')}
+</body>
+</html>`;
+      mimeType = 'text/html';
+      break;
+      
+    case 'xml':
+      // XML экспорт
+      content = `<?xml version="1.0" encoding="UTF-8"?>
+<SmartTable>
+  <Metadata>
+    <ExportDate>${new Date().toISOString()}</ExportDate>
+    <Sheets>${sheetsData.length}</Sheets>
+  </Metadata>
+  <Data>
+${sheetsData.map(sheet => `    <Sheet name="${escapeXml(sheet.name)}">
+${sheet.data.map((row, ri) => `      <Row index="${ri}">
+${row.map((cell, ci) => `        <Cell index="${ci}">${escapeXml(cell)}</Cell>`).join('\n')}
+      </Row>`).join('\n')}
+    </Sheet>`).join('\n')}
+  </Data>
+</SmartTable>`;
+      mimeType = 'application/xml';
+      extension = 'xml';
+      break;
+      
+    case 'markdown':
+      // Markdown с несколькими листами
+      content = sheetsData.map(sheet => 
+        `## ${sheet.name}\n\n` +
+        `| ${sheet.data[0]?.map(() => 'Column').join(' | ')} |\n` +
+        `| ${sheet.data[0]?.map(() => '---').join(' | ')} |\n` +
+        sheet.data.map(row => `| ${row.join(' | ')} |`).join('\n')
+      ).join('\n\n');
+      mimeType = 'text/markdown';
+      extension = 'md';
+      break;
+      
+    case 'ods':
+      // ODS (простой XML)
+      content = `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tdc:office" xmlns:table="urn:oasis:names:tdc:table">
+  <office:body>
+    <office:spreadsheet>
+${sheetsData.map(sheet => `      <table:table table:name="${escapeXml(sheet.name)}">
+${sheet.data.map(row => `        <table:table-row>
+${row.map(cell => `          <table:table-cell><text:p>${escapeXml(cell)}</text:p></table:table-cell>`).join('\n')}
+        </table:table-row>`).join('\n')}
+      </table:table>`).join('\n')}
+    </office:spreadsheet>
+  </office:body>
+</office:document-content>`;
+      mimeType = 'application/vnd.oasis.opendocument.spreadsheet';
+      break;
+      
+    case 'tsv':
+      // TSV экспортирует только первый выбранный лист
+      if (sheetsData.length > 0) {
+        content = sheetsData[0].data.map(row => row.join('\t')).join('\n');
+      }
+      mimeType = 'text/tab-separated-values';
+      break;
+  }
+  
+  // Сохраняем через IPC
+  if (ipcRenderer) {
+    console.log('[Export] Calling save-file IPC handler...');
+    try {
+      const result = await ipcRenderer.invoke('save-file', {
+        content,
+        mimeType,
+        extension,
+        defaultName: `SmartTable_${new Date().toISOString().slice(0,10)}`
+      });
+      console.log('[Export] Save result:', result);
+      if (result.success) {
+        console.log('[Export] File saved successfully:', result.filePath);
+      } else {
+        console.log('[Export] Save cancelled by user');
+      }
+    } catch (error) {
+      console.error('[Export] Error saving file:', error);
+    }
+  } else {
+    console.error('[Export] ipcRenderer not available!');
+  }
+}
+
+// Глобальная функция для получения списка листов
+(window as any).getSheets = () => state.sheets;
+
 // Делаем showExportMenu и exportData глобальными функциями
 (window as any).showExportMenu = showExportMenu;
 (window as any).exportData = exportData;
+(window as any).exportDataWithSheets = exportDataWithSheets;
 
 // Экспорт для ES module
 export {};
