@@ -708,6 +708,11 @@ let lastSelectedCell: { row: number; col: number } | null = null;
 let lastSelectTime: number = 0;
 
 function selectCell(row: number, col: number): void {
+  // Завершить редактирование если оно идет
+  if (state.isEditing) {
+    finishEditing();
+  }
+
   // Не снимать выделение если идет выделение диапазона
   if (!state.isSelecting) {
     elements.cellGrid.querySelectorAll('.cell.selected').forEach(cell => {
@@ -3949,10 +3954,14 @@ function showExportMenu(): void {
   `;
   
   const options = [
-    { format: 'csv', label: 'CSV (.csv)', icon: '📄' },
     { format: 'xlsx', label: 'Excel (.xlsx)', icon: '📊' },
+    { format: 'ods', label: 'OpenDocument (.ods)', icon: '📑' },
+    { format: 'csv', label: 'CSV (.csv)', icon: '📄' },
+    { format: 'tsv', label: 'TSV (.tsv)', icon: '📝' },
     { format: 'json', label: 'JSON (.json)', icon: '📋' },
+    { format: 'xml', label: 'XML (.xml)', icon: '📄' },
     { format: 'html', label: 'HTML (.html)', icon: '🌐' },
+    { format: 'markdown', label: 'Markdown (.md)', icon: '📖' },
   ];
   
   options.forEach(opt => {
@@ -3994,7 +4003,7 @@ function showExportMenu(): void {
   }, 100);
 }
 
-function exportData(format: 'csv' | 'xlsx' | 'json' | 'html'): void {
+function exportData(format: 'csv' | 'xlsx' | 'json' | 'html' | 'xml' | 'ods' | 'tsv' | 'markdown'): void {
   const data: string[][] = [];
   
   // Собрать данные из таблицы
@@ -4050,13 +4059,68 @@ ${data.map(row => `  <tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).
   <Worksheet ss:Name="Sheet1">
     <Table>
 ${data.map(row => `      <Row>
-${row.map(cell => `        <Cell><Data ss:Type="String">${cell}</Data></Cell>`).join('\n')}
+${row.map(cell => `        <Cell><Data ss:Type="String">${escapeXml(cell)}</Data></Cell>`).join('\n')}
       </Row>`).join('\n')}
     </Table>
   </Worksheet>
 </Workbook>`;
       mimeType = 'application/vnd.ms-excel';
       extension = 'xls';
+      break;
+
+    case 'xml':
+      // XML экспорт
+      content = `<?xml version="1.0" encoding="UTF-8"?>
+<SmartTable>
+  <Metadata>
+    <ExportDate>${new Date().toISOString()}</ExportDate>
+    <Rows>${CONFIG.ROWS}</Rows>
+    <Cols>${CONFIG.COLS}</Cols>
+  </Metadata>
+  <Data>
+${data.map((row, ri) => `    <Row index="${ri}">
+${row.map((cell, ci) => `      <Cell index="${ci}">${escapeXml(cell)}</Cell>`).join('\n')}
+    </Row>`).join('\n')}
+  </Data>
+</SmartTable>`;
+      mimeType = 'application/xml';
+      extension = 'xml';
+      break;
+
+    case 'ods':
+      // OpenDocument Spreadsheet
+      content = `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tdc:office" xmlns:table="urn:oasis:names:tdc:table" xmlns:text="urn:oasis:names:tdc:text">
+  <office:body>
+    <office:spreadsheet>
+      <table:table table:name="Sheet1">
+${data.map(row => row.map(cell => `        <table:table-cell><text:p>${escapeXml(cell)}</text:p></table:table-cell>`).join('\n') + `
+      </table:table-row>`).join('\n')}
+      </table:table>
+    </office:spreadsheet>
+  </office:body>
+</office:document-content>`;
+      mimeType = 'application/vnd.oasis.opendocument.spreadsheet';
+      extension = 'ods';
+      break;
+
+    case 'tsv':
+      // Tab-separated values
+      content = data.map(row => row.join('\t')).join('\n');
+      mimeType = 'text/tab-separated-values';
+      extension = 'tsv';
+      break;
+
+    case 'markdown':
+      // Markdown таблица
+      const header = data[0] || [];
+      const separator = header.map(() => '---').join(' | ');
+      const rows = data.slice(1).map(row => row.join(' | '));
+      content = `| ${header.join(' | ')} |
+| ${separator} |
+${rows.map(row => `| ${row} |`).join('\n')}`;
+      mimeType = 'text/markdown';
+      extension = 'md';
       break;
   }
   
@@ -5100,6 +5164,10 @@ function showPromptModal(message: string, callback: (value: string | null) => vo
   input.focus();
   input.select();
 }
+
+// Делаем showExportMenu и exportData глобальными функциями
+(window as any).showExportMenu = showExportMenu;
+(window as any).exportData = exportData;
 
 // Экспорт для ES module
 export {};
