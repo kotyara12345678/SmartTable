@@ -4,12 +4,21 @@ console.log('[Renderer] Script loaded!');
 // === КОНФИГУРАЦИЯ ===
 const CONFIG = {
   ROWS: 100,
-  COLS: 26,
+  COLS: 100,
   CELL_WIDTH: 100,
   CELL_HEIGHT: 32,
   HEADER_WIDTH: 50,
   HEADER_HEIGHT: 32,
 };
+
+// Переменные для virtual scrolling
+let visibleRange = {
+  rowStart: 0,
+  rowEnd: 0,
+  colStart: 0,
+  colEnd: 0
+};
+let renderScheduled = false;
 
 // === СОСТОЯНИЕ ===
 const state = {
@@ -240,7 +249,7 @@ function autoSave(): void {
 function autoLoad(): void {
   try {
     const saved = localStorage.getItem('smarttable-autosave');
-    
+
     // Загружаем данные
     const currentData = getCurrentData();
     currentData.clear();
@@ -249,30 +258,41 @@ function autoLoad(): void {
       const data = JSON.parse(saved);
       console.log('[AutoLoad] Found autosave from:', new Date(data.timestamp).toLocaleString());
 
-      Object.keys(data.sheetsData).forEach(key => {
-        currentData.set(key, data.sheetsData[key]);
-      });
+      // Загружаем sheetsData
+      if (data.sheetsData) {
+        Object.keys(data.sheetsData).forEach(sheetKey => {
+          const sheetData = data.sheetsData[sheetKey];
+          const sheetMap = new Map();
+          
+          // Преобразуем объект в Map
+          if (typeof sheetData === 'object') {
+            Object.keys(sheetData).forEach(cellKey => {
+              sheetMap.set(cellKey, sheetData[cellKey]);
+            });
+          }
+          
+          state.sheetsData.set(parseInt(sheetKey), sheetMap);
+        });
+      } else if (data.cells) {
+        // Старый формат - только cells
+        Object.keys(data.cells).forEach(key => {
+          currentData.set(key, data.cells[key]);
+        });
+      }
 
       state.currentSheet = data.currentSheet || 1;
+      
+      // Обновляем имя файла в заголовке
+      if (data.fileName) {
+        updateFileNameInHeader(data.fileName);
+      }
 
-      // НЕ загружаем dataValidations из старых сохранений!
-      // state.dataValidations остаётся пустым
-
-      console.log('[AutoLoad] Data loaded successfully');
+      console.log('[AutoLoad] Data loaded successfully, sheets:', state.sheetsData.size);
     }
 
     // ПРИНУДИТЕЛЬНО очищаем dataValidations при каждой загрузке!
-    // Это удалит злощастный текст из A1
     state.dataValidations.clear();
     console.log('[AutoLoad] Force cleared dataValidations');
-
-    // Проверяем и очищаем ячейку A1 если там текст setDataValidation
-    const a1Key = getCellKey(0, 0); // A1 = row 0, col 0
-    const a1Data = currentData.get(a1Key);
-    if (a1Data && a1Data.value && a1Data.value.includes('setDataValidation')) {
-      currentData.delete(a1Key);
-      console.log('[AutoLoad] Removed setDataValidation text from A1');
-    }
 
     renderCells();
     updateAIDataCache();
@@ -280,6 +300,15 @@ function autoLoad(): void {
   } catch (e) {
     console.error('[AutoLoad] Error:', e);
   }
+}
+
+function updateFileNameInHeader(fileName: string): void {
+  // Обновляем имя файла в TopBar
+  const topBar = document.querySelector('#fileName') as HTMLElement;
+  if (topBar) {
+    topBar.textContent = fileName;
+  }
+  console.log('[AutoLoad] File name updated in header:', fileName);
 }
 
 // Очистить всё состояние и localStorage
@@ -430,7 +459,16 @@ function initElements(): void {
 
 // === УТИЛИТЫ ===
 function colToLetter(col: number): string {
-  return String.fromCharCode(65 + col);
+  let letter = '';
+  let n = col + 1; // Excel использует 1-индексацию
+  
+  while (n > 0) {
+    n--;
+    letter = String.fromCharCode(65 + (n % 26)) + letter;
+    n = Math.floor(n / 26);
+  }
+  
+  return letter;
 }
 
 function getCellId(row: number, col: number): string {
@@ -502,6 +540,8 @@ async function init(): Promise<void> {
   // Рендерим таблицу
   renderColumnHeaders();
   renderRowHeaders();
+  renderFixedColumnHeaders();
+  renderFixedRowHeaders();
   renderCells();
 
   // Автозагрузка сохранённых данных (после рендеринга!)
@@ -601,8 +641,24 @@ function renderColumnHeaders(): void {
     header.addEventListener('click', () => selectColumn(col));
     elements.columnHeaders.appendChild(header);
   }
-  // Добавим пустой элемент в начале для угла
-  elements.columnHeaders.style.display = 'flex';
+}
+
+function renderFixedColumnHeaders(): void {
+  const fixedHeaders = document.getElementById('fixedColumnHeaders');
+  if (!fixedHeaders) return;
+  
+  fixedHeaders.innerHTML = '';
+  // Фиксируем первые 5 столбцов (A-E)
+  const fixedCols = Math.min(5, CONFIG.COLS);
+  for (let col = 0; col < fixedCols; col++) {
+    const header = document.createElement('div');
+    header.className = 'fixed-column-header';
+    header.textContent = colToLetter(col);
+    header.dataset.col = col.toString();
+    header.style.width = `${CONFIG.CELL_WIDTH}px`;
+    header.addEventListener('click', () => selectColumn(col));
+    fixedHeaders.appendChild(header);
+  }
 }
 
 function renderRowHeaders(): void {
@@ -617,7 +673,50 @@ function renderRowHeaders(): void {
   }
 }
 
+function renderFixedRowHeaders(): void {
+  const fixedHeaders = document.getElementById('fixedRowHeaders');
+  if (!fixedHeaders) return;
+  
+  fixedHeaders.innerHTML = '';
+  // Фиксируем первые 5 строк (1-5)
+  const fixedRows = Math.min(5, CONFIG.ROWS);
+  for (let row = 0; row < fixedRows; row++) {
+    const header = document.createElement('div');
+    header.className = 'fixed-row-header';
+    header.textContent = (row + 1).toString();
+    header.dataset.row = row.toString();
+    header.style.height = `${CONFIG.CELL_HEIGHT}px`;
+    header.addEventListener('click', () => selectRow(row));
+    fixedHeaders.appendChild(header);
+  }
+}
+
+function syncFixedHeaders(): void {
+  const fixedColumnHeaders = document.getElementById('fixedColumnHeaders');
+  const fixedRowHeaders = document.getElementById('fixedRowHeaders');
+  const scrollLeft = elements.cellGridWrapper.scrollLeft;
+  const scrollTop = elements.cellGridWrapper.scrollTop;
+  
+  // Скрываем фиксированные заголовки когда прокрутка больше 0
+  if (fixedColumnHeaders) {
+    fixedColumnHeaders.style.display = scrollLeft > 0 ? 'flex' : 'none';
+  }
+  if (fixedRowHeaders) {
+    fixedRowHeaders.style.display = scrollTop > 0 ? 'flex' : 'none';
+  }
+}
+
 function renderCells(): void {
+  if (renderScheduled) return;
+  renderScheduled = true;
+  
+  requestAnimationFrame(() => {
+    renderScheduled = false;
+    renderVisibleCells();
+  });
+}
+
+function renderVisibleCells(): void {
   // Сохраняем текущее выделение
   const selectedCells = Array.from(elements.cellGrid.querySelectorAll('.cell.selected'))
     .map(cell => {
@@ -628,19 +727,39 @@ function renderCells(): void {
       };
     });
 
-  elements.cellGrid.innerHTML = '';
-  elements.cellGrid.style.gridTemplateColumns = `repeat(${CONFIG.COLS}, ${CONFIG.CELL_WIDTH}px)`;
-  elements.cellGrid.style.gridTemplateRows = `repeat(${CONFIG.ROWS}, ${CONFIG.CELL_HEIGHT}px)`;
-
   const data = getCurrentData();
+  const fragment = document.createDocumentFragment();
 
-  for (let row = 0; row < CONFIG.ROWS; row++) {
-    for (let col = 0; col < CONFIG.COLS; col++) {
+  // Вычисляем видимый диапазон
+  calculateVisibleRange();
+
+  // Рендерим только видимые ячейки + буфер
+  const buffer = 3;
+  const rowStart = Math.max(0, visibleRange.rowStart - buffer);
+  const rowEnd = Math.min(CONFIG.ROWS, visibleRange.rowEnd + buffer);
+  const colStart = Math.max(0, visibleRange.colStart - buffer);
+  const colEnd = Math.min(CONFIG.COLS, visibleRange.colEnd + buffer);
+
+  // Устанавливаем размеры сетки для правильного скролла
+  elements.cellGrid.style.width = `${CONFIG.COLS * CONFIG.CELL_WIDTH}px`;
+  elements.cellGrid.style.height = `${CONFIG.ROWS * CONFIG.CELL_HEIGHT}px`;
+  elements.cellGrid.style.position = 'relative';
+  elements.cellGrid.style.display = 'block';
+
+  for (let row = rowStart; row < rowEnd; row++) {
+    for (let col = colStart; col < colEnd; col++) {
       const cell = document.createElement('div');
       cell.className = 'cell';
       cell.dataset.row = row.toString();
       cell.dataset.col = col.toString();
       cell.tabIndex = -1;
+      
+      // Абсолютное позиционирование
+      cell.style.position = 'absolute';
+      cell.style.left = `${col * CONFIG.CELL_WIDTH}px`;
+      cell.style.top = `${row * CONFIG.CELL_HEIGHT}px`;
+      cell.style.width = `${CONFIG.CELL_WIDTH}px`;
+      cell.style.height = `${CONFIG.CELL_HEIGHT}px`;
 
       // Загрузка данных
       const key = getCellKey(row, col);
@@ -658,19 +777,19 @@ function renderCells(): void {
             }
           });
 
-          // Если ячейка объединённая - устанавливаем grid свойства
+          // Если ячейка объединённая
           if (cellData.style.merged) {
-            if (cellData.style.gridColumnStart && cellData.style.colspan) {
-              cell.style.gridColumn = `${cellData.style.gridColumnStart} / span ${cellData.style.colspan}`;
+            if (cellData.style.colspan) {
+              cell.style.width = `${cellData.style.colspan * CONFIG.CELL_WIDTH}px`;
             }
-            if (cellData.style.gridRowStart && cellData.style.rowspan) {
-              cell.style.gridRow = `${cellData.style.gridRowStart} / span ${cellData.style.rowspan}`;
+            if (cellData.style.rowspan) {
+              cell.style.height = `${cellData.style.rowspan * CONFIG.CELL_HEIGHT}px`;
             }
           }
         }
       }
 
-      // Проверка data validation - только устанавливаем флаг, обработчик через делегирование
+      // Проверка data validation
       const validation = getDataValidation(row, col);
       if (validation && validation.type === 'list') {
         cell.style.cursor = 'pointer';
@@ -678,9 +797,12 @@ function renderCells(): void {
         renderCellDropdown(cell, row, col);
       }
 
-      elements.cellGrid.appendChild(cell);
+      fragment.appendChild(cell);
     }
   }
+
+  elements.cellGrid.innerHTML = '';
+  elements.cellGrid.appendChild(fragment);
 
   // Восстанавливаем выделение
   selectedCells.forEach(({ row, col }) => {
@@ -691,6 +813,24 @@ function renderCells(): void {
   });
 
   // Обновляем заголовки
+  updateSelectionHeaders();
+}
+
+function calculateVisibleRange(): void {
+  const scrollLeft = elements.cellGridWrapper.scrollLeft;
+  const scrollTop = elements.cellGridWrapper.scrollTop;
+  const viewportWidth = elements.cellGridWrapper.clientWidth;
+  const viewportHeight = elements.cellGridWrapper.clientHeight;
+
+  visibleRange.colStart = Math.floor(scrollLeft / CONFIG.CELL_WIDTH);
+  visibleRange.colEnd = Math.ceil((scrollLeft + viewportWidth) / CONFIG.CELL_WIDTH);
+  visibleRange.rowStart = Math.floor(scrollTop / CONFIG.CELL_HEIGHT);
+  visibleRange.rowEnd = Math.ceil((scrollTop + viewportHeight) / CONFIG.CELL_HEIGHT);
+}
+
+// === ВЫДЕЛЕНИЕ ЯЧЕЕК ===
+
+function updateSelectionHeaders(): void {
   const rowHeader = elements.rowHeaders.querySelector(`.row-header[data-row="${state.selectedCell.row}"]`);
   if (rowHeader) {
     rowHeader.classList.add('selected');
@@ -700,8 +840,6 @@ function renderCells(): void {
     colHeader.classList.add('selected');
   }
 }
-
-// === ВЫДЕЛЕНИЕ ЯЧЕЕК ===
 
 // Для отслеживания повторного клика по той же ячейке
 let lastSelectedCell: { row: number; col: number } | null = null;
@@ -797,8 +935,8 @@ function selectColumn(col: number): void {
 }
 
 function getCellElement(row: number, col: number): HTMLDivElement | null {
-  const index = row * CONFIG.COLS + col;
-  return elements.cellGrid.children[index] as HTMLDivElement | null;
+  // Ищем по data-атрибутам вместо индекса
+  return elements.cellGrid.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`) as HTMLDivElement | null;
 }
 
 // === РЕДАКТИРОВАНИЕ ===
@@ -843,7 +981,7 @@ function finishEditing(): void {
     const getCellValue = (cellRef: string): string => {
       const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
       if (!match) return '';
-      
+
       const c = match[1].toUpperCase().charCodeAt(0) - 65;
       const r = parseInt(match[2]) - 1;
       const cellKey = getCellKey(r, c);
@@ -869,13 +1007,38 @@ function finishEditing(): void {
 
   updateFormulaBar();
 
-  // Перерисовать ячейку
-  renderCells();
+  // НЕ перерисовываем все ячейки, а обновляем только текущую
+  updateSingleCell(state.selectedCell.row, state.selectedCell.col);
 
   // Автоподбор ширины если включен
   const autoFitEnabled = localStorage.getItem('smarttable-auto-fit-columns') === 'true';
   if (autoFitEnabled && finalValue) {
     autoFitColumn(state.selectedCell.col);
+  }
+}
+
+function updateSingleCell(row: number, col: number): void {
+  const cell = getCellElement(row, col);
+  if (!cell) return;
+
+  const key = getCellKey(row, col);
+  const cellData = getCurrentData().get(key);
+
+  if (cellData) {
+    cell.textContent = cellData.value;
+    cell.classList.add('has-content');
+
+    // Применяем стили
+    if (cellData.style) {
+      Object.entries(cellData.style).forEach(([prop, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          (cell.style as any)[prop] = value;
+        }
+      });
+    }
+  } else {
+    cell.textContent = '';
+    cell.classList.remove('has-content');
   }
 }
 
@@ -1311,8 +1474,7 @@ function setupCellEventListeners(): void {
     }
   });
 
-  // Двойной клик (редактирование) - теперь не нужен, т.к. редактирование начинается по клику или клавише
-  // Оставлен для совместимости, если пользователь привык к двойному клику
+  // Двойной клик (редактирование)
   elements.cellGrid.addEventListener('dblclick', (e: MouseEvent) => {
     const cell = (e.target as HTMLElement).closest('.cell') as HTMLElement;
     if (!cell) return;
@@ -1336,6 +1498,23 @@ function setupCellEventListeners(): void {
     if (!cell.classList.contains('cell')) return;
 
     handleCellInput(e);
+  });
+  
+  // Обработка начала редактирования по клавише
+  elements.cellGrid.addEventListener('keypress', (e: KeyboardEvent) => {
+    const cell = (e.target as HTMLElement).closest('.cell') as HTMLElement;
+    if (!cell) return;
+    
+    // Игнорируем если уже редактируем
+    if (state.isEditing) return;
+    
+    const row = parseInt(cell.dataset.row || '0');
+    const col = parseInt(cell.dataset.col || '0');
+    
+    // Начинаем редактирование если нажата printable клавиша
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      editCellWithChar(row, col, e.key);
+    }
   });
 }
 
@@ -1757,7 +1936,7 @@ function setupEventListeners(): void {
     });
   });
 
-  // Изменение цвета текста
+  // Изменение ц��ета текста
   document.addEventListener('text-color-change', (e: Event) => {
     const event = e as CustomEvent<{ color: string }>;
     applyColorToSelection('text', event.detail.color);
@@ -1948,6 +2127,7 @@ function setupEventListeners(): void {
   });
 
   // Синхронизация скролла
+  let scrollFrameId: number | null = null;
   elements.cellGridWrapper.addEventListener('scroll', () => {
     const scrollLeft = elements.cellGridWrapper.scrollLeft;
     const scrollTop = elements.cellGridWrapper.scrollTop;
@@ -1957,6 +2137,18 @@ function setupEventListeners(): void {
 
     // Синхронизация заголовков строк
     elements.rowHeaders.scrollTop = scrollTop;
+    
+    // Синхронизация фиксированных заголовков
+    syncFixedHeaders();
+
+    // Оптимизация: перерисовка только видимых ячеек при скролле
+    if (scrollFrameId !== null) {
+      cancelAnimationFrame(scrollFrameId);
+    }
+    scrollFrameId = requestAnimationFrame(() => {
+      renderVisibleCells();
+      scrollFrameId = null;
+    });
   });
 
   // Изменение размера столбцов
@@ -2224,6 +2416,43 @@ function setupEventListeners(): void {
 }
 
 function handleGlobalKeyDown(e: KeyboardEvent): void {
+  // Игнорируем если фокус на input/textarea
+  const target = e.target as HTMLElement;
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+    return;
+  }
+
+  // Обработка стрелок для навигации
+  if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+    switch (e.key) {
+      case 'ArrowUp':
+        e.preventDefault();
+        moveSelection(-1, 0);
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        moveSelection(1, 0);
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        moveSelection(0, -1);
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        moveSelection(0, 1);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        moveSelection(1, 0);
+        break;
+      case 'Tab':
+        e.preventDefault();
+        moveSelection(0, e.shiftKey ? -1 : 1);
+        break;
+    }
+    return;
+  }
+
   // Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+Z, Ctrl+Y
   if (e.ctrlKey || e.metaKey) {
     switch (e.key.toLowerCase()) {
@@ -2252,6 +2481,56 @@ function handleGlobalKeyDown(e: KeyboardEvent): void {
         elements.aiPanel.classList.toggle('open');
         break;
     }
+  }
+}
+
+function moveSelection(deltaRow: number, deltaCol: number): void {
+  let newRow = state.selectedCell.row + deltaRow;
+  let newCol = state.selectedCell.col + deltaCol;
+
+  // Ограничиваем в пределах таблицы
+  newRow = Math.max(0, Math.min(CONFIG.ROWS - 1, newRow));
+  newCol = Math.max(0, Math.min(CONFIG.COLS - 1, newCol));
+
+  // Выделяем новую ячейку
+  selectCell(newRow, newCol);
+
+  // Прокручиваем к ячейке если нужно
+  scrollToCell(newRow, newCol);
+}
+
+function scrollToCell(row: number, col: number): void {
+  const cellTop = row * CONFIG.CELL_HEIGHT;
+  const cellLeft = col * CONFIG.CELL_WIDTH;
+  const cellBottom = cellTop + CONFIG.CELL_HEIGHT;
+  const cellRight = cellLeft + CONFIG.CELL_WIDTH;
+
+  const scrollTop = elements.cellGridWrapper.scrollTop;
+  const scrollLeft = elements.cellGridWrapper.scrollLeft;
+  const viewportHeight = elements.cellGridWrapper.clientHeight;
+  const viewportWidth = elements.cellGridWrapper.clientWidth;
+
+  let newScrollTop = scrollTop;
+  let newScrollLeft = scrollLeft;
+
+  // Прокрутка по вертикали
+  if (cellTop < scrollTop) {
+    newScrollTop = cellTop;
+  } else if (cellBottom > scrollTop + viewportHeight) {
+    newScrollTop = cellBottom - viewportHeight;
+  }
+
+  // Прокрутка по горизонтали
+  if (cellLeft < scrollLeft) {
+    newScrollLeft = cellLeft;
+  } else if (cellRight > scrollLeft + viewportWidth) {
+    newScrollLeft = cellRight - viewportWidth;
+  }
+
+  // Применяем прокрутку
+  if (newScrollTop !== scrollTop || newScrollLeft !== scrollLeft) {
+    elements.cellGridWrapper.scrollTop = newScrollTop;
+    elements.cellGridWrapper.scrollLeft = newScrollLeft;
   }
 }
 

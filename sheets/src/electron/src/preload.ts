@@ -17,3 +17,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   }
 });
+
+// API для работы с файлами
+contextBridge.exposeInMainWorld('filesAPI', {
+  scanFiles: (options?: { extensions?: string[]; directories?: string[] }) => 
+    ipcRenderer.invoke('scan-files', options),
+  openFile: (filePath: string) => 
+    ipcRenderer.invoke('open-file', filePath),
+  exportToExcel: (data: any, filePath?: string) => 
+    ipcRenderer.invoke('export-to-excel', { data, filePath })
+});

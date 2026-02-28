@@ -8,7 +8,7 @@ export interface TimeSession {
   start_time: string; // ISO string
   end_time?: string; // ISO string
   duration_seconds: number;
-  session_type: 'spreadsheet' | 'dashboard' | 'ai_chat' | 'other';
+  session_type: 'spreadsheet' | 'ai_chat' | 'other';
   is_active: boolean;
 }
 
@@ -16,7 +16,6 @@ export interface DailyStats {
   date: string;
   total_seconds: number;
   spreadsheet_seconds: number;
-  dashboard_seconds: number;
   ai_chat_seconds: number;
   other_seconds: number;
   session_count: number;
@@ -214,7 +213,6 @@ export class TimeTracker {
       date,
       total_seconds: 0,
       spreadsheet_seconds: 0,
-      dashboard_seconds: 0,
       ai_chat_seconds: 0,
       other_seconds: 0,
       session_count: daySessions.length
@@ -296,7 +294,6 @@ export class TimeTracker {
         date,
         total_seconds: 0,
         spreadsheet_seconds: 0,
-        dashboard_seconds: 0,
         ai_chat_seconds: 0,
         other_seconds: 0,
         session_count: daySessions.length

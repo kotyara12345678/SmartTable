@@ -1,5 +1,5 @@
 /**
- * Dashboard Component - современный личный кабинет с функциональными действиями
+ * Dashboard Component - современный Hub с функциональными действиями
  */
 import { timeTracker, DailyStats, WeeklyStats } from '../core/time-tracker.js';
 
@@ -128,6 +128,13 @@ export class DashboardComponent {
                 <rect x="3" y="14" width="7" height="7"/>
               </svg>
               <span>Dashboard</span>
+            </a>
+            <a href="#" class="nav-item" data-section="documents">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2Z"/>
+                <polyline points="14,2 14,8 20,8"/>
+              </svg>
+              <span>Документы</span>
             </a>
             <a href="#" class="nav-item" data-section="profile">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -301,55 +308,6 @@ export class DashboardComponent {
           </div>
         </div>
 
-        <!-- Activity Breakdown -->
-        <div class="activity-breakdown">
-          <h3>Распределение времени сегодня</h3>
-          <div class="activity-bars">
-            <div class="activity-bar">
-              <div class="activity-label">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2Z"/>
-                  <polyline points="14,2 14,8 20,8"/>
-                </svg>
-                <span>Таблицы</span>
-              </div>
-              <div class="activity-progress">
-                <div class="activity-fill spreadsheet" style="width: ${this.getPercentage(dailyStats.spreadsheet_seconds, dailyStats.total_seconds)}%"></div>
-                <span class="activity-time">${timeTracker.formatTime(dailyStats.spreadsheet_seconds)}</span>
-              </div>
-            </div>
-
-            <div class="activity-bar">
-              <div class="activity-label">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="3" y="3" width="7" height="7"/>
-                  <rect x="14" y="3" width="7" height="7"/>
-                  <rect x="14" y="14" width="7" height="7"/>
-                  <rect x="3" y="14" width="7" height="7"/>
-                </svg>
-                <span>Личный кабинет</span>
-              </div>
-              <div class="activity-progress">
-                <div class="activity-fill dashboard" style="width: ${this.getPercentage(dailyStats.dashboard_seconds, dailyStats.total_seconds)}%"></div>
-                <span class="activity-time">${timeTracker.formatTime(dailyStats.dashboard_seconds)}</span>
-              </div>
-            </div>
-
-            <div class="activity-bar">
-              <div class="activity-label">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                </svg>
-                <span>AI Ассистент</span>
-              </div>
-              <div class="activity-progress">
-                <div class="activity-fill ai-chat" style="width: ${this.getPercentage(dailyStats.ai_chat_seconds, dailyStats.total_seconds)}%"></div>
-                <span class="activity-time">${timeTracker.formatTime(dailyStats.ai_chat_seconds)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- Metrics Cards -->
         <div class="metrics-grid">
           <div class="metric-card" id="activityMetricCard" title="Нажмите для подробностей">
@@ -376,20 +334,6 @@ export class DashboardComponent {
               <h3 class="metric-title">Документы</h3>
               <p class="metric-value" id="documentsCount">0</p>
               <p class="metric-change positive" id="documentsChange">Загрузка...</p>
-            </div>
-          </div>
-
-          <div class="metric-card">
-            <div class="metric-clock time">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <polyline points="12,6 12,12 16,14"/>
-              </svg>
-            </div>
-            <div class="metric-content">
-              <h3 class="metric-title">Время работы</h3>
-              <p class="metric-value">${timeTracker.formatTime(dailyStats.total_seconds)}</p>
-              <p class="metric-change neutral">+8ч за неделю</p>
             </div>
           </div>
 
@@ -470,7 +414,7 @@ export class DashboardComponent {
   private getActivityTypeLabel(type: string): string {
     const labels: Record<string, string> = {
       spreadsheet: 'Таблицы',
-      dashboard: 'Личный кабинет',
+      dashboard: 'Hub',
       ai_chat: 'AI Ассистент',
       settings: 'Настройки'
     };
@@ -562,20 +506,6 @@ export class DashboardComponent {
         time: timeTracker.formatTime(dailyStats.spreadsheet_seconds),
         detail: `Ячеек: ${this.getCellsFilled()}`,
         color: 'spreadsheet'
-      },
-      {
-        icon: `
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="7" height="7"/>
-            <rect x="14" y="3" width="7" height="7"/>
-            <rect x="14" y="14" width="7" height="7"/>
-            <rect x="3" y="14" width="7" height="7"/>
-          </svg>
-        `,
-        title: 'Личный кабинет',
-        time: timeTracker.formatTime(dailyStats.dashboard_seconds),
-        detail: `Открытий: ${this.getDashboardOpens()}`,
-        color: 'dashboard'
       },
       {
         icon: `
@@ -700,8 +630,11 @@ export class DashboardComponent {
     }
 
     const sizeMB = (totalSize / (1024 * 1024)).toFixed(3);
-    const freeSpace = Math.max(0, (5 - parseFloat(sizeMB))).toFixed(3);
-    const percentUsed = Math.min(100, (parseFloat(sizeMB) / 5 * 100)).toFixed(1);
+    const sizeGB = (totalSize / (1024 * 1024 * 1024)).toFixed(3);
+    const storageLimitMB = 10 * 1024; // 10 ГБ в МБ
+    const freeSpace = Math.max(0, (storageLimitMB - parseFloat(sizeMB))).toFixed(3);
+    const freeSpaceGB = (parseFloat(freeSpace) / 1024).toFixed(3);
+    const percentUsed = Math.min(100, (parseFloat(sizeMB) / storageLimitMB * 100)).toFixed(1);
 
     // Группируем по категориям
     const categories = [
@@ -767,7 +700,7 @@ export class DashboardComponent {
                 <div class="stat-card-icon">✨</div>
                 <div class="stat-card-content">
                   <span class="stat-card-label">Свободно</span>
-                  <span class="stat-card-value">${freeSpace} MB</span>
+                  <span class="stat-card-value">${freeSpaceGB} ГБ</span>
                 </div>
               </div>
 
@@ -775,7 +708,7 @@ export class DashboardComponent {
                 <div class="stat-card-icon">📏</div>
                 <div class="stat-card-content">
                   <span class="stat-card-label">Лимит</span>
-                  <span class="stat-card-value">5 MB</span>
+                  <span class="stat-card-value">10 ГБ</span>
                 </div>
               </div>
             </div>
@@ -1093,6 +1026,7 @@ export class DashboardComponent {
     // Обновляем заголовок
     const titles: Record<string, string> = {
       dashboard: 'Dashboard',
+      documents: 'Документы',
       profile: 'Профиль',
       history: 'История',
       support: 'Поддержка'
@@ -1119,6 +1053,10 @@ export class DashboardComponent {
             this.updateDatabaseStats();
           }, 0);
           document.getElementById('btnClearHistory')?.addEventListener('click', () => this.clearHistory());
+          break;
+        case 'documents':
+          content.innerHTML = this.getDocumentsContent();
+          this.bindDocumentsEvents();
           break;
         case 'profile':
           content.innerHTML = this.getProfileContent();
@@ -1173,6 +1111,420 @@ export class DashboardComponent {
         <button class="clear-history-btn" id="btnClearFullHistory">Очистить всю историю</button>
       </div>
     `;
+  }
+
+  private getDocumentsContent(): string {
+    return `
+      <div class="dashboard-section documents-section">
+        <div class="documents-header">
+          <h2>Документы</h2>
+          <p class="documents-description">Все файлы таблиц на вашем компьютере</p>
+        </div>
+
+        <div class="documents-toolbar">
+          <button class="btn-create-new" id="btnCreateNewDocument">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Новый документ
+          </button>
+          <button class="btn-import" id="btnImportDocument">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17,8 12,3 7,8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Импорт
+          </button>
+          <button class="btn-refresh" id="btnRefreshDocuments">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23,4 23,10 17,10"/>
+              <polyline points="1,20 1,14 7,14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+            Обновить
+          </button>
+        </div>
+
+        <div class="documents-loading" id="documentsLoading">
+          <div class="loading-spinner"></div>
+          <p>Сканирование файлов...</p>
+        </div>
+
+        <div class="documents-grid" id="documentsGrid">
+          <!-- Документы будут загружены динамически -->
+        </div>
+      </div>
+    `;
+  }
+
+  private getEmptyDocumentsHTML(): string {
+    return `
+      <div class="empty-documents">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2Z"/>
+          <polyline points="14,2 14,8 20,8"/>
+        </svg>
+        <h3>Файлы не найдены</h3>
+        <p>Нет файлов .xlsx, .xls или .csv в папках Документы, Рабочий стол и Загрузки</p>
+      </div>
+    `;
+  }
+
+  private bindDocumentsEvents(): void {
+    // Создание нового документа
+    document.getElementById('btnCreateNewDocument')?.addEventListener('click', () => {
+      this.createNewDocument();
+    });
+
+    // Импорт документа
+    document.getElementById('btnImportDocument')?.addEventListener('click', () => {
+      this.importDocument();
+    });
+
+    // Обновление списка документов
+    document.getElementById('btnRefreshDocuments')?.addEventListener('click', () => {
+      this.loadDocuments();
+    });
+
+    // Загрузка документов при открытии
+    this.loadDocuments();
+
+    // Действия с документами (открыть/удалить) - делегирование событий
+    const grid = document.getElementById('documentsGrid');
+    grid?.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      const btn = target.closest('.document-card-btn') as HTMLButtonElement;
+      
+      if (btn) {
+        const action = btn.dataset.action;
+        const docPath = btn.dataset.path;
+        
+        if (action === 'open' && docPath) {
+          this.openDocument(docPath);
+        }
+      }
+    });
+
+    // Двойной клик для открытия
+    grid?.addEventListener('dblclick', (e) => {
+      const card = (e.target as HTMLElement).closest('.document-card') as HTMLElement;
+      if (card) {
+        const docPath = card.dataset.path;
+        if (docPath) {
+          this.openDocument(docPath);
+        }
+      }
+    });
+  }
+
+  private async loadDocuments(): Promise<void> {
+    const grid = document.getElementById('documentsGrid');
+    const loading = document.getElementById('documentsLoading');
+    
+    if (loading) loading.style.display = 'flex';
+    if (grid) grid.innerHTML = '';
+
+    try {
+      // Используем filesAPI для сканирования файлов
+      const result = await (window as any).filesAPI?.scanFiles({
+        extensions: ['.xlsx', '.xls', '.csv']
+      });
+
+      if (loading) loading.style.display = 'none';
+
+      if (result?.success && result.files && result.files.length > 0) {
+        if (grid) {
+          grid.innerHTML = this.getFilesGridHTML(result.files);
+        }
+      } else {
+        if (grid) {
+          grid.innerHTML = this.getEmptyDocumentsHTML();
+        }
+      }
+    } catch (error) {
+      console.error('[Documents] Failed to load files:', error);
+      if (loading) loading.style.display = 'none';
+      if (grid) {
+        grid.innerHTML = `
+          <div class="empty-documents">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <h3>Ошибка загрузки файлов</h3>
+            <p>Не удалось просканировать файлы на компьютере</p>
+          </div>
+        `;
+      }
+    }
+  }
+
+  private getFilesGridHTML(files: Array<{name: string; path: string; size: number; date: string; extension: string}>): string {
+    return files.map(file => `
+      <div class="document-card" data-path="${this.escapeHtml(file.path)}">
+        <div class="document-card-icon ${this.getFileIconClass(file.extension)}">
+          ${this.getFileIcon(file.extension)}
+        </div>
+        <div class="document-card-content">
+          <h4 class="document-card-name" title="${this.escapeHtml(file.name)}">${this.escapeHtml(file.name)}</h4>
+          <p class="document-card-date">${this.formatDocumentDate(file.date)}</p>
+          <p class="document-card-size">${this.formatFileSize(file.size)}</p>
+        </div>
+        <div class="document-card-actions">
+          <button class="document-card-btn open" title="Открыть" data-action="open" data-path="${this.escapeHtml(file.path)}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  private getFileIcon(extension: string): string {
+    switch (extension) {
+      case '.xlsx':
+      case '.xls':
+        return `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2Z"/>
+            <polyline points="14,2 14,8 20,8"/>
+            <line x1="8" y1="13" x2="16" y2="13"/>
+            <line x1="8" y1="17" x2="16" y2="17"/>
+            <line x1="8" y1="9" x2="10" y2="9"/>
+          </svg>
+        `;
+      case '.csv':
+        return `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2Z"/>
+            <polyline points="14,2 14,8 20,8"/>
+            <text x="8" y="18" font-size="6" fill="currentColor" stroke="none">CSV</text>
+          </svg>
+        `;
+      default:
+        return `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2Z"/>
+            <polyline points="14,2 14,8 20,8"/>
+          </svg>
+        `;
+    }
+  }
+
+  private getFileIconClass(extension: string): string {
+    switch (extension) {
+      case '.xlsx':
+      case '.xls':
+        return 'excel';
+      case '.csv':
+        return 'csv';
+      default:
+        return '';
+    }
+  }
+
+  private createNewDocument(): void {
+    // Очищаем localStorage для нового документа
+    const confirmed = confirm('Создать новый документ? Текущая таблица будет сохранена в архиве.');
+    
+    if (confirmed) {
+      // Сохраняем текущий документ в архив
+      const currentData = localStorage.getItem('smarttable-autosave');
+      if (currentData) {
+        const archiveKey = `smarttable-archive-${Date.now()}`;
+        localStorage.setItem(archiveKey, currentData);
+      }
+      
+      // Очищаем основную таблицу
+      localStorage.removeItem('smarttable-autosave');
+      
+      // Добавляем действие в историю
+      this.addAction({
+        action: 'Создание нового документа',
+        type: 'create',
+        status: 'success'
+      });
+      
+      // Перезагружаем страницу
+      window.location.reload();
+    }
+  }
+
+  private importDocument(): void {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,.csv,.xlsx';
+    
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const content = event.target?.result as string;
+            const data = JSON.parse(content);
+            
+            // Импортируем данные
+            localStorage.setItem(`smarttable-import-${Date.now()}`, JSON.stringify(data));
+            
+            alert('Документ успешно импортирован!');
+            
+            this.addAction({
+              action: `Импорт документа: ${file.name}`,
+              type: 'open',
+              status: 'success'
+            });
+            
+            // Обновляем список
+            this.switchSection('documents');
+          } catch (err) {
+            alert('Ошибка импорта файла. Убедитесь, что это корректный JSON.');
+          }
+        };
+        reader.readAsText(file);
+      }
+    };
+    
+    input.click();
+  }
+
+  private async openDocument(filePath: string): Promise<void> {
+    const confirmed = confirm(`Открыть файл "${filePath.split(/[\\/]/).pop()}"?\n\nТекущие несохранённые изменения будут утеряны.`);
+
+    if (confirmed) {
+      try {
+        // Используем filesAPI для открытия файла
+        const result = await (window as any).filesAPI?.openFile(filePath);
+
+        if (result?.success) {
+          // Определяем тип файла по расширению
+          const ext = filePath.toLowerCase().split('.').pop();
+          const fileName = filePath.split(/[\\/]/).pop() || 'Import';
+
+          if (ext === 'csv') {
+            // Парсим CSV
+            let content: string;
+            if (typeof result.content === 'string') {
+              content = result.content;
+            } else if (result.content instanceof Uint8Array) {
+              content = new TextDecoder().decode(result.content);
+            } else {
+              content = String(result.content);
+            }
+
+            console.log('[Documents] CSV content preview:', content.substring(0, 200));
+
+            const rows = content.split(/\r?\n/).filter(row => row.trim() !== '');
+            
+            // Преобразуем в формат таблицы
+            const cells: { [key: string]: { value: string; type: string; style?: any } } = {};
+
+            rows.forEach((row, rowIndex) => {
+              const cells_in_row = row.split(',');
+              cells_in_row.forEach((cell, colIndex) => {
+                const cellValue = cell.trim().replace(/^"|"$/g, ''); // Удаляем кавычки
+                
+                if (cellValue) { // Сохраняем только непустые ячейки
+                  const cellKey = `${rowIndex}-${colIndex}`; // Формат ключа: row-col
+                  cells[cellKey] = {
+                    value: cellValue,
+                    type: 'text'
+                  };
+                }
+              });
+            });
+
+            // Формат совместимый с renderer.ts
+            const tableData: {
+              cells: { [key: string]: { value: string; type: string; style?: any } };
+              sheetsData: { [key: string]: { [key: string]: { value: string; type: string; style?: any } } };
+              fileName: string;
+              timestamp: string;
+              currentSheet: number;
+            } = {
+              cells: cells,
+              sheetsData: {
+                '1': cells // Лист 1
+              },
+              fileName: fileName,
+              timestamp: new Date().toISOString(),
+              currentSheet: 1
+            };
+
+            console.log('[Documents] CSV parsed:', Object.keys(cells).length, 'cells');
+            console.log('[Documents] Saving to smarttable-autosave');
+
+            localStorage.setItem('smarttable-autosave', JSON.stringify(tableData));
+
+            console.log('[Documents] CSV file loaded:', fileName);
+          } else if (ext === 'xlsx' || ext === 'xls') {
+            // Для XLSX - сохраняем информацию о файле
+            // В будущем можно подключить библиотеку xlsx для полноценного парсинга
+            const tableData = {
+              cells: {},
+              fileName: fileName,
+              sourcePath: filePath,
+              timestamp: new Date().toISOString(),
+              importedFrom: 'xlsx',
+              message: `Файл ${ext.toUpperCase()} выбран. Полная поддержка импорта будет добавлена в следующей версии.`
+            };
+
+            localStorage.setItem('smarttable-autosave', JSON.stringify(tableData));
+            
+            console.log('[Documents] XLSX file selected:', fileName);
+          }
+
+          // Добавляем действие в историю
+          this.addAction({
+            action: `Открытие файла: ${fileName}`,
+            type: 'open',
+            status: 'success'
+          });
+
+          // Перезагружаем страницу
+          window.location.reload();
+        } else {
+          console.error('[Documents] Failed to open file:', result?.error);
+          alert(`Ошибка открытия файла: ${result?.error || 'Неизвестная ошибка'}`);
+        }
+      } catch (e) {
+        console.error('[Documents] Failed to open document:', e);
+        alert(`Ошибка открытия файла: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+  }
+
+  private formatDocumentDate(date: string | Date): string {
+    if (date === '-' || !date) return 'Неизвестно';
+    try {
+      const d = new Date(date);
+      return d.toLocaleDateString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (e) {
+      return String(date);
+    }
+  }
+
+  private formatFileSize(bytes: number): string {
+    if (bytes < 1024) return bytes + ' Б';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' КБ';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' МБ';
+  }
+
+  private escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   private getSupportContent(): string {
@@ -1304,14 +1656,17 @@ export class DashboardComponent {
         }
       }
 
+      const storageLimitMB = 10 * 1024; // 10 ГБ в МБ
       const sizeMB = (totalSize / (1024 * 1024)).toFixed(2);
-      const freeSpace = (5 - parseFloat(sizeMB)).toFixed(2); // Лимит 5MB
+      const sizeGB = (totalSize / (1024 * 1024 * 1024)).toFixed(3);
+      const freeSpace = (storageLimitMB - parseFloat(sizeMB)).toFixed(2);
+      const freeSpaceGB = (parseFloat(freeSpace) / 1024).toFixed(3);
 
       const storageSize = document.getElementById('storageSize');
       const freeSpaceEl = document.getElementById('freeSpace');
 
-      if (storageSize) storageSize.textContent = `${sizeMB} MB`;
-      if (freeSpaceEl) freeSpaceEl.textContent = `${freeSpace} MB`;
+      if (storageSize) storageSize.textContent = `${sizeGB} ГБ`;
+      if (freeSpaceEl) freeSpaceEl.textContent = `${freeSpaceGB} ГБ`;
 
       // Обновляем количество документов
       const docsCount = Object.keys(localStorage).filter(k => k.startsWith('smarttable-doc-')).length;
