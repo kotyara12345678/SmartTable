@@ -786,6 +786,34 @@ function renderVisibleCells(): void {
               cell.style.height = `${cellData.style.rowspan * CONFIG.CELL_HEIGHT}px`;
             }
           }
+
+          // Перенос текста
+          if (cellData.style.wrapText) {
+            cell.style.whiteSpace = 'normal';
+            cell.style.wordWrap = 'break-word';
+            cell.style.overflow = 'visible';
+            cell.style.lineHeight = '1.2';
+          }
+
+          // Ссылка
+          if (cellData.style.hyperlink) {
+            cell.style.color = '#0066cc';
+            cell.style.textDecoration = 'underline';
+            cell.style.cursor = 'pointer';
+            cell.addEventListener('click', (e) => {
+              e.stopPropagation();
+              window.open(cellData.style.hyperlink, '_blank', 'noopener,noreferrer');
+            });
+          }
+
+          // Изображение в ячейке
+          if (cellData.style.backgroundImage) {
+            cell.style.backgroundImage = cellData.style.backgroundImage;
+            cell.style.backgroundSize = cellData.style.backgroundSize || 'contain';
+            cell.style.backgroundRepeat = cellData.style.backgroundRepeat || 'no-repeat';
+            cell.style.backgroundPosition = cellData.style.backgroundPosition || 'center';
+            cell.textContent = ''; // Убираем текст
+          }
         }
       }
 
@@ -940,7 +968,7 @@ function getCellElement(row: number, col: number): HTMLDivElement | null {
 }
 
 // === РЕДАКТИРОВАНИЕ ===
-function editCell(row: number, col: number): void {
+function editCell(row: number, col: number, selectAll: boolean = true): void {
   const cell = getCellElement(row, col);
   if (!cell) return;
 
@@ -951,12 +979,15 @@ function editCell(row: number, col: number): void {
   cell.contentEditable = 'true';
   cell.focus();
 
-  // Выделить весь текст
-  const range = document.createRange();
-  range.selectNodeContents(cell);
-  const sel = window.getSelection();
-  sel?.removeAllRanges();
-  sel?.addRange(range);
+  // Выделить весь текст или поставить курсор в конец
+  if (selectAll) {
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }
+  // Если selectAll = false, курсор останется там, где кликнули
 }
 
 function finishEditing(): void {
@@ -1464,24 +1495,46 @@ function setupCellEventListeners(): void {
 
     // Проверка на dropdown ячейку
     if (cell.dataset.hasDropdown === 'true') {
-      selectCell(row, col);
+      if (!state.isEditing) {
+        selectCell(row, col);
+      }
       const validation = getDataValidation(row, col);
       if (validation && validation.type === 'list') {
         showDropdownList(e, cell, row, col, validation.values);
       }
+      return;
+    }
+
+    // Если уже редактируем - не делаем ничего (клик внутри ячейки)
+    if (state.isEditing) {
+      return;
+    }
+
+    // Если ячейка уже выделена и содержит текст - начинаем редактирование без выделения
+    const isSameCell = state.selectedCell.row === row && state.selectedCell.col === col;
+    const cellHasContent = cell.textContent && cell.textContent.length > 0;
+    
+    if (isSameCell && cellHasContent) {
+      // Начинаем редактирование без выделения текста (курсор в месте клика)
+      // Важно: НЕ вызываем selectCell, чтобы не завершить редактирование
+      editCell(row, col, false);
     } else {
+      // Просто выделяем ячейку
       selectCell(row, col);
     }
   });
 
-  // Двойной клик (редактирование)
+  // Двойной клик (редактирование с выделением)
   elements.cellGrid.addEventListener('dblclick', (e: MouseEvent) => {
     const cell = (e.target as HTMLElement).closest('.cell') as HTMLElement;
     if (!cell) return;
 
     const row = parseInt(cell.dataset.row || '0');
     const col = parseInt(cell.dataset.col || '0');
-    editCell(row, col);
+    
+    // При двойном клике всегда выделяем ячейку и начинаем редактирование
+    selectCell(row, col);
+    editCell(row, col, true);
   });
 
   // Обработка клавиатуры для ячеек
@@ -1905,26 +1958,262 @@ function deleteColumnAt(col: number): void {
   colsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
 }
 
-// Вставка изображения в ячейку
+// Вставка изображения (плавающий объект)
 function insertImage(imageSrc: string): void {
+  const { row, col } = state.selectedCell;
+  const cell = getCellElement(row, col);
+  if (!cell) return;
+
+  const rect = cell.getBoundingClientRect();
+  const container = document.getElementById('cellGridWrapper');
+  if (!container) return;
+
+  // Создаём плавающее изображение
+  const imgContainer = document.createElement('div');
+  imgContainer.className = 'floating-image';
+  imgContainer.style.cssText = `
+    position: absolute;
+    left: ${rect.left + container.scrollLeft}px;
+    top: ${rect.top + container.scrollTop}px;
+    min-width: 150px;
+    min-height: 150px;
+    max-width: 400px;
+    max-height: 400px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    background: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+  `;
+
+  // Заголовок для перетаскивания
+  const header = document.createElement('div');
+  header.className = 'floating-header';
+  header.style.cssText = `
+    height: 28px;
+    background: linear-gradient(to bottom, #f5f5f5, #e0e0e0);
+    border-bottom: 1px solid #ddd;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px;
+    cursor: move;
+    user-select: none;
+  `;
+
+  const title = document.createElement('span');
+  title.textContent = 'Фото';
+  title.style.cssText = `
+    font-size: 12px;
+    color: #666;
+    font-weight: 500;
+  `;
+
+  const removeBtn = document.createElement('button');
+  removeBtn.innerHTML = '×';
+  removeBtn.style.cssText = `
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: transparent;
+    color: #666;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  `;
+  removeBtn.onmouseover = () => {
+    removeBtn.style.background = '#ff4444';
+    removeBtn.style.color = 'white';
+  };
+  removeBtn.onmouseout = () => {
+    removeBtn.style.background = 'transparent';
+    removeBtn.style.color = '#666';
+  };
+  removeBtn.onclick = (e) => {
+    e.stopPropagation();
+    imgContainer.remove();
+  };
+
+  header.appendChild(title);
+  header.appendChild(removeBtn);
+  imgContainer.appendChild(header);
+
+  // Контейнер для изображения
+  const imgWrapper = document.createElement('div');
+  imgWrapper.style.cssText = `
+    position: relative;
+    width: 100%;
+    height: calc(100% - 28px);
+    overflow: hidden;
+  `;
+
+  const img = document.createElement('img');
+  img.src = imageSrc;
+  img.style.cssText = `
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    pointer-events: none;
+  `;
+
+  imgWrapper.appendChild(img);
+  imgContainer.appendChild(imgWrapper);
+  container.appendChild(imgContainer);
+
+  // Делаем изображение перетаскиваемым за заголовок
+  makeDraggableByHeader(imgContainer, header);
+
+  // Добавляем изменение размера
+  addResizeHandles(imgContainer);
+
+  autoSave();
+}
+
+// Вставка изображения в ячейку
+function insertImageInCell(imageSrc: string): void {
   const { row, col } = state.selectedCell;
   const key = getCellKey(row, col);
   const data = getCurrentData();
-  
+
   data.set(key, {
-    value: '[Изображение]',
+    value: '[Фото]',
     style: {
       backgroundImage: `url(${imageSrc})`,
       backgroundSize: 'contain',
       backgroundRepeat: 'no-repeat',
       backgroundPosition: 'center',
-      minHeight: '100px'
+      minHeight: `${CONFIG.CELL_HEIGHT}px`
     }
   });
-  
+
   renderCells();
   updateAIDataCache();
   autoSave();
+}
+
+function makeDraggableByHeader(element: HTMLElement, header: HTMLElement): void {
+  let isDragging = false;
+  let startX: number, startY: number, initialLeft: number, initialTop: number;
+
+  header.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    initialLeft = parseFloat(element.style.left) || 0;
+    initialTop = parseFloat(element.style.top) || 0;
+    header.style.cursor = 'grabbing';
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (isDragging) {
+      e.stopPropagation();
+      e.preventDefault();
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      element.style.left = `${initialLeft + dx}px`;
+      element.style.top = `${initialTop + dy}px`;
+    }
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      header.style.cursor = 'move';
+    }
+  });
+}
+
+function makeDraggable(element: HTMLElement): void {
+  let isDragging = false;
+  let startX: number, startY: number, initialLeft: number, initialTop: number;
+
+  element.addEventListener('mousedown', (e) => {
+    // Предотвращаем всплытие и выделение ячеек
+    e.stopPropagation();
+    e.preventDefault();
+    
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    initialLeft = parseFloat(element.style.left) || 0;
+    initialTop = parseFloat(element.style.top) || 0;
+    element.style.cursor = 'grabbing';
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (isDragging) {
+      e.stopPropagation();
+      e.preventDefault();
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      element.style.left = `${initialLeft + dx}px`;
+      element.style.top = `${initialTop + dy}px`;
+    }
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      element.style.cursor = 'move';
+    }
+  });
+}
+
+// Добавление ручек для изменения размера
+function addResizeHandles(element: HTMLElement): void {
+  // Ручка для изменения размера (правый нижний угол)
+  const resizeHandle = document.createElement('div');
+  resizeHandle.className = 'resize-handle';
+  resizeHandle.style.cssText = `
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 16px;
+    height: 16px;
+    cursor: nwse-resize;
+    z-index: 1001;
+    background: linear-gradient(135deg, transparent 50%, #999 50%);
+    border-radius: 0 0 8px 0;
+  `;
+
+  let isResizing = false;
+  let startX: number, startY: number, startWidth: number, startHeight: number;
+
+  resizeHandle.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    isResizing = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    startWidth = element.offsetWidth;
+    startHeight = element.offsetHeight;
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (isResizing) {
+      e.stopPropagation();
+      e.preventDefault();
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      element.style.width = `${Math.max(150, startWidth + dx)}px`;
+      element.style.height = `${Math.max(100, startHeight + dy)}px`;
+    }
+  });
+
+  document.addEventListener('mouseup', () => {
+    isResizing = false;
+  });
+
+  element.appendChild(resizeHandle);
 }
 
 function setupEventListeners(): void {
@@ -1969,6 +2258,41 @@ function setupEventListeners(): void {
     autoSum();
   });
 
+  // Автоподбор ширины колонки
+  document.addEventListener('auto-fit-column', () => {
+    autoFitColumn(state.selectedCell.col);
+  });
+
+  // Перенос текста
+  document.addEventListener('wrap-text', () => {
+    toggleWrapText();
+  });
+
+  // Сортировка
+  document.addEventListener('sort-data', () => {
+    sortData();
+  });
+
+  // Фильтр
+  document.addEventListener('filter-data', () => {
+    toggleFilter();
+  });
+
+  // Сортировка A-Z
+  document.addEventListener('sort-a-z', () => {
+    sortColumnAZ();
+  });
+
+  // Фильтр данных
+  document.addEventListener('filter-data-full', () => {
+    filterDataFull();
+  });
+
+  // Удаление дубликатов
+  document.addEventListener('remove-duplicates', () => {
+    removeDuplicates();
+  });
+
   // Вставка из ribbon
   document.addEventListener('paste-from-ribbon', (e: Event) => {
     const event = e as CustomEvent<{ text: string }>;
@@ -2010,7 +2334,7 @@ function setupEventListeners(): void {
     autoSave();
   });
 
-  // Вставка изображения
+  // Вставка изображения (плавающий объект)
   document.addEventListener('insert-image', () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -2022,6 +2346,25 @@ function setupEventListeners(): void {
         reader.onload = (event) => {
           const result = event.target?.result as string;
           insertImage(result);
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+    input.click();
+  });
+
+  // Вставка изображения в ячейку
+  document.addEventListener('insert-image-in-cell', () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const result = event.target?.result as string;
+          insertImageInCell(result);
         };
         reader.readAsDataURL(file);
       }
@@ -2091,7 +2434,7 @@ function setupEventListeners(): void {
     });
   });
 
-  // Вставка таблицы
+  // Вставка таблицы (плавающий объект)
   document.addEventListener('insert-table', () => {
     showPromptModal('Количество строк:', (rows) => {
       if (!rows) return;
@@ -2101,26 +2444,133 @@ function setupEventListeners(): void {
 
         const numRows = parseInt(rows);
         const numCols = parseInt(cols);
-        const startRow = state.selectedCell.row;
-        const startCol = state.selectedCell.col;
-        const data = getCurrentData();
+        const { row, col } = state.selectedCell;
+        const cell = getCellElement(row, col);
+        if (!cell) return;
 
+        const rect = cell.getBoundingClientRect();
+        const container = document.getElementById('cellGridWrapper');
+        if (!container) return;
+
+        // Создаём плавающую таблицу
+        const tableContainer = document.createElement('div');
+        tableContainer.className = 'floating-table';
+        tableContainer.style.cssText = `
+          position: absolute;
+          left: ${rect.left + container.scrollLeft}px;
+          top: ${rect.top + container.scrollTop}px;
+          background: white;
+          border: 2px solid #ddd;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          z-index: 1000;
+          min-width: 200px;
+          min-height: 100px;
+          max-width: 800px;
+          max-height: 600px;
+        `;
+
+        // Заголовок для перетаскивания
+        const header = document.createElement('div');
+        header.className = 'floating-header';
+        header.style.cssText = `
+          height: 28px;
+          background: linear-gradient(to bottom, #f5f5f5, #e0e0e0);
+          border-bottom: 1px solid #ddd;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 8px;
+          cursor: move;
+          user-select: none;
+        `;
+
+        const title = document.createElement('span');
+        title.textContent = `Таблица ${numRows}x${numCols}`;
+        title.style.cssText = `
+          font-size: 12px;
+          color: #666;
+          font-weight: 500;
+        `;
+
+        const removeBtn = document.createElement('button');
+        removeBtn.innerHTML = '×';
+        removeBtn.style.cssText = `
+          width: 20px;
+          height: 20px;
+          border: none;
+          background: transparent;
+          color: #666;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 16px;
+          line-height: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        `;
+        removeBtn.onmouseover = () => {
+          removeBtn.style.background = '#ff4444';
+          removeBtn.style.color = 'white';
+        };
+        removeBtn.onmouseout = () => {
+          removeBtn.style.background = 'transparent';
+          removeBtn.style.color = '#666';
+        };
+        removeBtn.onclick = (e) => {
+          e.stopPropagation();
+          tableContainer.remove();
+        };
+
+        header.appendChild(title);
+        header.appendChild(removeBtn);
+        tableContainer.appendChild(header);
+
+        // Контейнер для таблицы с прокруткой
+        const tableWrapper = document.createElement('div');
+        tableWrapper.style.cssText = `
+          position: relative;
+          width: 100%;
+          height: calc(100% - 28px);
+          overflow: auto;
+          padding: 8px;
+        `;
+
+        const table = document.createElement('table');
+        table.style.cssText = `
+          width: 100%;
+          border-collapse: collapse;
+          min-width: ${numCols * 80}px;
+        `;
+
+        // Создаём пустую таблицу
         for (let r = 0; r < numRows; r++) {
+          const tr = document.createElement('tr');
           for (let c = 0; c < numCols; c++) {
-            const key = getCellKey(startRow + r, startCol + c);
-            const value = c === 0 ? `Строка ${r + 1}` : `Ячейка ${r + 1}-${c + 1}`;
-            data.set(key, {
-              value,
-              style: {
-                backgroundColor: r % 2 === 0 ? '#f0f0f0' : 'white',
-                border: '1px solid #ccc'
-              }
-            });
+            const td = document.createElement('td');
+            td.contentEditable = 'true';
+            td.style.cssText = `
+              padding: 8px;
+              border: 1px solid #ccc;
+              min-width: 80px;
+              min-height: 24px;
+            `;
+            tr.appendChild(td);
           }
+          table.appendChild(tr);
         }
 
-        renderCells();
-        updateAIDataCache();
+        tableWrapper.appendChild(table);
+        tableContainer.appendChild(tableWrapper);
+        container.appendChild(tableContainer);
+
+        // Делаем таблицу перетаскиваемой за заголовок
+        makeDraggableByHeader(tableContainer, header);
+
+        // Добавляем изменение размера
+        addResizeHandles(tableContainer);
+
         autoSave();
       });
     });
@@ -3284,7 +3734,7 @@ async function executeSingleCommand(action: string, params: any): Promise<void> 
     }
   }
 
-  // Проверяем что column и row существуют для команд которые их требуют
+  // Провер��ем что column и row существуют для команд которые их требуют
   const requiresColumnRow = ['set_cell', 'set_cell_color', 'set_formula', 'color_row'];
   if (requiresColumnRow.includes(action)) {
     if (params.column === undefined || params.column === null) {
@@ -4966,6 +5416,98 @@ function toggleFilter(): void {
     }
   });
   updateAIDataCache();
+}
+
+// Перенос текста
+function toggleWrapText(): void {
+  const { row, col } = state.selectedCell;
+  const key = getCellKey(row, col);
+  const data = getCurrentData();
+  const cellData = data.get(key) || { value: '' };
+  cellData.style = cellData.style || {};
+  cellData.style.wrapText = !cellData.style.wrapText;
+  data.set(key, cellData);
+  renderCells();
+  updateAIDataCache();
+  autoSave();
+}
+
+// Сортировка A-Z
+function sortColumnAZ(): void {
+  const { col } = state.selectedCell;
+  const data = getCurrentData();
+  const rowsMap = new Map<number, Map<number, string>>();
+  data.forEach((cellData, key) => {
+    const [row, cellCol] = key.split('-').map(Number);
+    if (!rowsMap.has(row)) rowsMap.set(row, new Map());
+    rowsMap.get(row)!.set(cellCol, cellData.value);
+  });
+  const sortedRows = Array.from(rowsMap.entries()).sort((a, b) => {
+    const valA = a[1].get(col) || '';
+    const valB = b[1].get(col) || '';
+    return valA.localeCompare(valB, 'ru');
+  });
+  const newData = new Map<string, { value: string; style?: any }>();
+  sortedRows.forEach(([, rowData], newRow) => {
+    rowData.forEach((value, oldCol) => { const newKey = `${newRow}-${oldCol}`; newData.set(newKey, { value }); });
+  });
+  data.clear();
+  newData.forEach((value, key) => data.set(key, value));
+  renderCells();
+  updateAIDataCache();
+  autoSave();
+}
+
+// Фильтр данных (полный)
+function filterDataFull(): void {
+  const { col } = state.selectedCell;
+  const cell = getCellElement(state.selectedCell.row, state.selectedCell.col);
+  const value = cell?.textContent || '';
+  if (!value) { alert('Введите значение для фильтрации в активной ячейке'); return; }
+  const data = getCurrentData();
+  data.forEach((cellData, key) => {
+    const [row, cellCol] = key.split('-').map(Number);
+    if (cellCol === col) {
+      const cellEl = getCellElement(row, col);
+      if (cellEl) cellEl.style.display = cellData.value.includes(value) ? '' : 'none';
+    }
+  });
+  updateAIDataCache();
+  autoSave();
+}
+
+// Удаление дубликатов
+function removeDuplicates(): void {
+  const { col } = state.selectedCell;
+  const data = getCurrentData();
+  const seen = new Set<string>();
+  const rowsToDelete = new Set<number>();
+  const rowsMap = new Map<number, Map<number, string>>();
+  data.forEach((cellData, key) => {
+    const [row, cellCol] = key.split('-').map(Number);
+    if (!rowsMap.has(row)) rowsMap.set(row, new Map());
+    rowsMap.get(row)!.set(cellCol, cellData.value);
+  });
+  rowsMap.forEach((rowData, row) => {
+    const val = rowData.get(col) || '';
+    if (seen.has(val)) {
+      rowsToDelete.add(row);
+    } else {
+      seen.add(val);
+    }
+  });
+  rowsToDelete.forEach(row => {
+    const rowToDelete = rowsMap.get(row);
+    if (rowToDelete) {
+      rowToDelete.forEach((_, c) => {
+        const key = getCellKey(row, c);
+        data.delete(key);
+      });
+    }
+  });
+  renderCells();
+  updateAIDataCache();
+  autoSave();
 }
 
 // Экспорт глобальных функций

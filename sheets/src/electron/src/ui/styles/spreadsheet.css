@@ -524,3 +524,46 @@
   margin-top: 4px;
   font-family: monospace;
 }
+
+/* Floating Objects (Images, Tables) */
+.floating-image,
+.floating-table {
+  transition: box-shadow 0.2s;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.floating-image:hover,
+.floating-table:hover {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+}
+
+.floating-image img {
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.floating-table table {
+  user-select: text;
+}
+
+.floating-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.floating-header:hover .resize-handle {
+  opacity: 1;
+}
+
+.resize-handle {
+  transition: opacity 0.2s;
+}
+
+.resize-handle:hover {
+  background: linear-gradient(135deg, transparent 50%, #666 50%);
+}

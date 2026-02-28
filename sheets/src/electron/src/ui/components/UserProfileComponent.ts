@@ -1,5 +1,5 @@
 /**
- * UserProfile Component - личный кабинет с загрузкой аватара
+ * UserProfile Component - Hub с загрузкой аватара
  * Поддерживаемые форматы: PNG, JPG, JPEG, GIF, WebP (макс. 5MB)
  */
 export class UserProfileComponent {
@@ -75,7 +75,7 @@ export class UserProfileComponent {
       <div class="profile-overlay" id="profileOverlay"></div>
       <div class="profile-modal">
         <div class="profile-header">
-          <h3>Личный кабинет</h3>
+          <h3>Hub</h3>
           <button class="close-btn" id="profileClose">×</button>
         </div>
         <div class="profile-content">
