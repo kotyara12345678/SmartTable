@@ -44,6 +44,7 @@ export class RibbonComponent extends BaseComponent {
         this.btnInsertColLeft = null;
         this.btnInsertColRight = null;
         this.btnInsertImage = null;
+        this.btnInsertImageInCell = null;
         this.btnInsertLink = null;
         this.btnInsertComment = null;
         this.btnInsertSymbol = null;
@@ -116,6 +117,7 @@ export class RibbonComponent extends BaseComponent {
         this.btnInsertColLeft = this.querySelector('#btnInsertColLeft');
         this.btnInsertColRight = this.querySelector('#btnInsertColRight');
         this.btnInsertImage = this.querySelector('#btnInsertImage');
+        this.btnInsertImageInCell = this.querySelector('#btnInsertImageInCell');
         this.btnInsertLink = this.querySelector('#btnInsertLink');
         this.btnInsertComment = this.querySelector('#btnInsertComment');
         this.btnInsertSymbol = this.querySelector('#btnInsertSymbol');
@@ -202,6 +204,7 @@ export class RibbonComponent extends BaseComponent {
         this.bindEvent(this.btnInsertColLeft, 'click', () => this.handleInsertColLeft());
         this.bindEvent(this.btnInsertColRight, 'click', () => this.handleInsertColRight());
         this.bindEvent(this.btnInsertImage, 'click', () => this.handleInsertImage());
+        this.bindEvent(this.btnInsertImageInCell, 'click', () => this.handleInsertImageInCell());
         this.bindEvent(this.btnInsertLink, 'click', () => this.handleInsertLink());
         this.bindEvent(this.btnInsertComment, 'click', () => this.handleInsertComment());
         this.bindEvent(this.btnInsertSymbol, 'click', () => this.handleInsertSymbol());
@@ -364,6 +367,9 @@ export class RibbonComponent extends BaseComponent {
     }
     handleInsertImage() {
         document.dispatchEvent(new CustomEvent('insert-image'));
+    }
+    handleInsertImageInCell() {
+        document.dispatchEvent(new CustomEvent('insert-image-in-cell'));
     }
     handleInsertLink() {
         document.dispatchEvent(new CustomEvent('insert-link'));

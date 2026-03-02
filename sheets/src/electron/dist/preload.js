@@ -17,4 +17,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         }
     }
 });
+// API для работы с файлами
+contextBridge.exposeInMainWorld('filesAPI', {
+    scanFiles: (options) => ipcRenderer.invoke('scan-files', options),
+    openFile: (filePath) => ipcRenderer.invoke('open-file', filePath),
+    exportToExcel: (data, filePath) => ipcRenderer.invoke('export-to-excel', { data, filePath })
+});
 //# sourceMappingURL=preload.js.map

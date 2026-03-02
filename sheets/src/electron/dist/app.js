@@ -78,6 +78,16 @@ async function initApp() {
             }
             // Скрываем начальный экран
             startScreen?.hide();
+        }, (sheets) => {
+            // Callback при открытии файла/папки
+            logs.push('[App] Importing sheets: ' + sheets.length);
+            // Импортируем листы в таблицу
+            importSheets(sheets);
+            // Скрываем начальный экран
+            startScreen?.hide();
+            if (topBar) {
+                topBar.setProjectName('Импортированный файл');
+            }
         });
         window.startScreen = startScreen;
         logs.push('[App] StartScreenComponent initialized');
@@ -358,6 +368,20 @@ function handleRibbonAction(action) {
         case 'filter':
             toggleFilter();
             break;
+    }
+}
+/**
+ * Импорт листов из XLSX/CSV файла
+ */
+function importSheets(sheets) {
+    console.log('[App] Importing sheets:', sheets);
+    const importFunc = window.importSheets;
+    if (typeof importFunc === 'function') {
+        importFunc(sheets);
+    }
+    else {
+        console.error('[App] importSheets function not found');
+        alert('Ошибка импорта: функция импорта недоступна');
     }
 }
 /**

@@ -3,12 +3,20 @@ console.log('[Renderer] Script loaded!');
 // === КОНФИГУРАЦИЯ ===
 const CONFIG = {
     ROWS: 100,
-    COLS: 26,
+    COLS: 100,
     CELL_WIDTH: 100,
     CELL_HEIGHT: 32,
     HEADER_WIDTH: 50,
     HEADER_HEIGHT: 32,
 };
+// Переменные для virtual scrolling
+let visibleRange = {
+    rowStart: 0,
+    rowEnd: 0,
+    colStart: 0,
+    colEnd: 0
+};
+let renderScheduled = false;
 // === СОСТОЯНИЕ ===
 const state = {
     selectedCell: { row: 0, col: 0 },
@@ -217,25 +225,36 @@ function autoLoad() {
         if (saved) {
             const data = JSON.parse(saved);
             console.log('[AutoLoad] Found autosave from:', new Date(data.timestamp).toLocaleString());
-            Object.keys(data.sheetsData).forEach(key => {
-                currentData.set(key, data.sheetsData[key]);
-            });
+            // Загружаем sheetsData
+            if (data.sheetsData) {
+                Object.keys(data.sheetsData).forEach(sheetKey => {
+                    const sheetData = data.sheetsData[sheetKey];
+                    const sheetMap = new Map();
+                    // Преобразуем объект в Map
+                    if (typeof sheetData === 'object') {
+                        Object.keys(sheetData).forEach(cellKey => {
+                            sheetMap.set(cellKey, sheetData[cellKey]);
+                        });
+                    }
+                    state.sheetsData.set(parseInt(sheetKey), sheetMap);
+                });
+            }
+            else if (data.cells) {
+                // Старый формат - только cells
+                Object.keys(data.cells).forEach(key => {
+                    currentData.set(key, data.cells[key]);
+                });
+            }
             state.currentSheet = data.currentSheet || 1;
-            // НЕ загружаем dataValidations из старых сохранений!
-            // state.dataValidations остаётся пустым
-            console.log('[AutoLoad] Data loaded successfully');
+            // Обновляем имя файла в заголовке
+            if (data.fileName) {
+                updateFileNameInHeader(data.fileName);
+            }
+            console.log('[AutoLoad] Data loaded successfully, sheets:', state.sheetsData.size);
         }
         // ПРИНУДИТЕЛЬНО очищаем dataValidations при каждой загрузке!
-        // Это удалит злощастный текст из A1
         state.dataValidations.clear();
         console.log('[AutoLoad] Force cleared dataValidations');
-        // Проверяем и очищаем ячейку A1 если там текст setDataValidation
-        const a1Key = getCellKey(0, 0); // A1 = row 0, col 0
-        const a1Data = currentData.get(a1Key);
-        if (a1Data && a1Data.value && a1Data.value.includes('setDataValidation')) {
-            currentData.delete(a1Key);
-            console.log('[AutoLoad] Removed setDataValidation text from A1');
-        }
         renderCells();
         updateAIDataCache();
         console.log('[AutoLoad] Completed successfully');
@@ -243,6 +262,14 @@ function autoLoad() {
     catch (e) {
         console.error('[AutoLoad] Error:', e);
     }
+}
+function updateFileNameInHeader(fileName) {
+    // Обновляем имя файла в TopBar
+    const topBar = document.querySelector('#fileName');
+    if (topBar) {
+        topBar.textContent = fileName;
+    }
+    console.log('[AutoLoad] File name updated in header:', fileName);
 }
 // Очистить всё состояние и localStorage
 function clearAllState() {
@@ -344,7 +371,14 @@ function initElements() {
 }
 // === УТИЛИТЫ ===
 function colToLetter(col) {
-    return String.fromCharCode(65 + col);
+    let letter = '';
+    let n = col + 1; // Excel использует 1-индексацию
+    while (n > 0) {
+        n--;
+        letter = String.fromCharCode(65 + (n % 26)) + letter;
+        n = Math.floor(n / 26);
+    }
+    return letter;
 }
 function getCellId(row, col) {
     return `${colToLetter(col)}${row + 1}`;
@@ -409,6 +443,8 @@ async function init() {
     // Рендерим таблицу
     renderColumnHeaders();
     renderRowHeaders();
+    renderFixedColumnHeaders();
+    renderFixedRowHeaders();
     renderCells();
     // Автозагрузка сохранённых данных (после рендеринга!)
     autoLoad();
@@ -500,8 +536,23 @@ function renderColumnHeaders() {
         header.addEventListener('click', () => selectColumn(col));
         elements.columnHeaders.appendChild(header);
     }
-    // Добавим пустой элемент в начале для угла
-    elements.columnHeaders.style.display = 'flex';
+}
+function renderFixedColumnHeaders() {
+    const fixedHeaders = document.getElementById('fixedColumnHeaders');
+    if (!fixedHeaders)
+        return;
+    fixedHeaders.innerHTML = '';
+    // Фиксируем первые 5 столбцов (A-E)
+    const fixedCols = Math.min(5, CONFIG.COLS);
+    for (let col = 0; col < fixedCols; col++) {
+        const header = document.createElement('div');
+        header.className = 'fixed-column-header';
+        header.textContent = colToLetter(col);
+        header.dataset.col = col.toString();
+        header.style.width = `${CONFIG.CELL_WIDTH}px`;
+        header.addEventListener('click', () => selectColumn(col));
+        fixedHeaders.appendChild(header);
+    }
 }
 function renderRowHeaders() {
     elements.rowHeaders.innerHTML = '';
@@ -514,7 +565,46 @@ function renderRowHeaders() {
         elements.rowHeaders.appendChild(header);
     }
 }
+function renderFixedRowHeaders() {
+    const fixedHeaders = document.getElementById('fixedRowHeaders');
+    if (!fixedHeaders)
+        return;
+    fixedHeaders.innerHTML = '';
+    // Фиксируем первые 5 строк (1-5)
+    const fixedRows = Math.min(5, CONFIG.ROWS);
+    for (let row = 0; row < fixedRows; row++) {
+        const header = document.createElement('div');
+        header.className = 'fixed-row-header';
+        header.textContent = (row + 1).toString();
+        header.dataset.row = row.toString();
+        header.style.height = `${CONFIG.CELL_HEIGHT}px`;
+        header.addEventListener('click', () => selectRow(row));
+        fixedHeaders.appendChild(header);
+    }
+}
+function syncFixedHeaders() {
+    const fixedColumnHeaders = document.getElementById('fixedColumnHeaders');
+    const fixedRowHeaders = document.getElementById('fixedRowHeaders');
+    const scrollLeft = elements.cellGridWrapper.scrollLeft;
+    const scrollTop = elements.cellGridWrapper.scrollTop;
+    // Скрываем фиксированные заголовки когда прокрутка больше 0
+    if (fixedColumnHeaders) {
+        fixedColumnHeaders.style.display = scrollLeft > 0 ? 'flex' : 'none';
+    }
+    if (fixedRowHeaders) {
+        fixedRowHeaders.style.display = scrollTop > 0 ? 'flex' : 'none';
+    }
+}
 function renderCells() {
+    if (renderScheduled)
+        return;
+    renderScheduled = true;
+    requestAnimationFrame(() => {
+        renderScheduled = false;
+        renderVisibleCells();
+    });
+}
+function renderVisibleCells() {
     // Сохраняем текущее выделение
     const selectedCells = Array.from(elements.cellGrid.querySelectorAll('.cell.selected'))
         .map(cell => {
@@ -524,17 +614,34 @@ function renderCells() {
             col: parseInt(el.dataset.col || '0')
         };
     });
-    elements.cellGrid.innerHTML = '';
-    elements.cellGrid.style.gridTemplateColumns = `repeat(${CONFIG.COLS}, ${CONFIG.CELL_WIDTH}px)`;
-    elements.cellGrid.style.gridTemplateRows = `repeat(${CONFIG.ROWS}, ${CONFIG.CELL_HEIGHT}px)`;
     const data = getCurrentData();
-    for (let row = 0; row < CONFIG.ROWS; row++) {
-        for (let col = 0; col < CONFIG.COLS; col++) {
+    const fragment = document.createDocumentFragment();
+    // Вычисляем видимый диапазон
+    calculateVisibleRange();
+    // Рендерим только видимые ячейки + буфер
+    const buffer = 3;
+    const rowStart = Math.max(0, visibleRange.rowStart - buffer);
+    const rowEnd = Math.min(CONFIG.ROWS, visibleRange.rowEnd + buffer);
+    const colStart = Math.max(0, visibleRange.colStart - buffer);
+    const colEnd = Math.min(CONFIG.COLS, visibleRange.colEnd + buffer);
+    // Устанавливаем размеры сетки для правильного скролла
+    elements.cellGrid.style.width = `${CONFIG.COLS * CONFIG.CELL_WIDTH}px`;
+    elements.cellGrid.style.height = `${CONFIG.ROWS * CONFIG.CELL_HEIGHT}px`;
+    elements.cellGrid.style.position = 'relative';
+    elements.cellGrid.style.display = 'block';
+    for (let row = rowStart; row < rowEnd; row++) {
+        for (let col = colStart; col < colEnd; col++) {
             const cell = document.createElement('div');
             cell.className = 'cell';
             cell.dataset.row = row.toString();
             cell.dataset.col = col.toString();
             cell.tabIndex = -1;
+            // Абсолютное позиционирование
+            cell.style.position = 'absolute';
+            cell.style.left = `${col * CONFIG.CELL_WIDTH}px`;
+            cell.style.top = `${row * CONFIG.CELL_HEIGHT}px`;
+            cell.style.width = `${CONFIG.CELL_WIDTH}px`;
+            cell.style.height = `${CONFIG.CELL_HEIGHT}px`;
             // Загрузка данных
             const key = getCellKey(row, col);
             const cellData = data.get(key);
@@ -549,27 +656,54 @@ function renderCells() {
                             cell.style[prop] = value;
                         }
                     });
-                    // Если ячейка объединённая - устанавливаем grid свойства
+                    // Если ячейка объединённая
                     if (cellData.style.merged) {
-                        if (cellData.style.gridColumnStart && cellData.style.colspan) {
-                            cell.style.gridColumn = `${cellData.style.gridColumnStart} / span ${cellData.style.colspan}`;
+                        if (cellData.style.colspan) {
+                            cell.style.width = `${cellData.style.colspan * CONFIG.CELL_WIDTH}px`;
                         }
-                        if (cellData.style.gridRowStart && cellData.style.rowspan) {
-                            cell.style.gridRow = `${cellData.style.gridRowStart} / span ${cellData.style.rowspan}`;
+                        if (cellData.style.rowspan) {
+                            cell.style.height = `${cellData.style.rowspan * CONFIG.CELL_HEIGHT}px`;
                         }
+                    }
+                    // Перенос текста
+                    if (cellData.style.wrapText) {
+                        cell.style.whiteSpace = 'normal';
+                        cell.style.wordWrap = 'break-word';
+                        cell.style.overflow = 'visible';
+                        cell.style.lineHeight = '1.2';
+                    }
+                    // Ссылка
+                    if (cellData.style.hyperlink) {
+                        cell.style.color = '#0066cc';
+                        cell.style.textDecoration = 'underline';
+                        cell.style.cursor = 'pointer';
+                        cell.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            window.open(cellData.style.hyperlink, '_blank', 'noopener,noreferrer');
+                        });
+                    }
+                    // Изображение в ячейке
+                    if (cellData.style.backgroundImage) {
+                        cell.style.backgroundImage = cellData.style.backgroundImage;
+                        cell.style.backgroundSize = cellData.style.backgroundSize || 'contain';
+                        cell.style.backgroundRepeat = cellData.style.backgroundRepeat || 'no-repeat';
+                        cell.style.backgroundPosition = cellData.style.backgroundPosition || 'center';
+                        cell.textContent = ''; // Убираем текст
                     }
                 }
             }
-            // Проверка data validation - только устанавливаем флаг, обработчик через делегирование
+            // Проверка data validation
             const validation = getDataValidation(row, col);
             if (validation && validation.type === 'list') {
                 cell.style.cursor = 'pointer';
                 cell.dataset.hasDropdown = 'true';
                 renderCellDropdown(cell, row, col);
             }
-            elements.cellGrid.appendChild(cell);
+            fragment.appendChild(cell);
         }
     }
+    elements.cellGrid.innerHTML = '';
+    elements.cellGrid.appendChild(fragment);
     // Восстанавливаем выделение
     selectedCells.forEach(({ row, col }) => {
         const cell = getCellElement(row, col);
@@ -578,6 +712,20 @@ function renderCells() {
         }
     });
     // Обновляем заголовки
+    updateSelectionHeaders();
+}
+function calculateVisibleRange() {
+    const scrollLeft = elements.cellGridWrapper.scrollLeft;
+    const scrollTop = elements.cellGridWrapper.scrollTop;
+    const viewportWidth = elements.cellGridWrapper.clientWidth;
+    const viewportHeight = elements.cellGridWrapper.clientHeight;
+    visibleRange.colStart = Math.floor(scrollLeft / CONFIG.CELL_WIDTH);
+    visibleRange.colEnd = Math.ceil((scrollLeft + viewportWidth) / CONFIG.CELL_WIDTH);
+    visibleRange.rowStart = Math.floor(scrollTop / CONFIG.CELL_HEIGHT);
+    visibleRange.rowEnd = Math.ceil((scrollTop + viewportHeight) / CONFIG.CELL_HEIGHT);
+}
+// === ВЫДЕЛЕНИЕ ЯЧЕЕК ===
+function updateSelectionHeaders() {
     const rowHeader = elements.rowHeaders.querySelector(`.row-header[data-row="${state.selectedCell.row}"]`);
     if (rowHeader) {
         rowHeader.classList.add('selected');
@@ -587,11 +735,14 @@ function renderCells() {
         colHeader.classList.add('selected');
     }
 }
-// === ВЫДЕЛЕНИЕ ЯЧЕЕК ===
 // Для отслеживания повторного клика по той же ячейке
 let lastSelectedCell = null;
 let lastSelectTime = 0;
 function selectCell(row, col) {
+    // Завершить редактирование если оно идет
+    if (state.isEditing) {
+        finishEditing();
+    }
     // Не снимать выделение если идет выделение диапазона
     if (!state.isSelecting) {
         elements.cellGrid.querySelectorAll('.cell.selected').forEach(cell => {
@@ -664,11 +815,11 @@ function selectColumn(col) {
     updateCellReference();
 }
 function getCellElement(row, col) {
-    const index = row * CONFIG.COLS + col;
-    return elements.cellGrid.children[index];
+    // Ищем по data-атрибутам вместо индекса
+    return elements.cellGrid.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
 }
 // === РЕДАКТИРОВАНИЕ ===
-function editCell(row, col) {
+function editCell(row, col, selectAll = true) {
     const cell = getCellElement(row, col);
     if (!cell)
         return;
@@ -678,12 +829,15 @@ function editCell(row, col) {
     cell.classList.remove('has-content');
     cell.contentEditable = 'true';
     cell.focus();
-    // Выделить весь текст
-    const range = document.createRange();
-    range.selectNodeContents(cell);
-    const sel = window.getSelection();
-    sel?.removeAllRanges();
-    sel?.addRange(range);
+    // Выделить весь текст или поставить курсор в конец
+    if (selectAll) {
+        const range = document.createRange();
+        range.selectNodeContents(cell);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+    }
+    // Если selectAll = false, курсор останется там, где кликнули
 }
 function finishEditing() {
     const cell = getCellElement(state.selectedCell.row, state.selectedCell.col);
@@ -726,12 +880,35 @@ function finishEditing() {
     // Обновить кэш для ИИ
     updateAIDataCache();
     updateFormulaBar();
-    // Перерисовать ячейку
-    renderCells();
+    // НЕ перерисовываем все ячейки, а обновляем только текущую
+    updateSingleCell(state.selectedCell.row, state.selectedCell.col);
     // Автоподбор ширины если включен
     const autoFitEnabled = localStorage.getItem('smarttable-auto-fit-columns') === 'true';
     if (autoFitEnabled && finalValue) {
         autoFitColumn(state.selectedCell.col);
+    }
+}
+function updateSingleCell(row, col) {
+    const cell = getCellElement(row, col);
+    if (!cell)
+        return;
+    const key = getCellKey(row, col);
+    const cellData = getCurrentData().get(key);
+    if (cellData) {
+        cell.textContent = cellData.value;
+        cell.classList.add('has-content');
+        // Применяем стили
+        if (cellData.style) {
+            Object.entries(cellData.style).forEach(([prop, value]) => {
+                if (value !== undefined && value !== null && value !== '') {
+                    cell.style[prop] = value;
+                }
+            });
+        }
+    }
+    else {
+        cell.textContent = '';
+        cell.classList.remove('has-content');
     }
 }
 // === ПРИМЕНЕНИЕ ЦВЕТА К ЯЧЕЙКАМ ===
@@ -1128,25 +1305,42 @@ function setupCellEventListeners() {
         const col = parseInt(cell.dataset.col || '0');
         // Проверка на dropdown ячейку
         if (cell.dataset.hasDropdown === 'true') {
-            selectCell(row, col);
+            if (!state.isEditing) {
+                selectCell(row, col);
+            }
             const validation = getDataValidation(row, col);
             if (validation && validation.type === 'list') {
                 showDropdownList(e, cell, row, col, validation.values);
             }
+            return;
+        }
+        // Если уже редактируем - не делаем ничего (клик внутри ячейки)
+        if (state.isEditing) {
+            return;
+        }
+        // Если ячейка уже выделена и содержит текст - начинаем редактирование без выделения
+        const isSameCell = state.selectedCell.row === row && state.selectedCell.col === col;
+        const cellHasContent = cell.textContent && cell.textContent.length > 0;
+        if (isSameCell && cellHasContent) {
+            // Начинаем редактирование без выделения текста (курсор в месте клика)
+            // Важно: НЕ вызываем selectCell, чтобы не завершить редактирование
+            editCell(row, col, false);
         }
         else {
+            // Просто выделяем ячейку
             selectCell(row, col);
         }
     });
-    // Двойной клик (редактирование) - теперь не нужен, т.к. редактирование начинается по клику или клавише
-    // Оставлен для совместимости, если пользователь привык к двойному клику
+    // Двойной клик (редактирование с выделением)
     elements.cellGrid.addEventListener('dblclick', (e) => {
         const cell = e.target.closest('.cell');
         if (!cell)
             return;
         const row = parseInt(cell.dataset.row || '0');
         const col = parseInt(cell.dataset.col || '0');
-        editCell(row, col);
+        // При двойном клике всегда выделяем ячейку и начинаем редактирование
+        selectCell(row, col);
+        editCell(row, col, true);
     });
     // Обработка клавиатуры для ячеек
     elements.cellGrid.addEventListener('keydown', (e) => {
@@ -1161,6 +1355,21 @@ function setupCellEventListeners() {
         if (!cell.classList.contains('cell'))
             return;
         handleCellInput(e);
+    });
+    // Обработка начала редактирования по клавише
+    elements.cellGrid.addEventListener('keypress', (e) => {
+        const cell = e.target.closest('.cell');
+        if (!cell)
+            return;
+        // Игнорируем если уже редактируем
+        if (state.isEditing)
+            return;
+        const row = parseInt(cell.dataset.row || '0');
+        const col = parseInt(cell.dataset.col || '0');
+        // Начинаем редактирование если нажата printable клавиша
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            editCellWithChar(row, col, e.key);
+        }
     });
 }
 function updateRangeSelection() {
@@ -1251,8 +1460,24 @@ function setupSheetContextMenu() {
         const menu = document.getElementById('sheetContextMenu');
         if (menu) {
             menu.style.display = 'block';
-            menu.style.left = `${e.pageX}px`;
-            menu.style.top = `${e.pageY}px`;
+            // Получаем размеры меню и окна
+            const menuRect = menu.getBoundingClientRect();
+            const viewportHeight = window.innerHeight;
+            const viewportWidth = window.innerWidth;
+            let left = e.pageX;
+            let top = e.pageY;
+            // Проверяем, помещается ли меню по вертикали
+            if (top + menuRect.height > viewportHeight) {
+                // Если не помещается внизу - показываем выше курсора
+                top = e.pageY - menuRect.height;
+            }
+            // Проверяем, помещается ли меню по горизонтали
+            if (left + menuRect.width > viewportWidth) {
+                // Если не помещается справа - показываем слева от курсора
+                left = e.pageX - menuRect.width;
+            }
+            menu.style.left = `${left}px`;
+            menu.style.top = `${top}px`;
         }
     });
     // Скрыть меню при клике
@@ -1285,11 +1510,12 @@ function handleSheetContextMenuAction(action) {
                 const sheet = state.sheets.find(s => s.id === sheetId);
                 if (!sheet)
                     return;
-                const newName = prompt('Введите новое название листа:', sheet.name);
-                if (newName && newName.trim()) {
+                showPromptModal('Введите новое название листа:', (newName) => {
+                    if (!newName || !newName.trim())
+                        return;
                     sheet.name = newName.trim();
                     renderSheets();
-                }
+                }, sheet.name);
             }
             break;
         case 'duplicate-sheet':
@@ -1398,13 +1624,14 @@ function handleContextMenuAction(action) {
             break;
         case 'bg-color':
             {
-                const color = prompt('Введите цвет фона (hex, например #FFEBEE):', '#FFEBEE');
-                if (color) {
+                showPromptModal('Введите цвет фона (hex, например #FFEBEE):', (color) => {
+                    if (!color)
+                        return;
                     const cell = getCellElement(row, col);
                     if (cell) {
                         cell.style.backgroundColor = color;
                     }
-                }
+                }, '#FFEBEE');
             }
             break;
         case 'insert-row-above':
@@ -1498,24 +1725,233 @@ function deleteColumnAt(col) {
     });
     colsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
 }
-// Вставка изображения в ячейку
+// Вставка изображения (плавающий объект)
 function insertImage(imageSrc) {
+    const { row, col } = state.selectedCell;
+    const cell = getCellElement(row, col);
+    if (!cell)
+        return;
+    const rect = cell.getBoundingClientRect();
+    const container = document.getElementById('cellGridWrapper');
+    if (!container)
+        return;
+    // Создаём плавающее изображение
+    const imgContainer = document.createElement('div');
+    imgContainer.className = 'floating-image';
+    imgContainer.style.cssText = `
+    position: absolute;
+    left: ${rect.left + container.scrollLeft}px;
+    top: ${rect.top + container.scrollTop}px;
+    min-width: 150px;
+    min-height: 150px;
+    max-width: 400px;
+    max-height: 400px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    background: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+  `;
+    // Заголовок для перетаскивания
+    const header = document.createElement('div');
+    header.className = 'floating-header';
+    header.style.cssText = `
+    height: 28px;
+    background: linear-gradient(to bottom, #f5f5f5, #e0e0e0);
+    border-bottom: 1px solid #ddd;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px;
+    cursor: move;
+    user-select: none;
+  `;
+    const title = document.createElement('span');
+    title.textContent = 'Фото';
+    title.style.cssText = `
+    font-size: 12px;
+    color: #666;
+    font-weight: 500;
+  `;
+    const removeBtn = document.createElement('button');
+    removeBtn.innerHTML = '×';
+    removeBtn.style.cssText = `
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: transparent;
+    color: #666;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  `;
+    removeBtn.onmouseover = () => {
+        removeBtn.style.background = '#ff4444';
+        removeBtn.style.color = 'white';
+    };
+    removeBtn.onmouseout = () => {
+        removeBtn.style.background = 'transparent';
+        removeBtn.style.color = '#666';
+    };
+    removeBtn.onclick = (e) => {
+        e.stopPropagation();
+        imgContainer.remove();
+    };
+    header.appendChild(title);
+    header.appendChild(removeBtn);
+    imgContainer.appendChild(header);
+    // Контейнер для изображения
+    const imgWrapper = document.createElement('div');
+    imgWrapper.style.cssText = `
+    position: relative;
+    width: 100%;
+    height: calc(100% - 28px);
+    overflow: hidden;
+  `;
+    const img = document.createElement('img');
+    img.src = imageSrc;
+    img.style.cssText = `
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    pointer-events: none;
+  `;
+    imgWrapper.appendChild(img);
+    imgContainer.appendChild(imgWrapper);
+    container.appendChild(imgContainer);
+    // Делаем изображение перетаскиваемым за заголовок
+    makeDraggableByHeader(imgContainer, header);
+    // Добавляем изменение размера
+    addResizeHandles(imgContainer);
+    autoSave();
+}
+// Вставка изображения в ячейку
+function insertImageInCell(imageSrc) {
     const { row, col } = state.selectedCell;
     const key = getCellKey(row, col);
     const data = getCurrentData();
     data.set(key, {
-        value: '[Изображение]',
+        value: '[Фото]',
         style: {
             backgroundImage: `url(${imageSrc})`,
             backgroundSize: 'contain',
             backgroundRepeat: 'no-repeat',
             backgroundPosition: 'center',
-            minHeight: '100px'
+            minHeight: `${CONFIG.CELL_HEIGHT}px`
         }
     });
     renderCells();
     updateAIDataCache();
     autoSave();
+}
+function makeDraggableByHeader(element, header) {
+    let isDragging = false;
+    let startX, startY, initialLeft, initialTop;
+    header.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        initialLeft = parseFloat(element.style.left) || 0;
+        initialTop = parseFloat(element.style.top) || 0;
+        header.style.cursor = 'grabbing';
+    });
+    document.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+            e.stopPropagation();
+            e.preventDefault();
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            element.style.left = `${initialLeft + dx}px`;
+            element.style.top = `${initialTop + dy}px`;
+        }
+    });
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            header.style.cursor = 'move';
+        }
+    });
+}
+function makeDraggable(element) {
+    let isDragging = false;
+    let startX, startY, initialLeft, initialTop;
+    element.addEventListener('mousedown', (e) => {
+        // Предотвращаем всплытие и выделение ячеек
+        e.stopPropagation();
+        e.preventDefault();
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        initialLeft = parseFloat(element.style.left) || 0;
+        initialTop = parseFloat(element.style.top) || 0;
+        element.style.cursor = 'grabbing';
+    });
+    document.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+            e.stopPropagation();
+            e.preventDefault();
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            element.style.left = `${initialLeft + dx}px`;
+            element.style.top = `${initialTop + dy}px`;
+        }
+    });
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            element.style.cursor = 'move';
+        }
+    });
+}
+// Добавление ручек для изменения размера
+function addResizeHandles(element) {
+    // Ручка для изменения размера (правый нижний угол)
+    const resizeHandle = document.createElement('div');
+    resizeHandle.className = 'resize-handle';
+    resizeHandle.style.cssText = `
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 16px;
+    height: 16px;
+    cursor: nwse-resize;
+    z-index: 1001;
+    background: linear-gradient(135deg, transparent 50%, #999 50%);
+    border-radius: 0 0 8px 0;
+  `;
+    let isResizing = false;
+    let startX, startY, startWidth, startHeight;
+    resizeHandle.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        isResizing = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        startWidth = element.offsetWidth;
+        startHeight = element.offsetHeight;
+    });
+    document.addEventListener('mousemove', (e) => {
+        if (isResizing) {
+            e.stopPropagation();
+            e.preventDefault();
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            element.style.width = `${Math.max(150, startWidth + dx)}px`;
+            element.style.height = `${Math.max(100, startHeight + dy)}px`;
+        }
+    });
+    document.addEventListener('mouseup', () => {
+        isResizing = false;
+    });
+    element.appendChild(resizeHandle);
 }
 function setupEventListeners() {
     // Переключение вкладок меню
@@ -1525,7 +1961,7 @@ function setupEventListeners() {
             item.classList.add('active');
         });
     });
-    // Изменение цвета текста
+    // Изменение ц��ета текста
     document.addEventListener('text-color-change', (e) => {
         const event = e;
         applyColorToSelection('text', event.detail.color);
@@ -1551,6 +1987,34 @@ function setupEventListeners() {
     // Автосумма
     document.addEventListener('auto-sum', () => {
         autoSum();
+    });
+    // Автоподбор ширины колонки
+    document.addEventListener('auto-fit-column', () => {
+        autoFitColumn(state.selectedCell.col);
+    });
+    // Перенос текста
+    document.addEventListener('wrap-text', () => {
+        toggleWrapText();
+    });
+    // Сортировка
+    document.addEventListener('sort-data', () => {
+        sortData();
+    });
+    // Фильтр
+    document.addEventListener('filter-data', () => {
+        toggleFilter();
+    });
+    // Сортировка A-Z
+    document.addEventListener('sort-a-z', () => {
+        sortColumnAZ();
+    });
+    // Фильтр данных
+    document.addEventListener('filter-data-full', () => {
+        filterDataFull();
+    });
+    // Удаление дубликатов
+    document.addEventListener('remove-duplicates', () => {
+        removeDuplicates();
     });
     // Вставка из ribbon
     document.addEventListener('paste-from-ribbon', (e) => {
@@ -1587,7 +2051,7 @@ function setupEventListeners() {
         renderCells();
         autoSave();
     });
-    // Вставка изображения
+    // Вставка изображения (плавающий объект)
     document.addEventListener('insert-image', () => {
         const input = document.createElement('input');
         input.type = 'file';
@@ -1605,10 +2069,29 @@ function setupEventListeners() {
         };
         input.click();
     });
+    // Вставка изображения в ячейку
+    document.addEventListener('insert-image-in-cell', () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = (e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const result = event.target?.result;
+                    insertImageInCell(result);
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+        input.click();
+    });
     // Вставка ссылки
     document.addEventListener('insert-link', () => {
-        const url = prompt('Введите URL ссылки:');
-        if (url) {
+        showPromptModal('Введите URL ссылки:', (url) => {
+            if (!url)
+                return;
             const { row, col } = state.selectedCell;
             const key = getCellKey(row, col);
             const data = getCurrentData();
@@ -1627,7 +2110,7 @@ function setupEventListeners() {
             }
             updateAIDataCache();
             autoSave();
-        }
+        });
     });
     // Вставка комментария
     document.addEventListener('insert-comment', () => {
@@ -1635,8 +2118,9 @@ function setupEventListeners() {
         const key = getCellKey(row, col);
         const data = getCurrentData();
         const cellData = data.get(key) || { value: '' };
-        const comment = prompt('Введите комментарий:');
-        if (comment) {
+        showPromptModal('Вв����дите комментарий:', (comment) => {
+            if (!comment)
+                return;
             cellData.style = cellData.style || {};
             cellData.style.comment = comment;
             data.set(key, cellData);
@@ -1647,45 +2131,149 @@ function setupEventListeners() {
             }
             updateAIDataCache();
             autoSave();
-        }
+        });
     });
     // Вставка символа
     document.addEventListener('insert-symbol', () => {
         const symbols = ['©', '®', '™', '±', '×', '÷', '≠', '≤', '≥', '∞', '√', '°', '€', '£', '¥'];
-        const symbol = prompt('Введите символ или выберите из: ' + symbols.join(', '));
-        if (symbol) {
+        showPromptModal('Введите символ или выберите из: ' + symbols.join(', '), (symbol) => {
+            if (!symbol)
+                return;
             pasteToCell(symbol);
-        }
+        });
     });
-    // Вставка таблицы
+    // Вставка таблицы (плавающий объект)
     document.addEventListener('insert-table', () => {
-        const rows = prompt('Количество строк:', '3');
-        const cols = prompt('Количество столбцов:', '3');
-        if (rows && cols) {
-            const numRows = parseInt(rows);
-            const numCols = parseInt(cols);
-            const startRow = state.selectedCell.row;
-            const startCol = state.selectedCell.col;
-            const data = getCurrentData();
-            for (let r = 0; r < numRows; r++) {
-                for (let c = 0; c < numCols; c++) {
-                    const key = getCellKey(startRow + r, startCol + c);
-                    const value = c === 0 ? `Строка ${r + 1}` : `Ячейка ${r + 1}-${c + 1}`;
-                    data.set(key, {
-                        value,
-                        style: {
-                            backgroundColor: r % 2 === 0 ? '#f0f0f0' : 'white',
-                            border: '1px solid #ccc'
-                        }
-                    });
+        showPromptModal('Количество строк:', (rows) => {
+            if (!rows)
+                return;
+            showPromptModal('Количество столбцов:', (cols) => {
+                if (!cols)
+                    return;
+                const numRows = parseInt(rows);
+                const numCols = parseInt(cols);
+                const { row, col } = state.selectedCell;
+                const cell = getCellElement(row, col);
+                if (!cell)
+                    return;
+                const rect = cell.getBoundingClientRect();
+                const container = document.getElementById('cellGridWrapper');
+                if (!container)
+                    return;
+                // Создаём плавающую таблицу
+                const tableContainer = document.createElement('div');
+                tableContainer.className = 'floating-table';
+                tableContainer.style.cssText = `
+          position: absolute;
+          left: ${rect.left + container.scrollLeft}px;
+          top: ${rect.top + container.scrollTop}px;
+          background: white;
+          border: 2px solid #ddd;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          z-index: 1000;
+          min-width: 200px;
+          min-height: 100px;
+          max-width: 800px;
+          max-height: 600px;
+        `;
+                // Заголовок для перетаскивания
+                const header = document.createElement('div');
+                header.className = 'floating-header';
+                header.style.cssText = `
+          height: 28px;
+          background: linear-gradient(to bottom, #f5f5f5, #e0e0e0);
+          border-bottom: 1px solid #ddd;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 8px;
+          cursor: move;
+          user-select: none;
+        `;
+                const title = document.createElement('span');
+                title.textContent = `Таблица ${numRows}x${numCols}`;
+                title.style.cssText = `
+          font-size: 12px;
+          color: #666;
+          font-weight: 500;
+        `;
+                const removeBtn = document.createElement('button');
+                removeBtn.innerHTML = '×';
+                removeBtn.style.cssText = `
+          width: 20px;
+          height: 20px;
+          border: none;
+          background: transparent;
+          color: #666;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 16px;
+          line-height: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        `;
+                removeBtn.onmouseover = () => {
+                    removeBtn.style.background = '#ff4444';
+                    removeBtn.style.color = 'white';
+                };
+                removeBtn.onmouseout = () => {
+                    removeBtn.style.background = 'transparent';
+                    removeBtn.style.color = '#666';
+                };
+                removeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    tableContainer.remove();
+                };
+                header.appendChild(title);
+                header.appendChild(removeBtn);
+                tableContainer.appendChild(header);
+                // Контейнер для таблицы с прокруткой
+                const tableWrapper = document.createElement('div');
+                tableWrapper.style.cssText = `
+          position: relative;
+          width: 100%;
+          height: calc(100% - 28px);
+          overflow: auto;
+          padding: 8px;
+        `;
+                const table = document.createElement('table');
+                table.style.cssText = `
+          width: 100%;
+          border-collapse: collapse;
+          min-width: ${numCols * 80}px;
+        `;
+                // Создаём пустую таблицу
+                for (let r = 0; r < numRows; r++) {
+                    const tr = document.createElement('tr');
+                    for (let c = 0; c < numCols; c++) {
+                        const td = document.createElement('td');
+                        td.contentEditable = 'true';
+                        td.style.cssText = `
+              padding: 8px;
+              border: 1px solid #ccc;
+              min-width: 80px;
+              min-height: 24px;
+            `;
+                        tr.appendChild(td);
+                    }
+                    table.appendChild(tr);
                 }
-            }
-            renderCells();
-            updateAIDataCache();
-            autoSave();
-        }
+                tableWrapper.appendChild(table);
+                tableContainer.appendChild(tableWrapper);
+                container.appendChild(tableContainer);
+                // Делаем таблицу перетаскиваемой за заголовок
+                makeDraggableByHeader(tableContainer, header);
+                // Добавляем изменение размера
+                addResizeHandles(tableContainer);
+                autoSave();
+            });
+        });
     });
     // Синхронизация скролла
+    let scrollFrameId = null;
     elements.cellGridWrapper.addEventListener('scroll', () => {
         const scrollLeft = elements.cellGridWrapper.scrollLeft;
         const scrollTop = elements.cellGridWrapper.scrollTop;
@@ -1693,6 +2281,16 @@ function setupEventListeners() {
         elements.columnHeaders.scrollLeft = scrollLeft;
         // Синхронизация заголовков строк
         elements.rowHeaders.scrollTop = scrollTop;
+        // Синхронизация фиксированных заголовков
+        syncFixedHeaders();
+        // Оптимизация: перерисовка только видимых ячеек при скролле
+        if (scrollFrameId !== null) {
+            cancelAnimationFrame(scrollFrameId);
+        }
+        scrollFrameId = requestAnimationFrame(() => {
+            renderVisibleCells();
+            scrollFrameId = null;
+        });
     });
     // Изменение размера столбцов
     setupColumnResize();
@@ -1919,6 +2517,41 @@ function setupEventListeners() {
     document.addEventListener('keydown', handleGlobalKeyDown);
 }
 function handleGlobalKeyDown(e) {
+    // Игнорируем если фокус на input/textarea
+    const target = e.target;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+    }
+    // Обработка стрелок для навигации
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        switch (e.key) {
+            case 'ArrowUp':
+                e.preventDefault();
+                moveSelection(-1, 0);
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                moveSelection(1, 0);
+                break;
+            case 'ArrowLeft':
+                e.preventDefault();
+                moveSelection(0, -1);
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                moveSelection(0, 1);
+                break;
+            case 'Enter':
+                e.preventDefault();
+                moveSelection(1, 0);
+                break;
+            case 'Tab':
+                e.preventDefault();
+                moveSelection(0, e.shiftKey ? -1 : 1);
+                break;
+        }
+        return;
+    }
     // Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+Z, Ctrl+Y
     if (e.ctrlKey || e.metaKey) {
         switch (e.key.toLowerCase()) {
@@ -1947,6 +2580,48 @@ function handleGlobalKeyDown(e) {
                 elements.aiPanel.classList.toggle('open');
                 break;
         }
+    }
+}
+function moveSelection(deltaRow, deltaCol) {
+    let newRow = state.selectedCell.row + deltaRow;
+    let newCol = state.selectedCell.col + deltaCol;
+    // Ограничиваем в пределах таблицы
+    newRow = Math.max(0, Math.min(CONFIG.ROWS - 1, newRow));
+    newCol = Math.max(0, Math.min(CONFIG.COLS - 1, newCol));
+    // Выделяем новую ячейку
+    selectCell(newRow, newCol);
+    // Прокручиваем к ячейке если нужно
+    scrollToCell(newRow, newCol);
+}
+function scrollToCell(row, col) {
+    const cellTop = row * CONFIG.CELL_HEIGHT;
+    const cellLeft = col * CONFIG.CELL_WIDTH;
+    const cellBottom = cellTop + CONFIG.CELL_HEIGHT;
+    const cellRight = cellLeft + CONFIG.CELL_WIDTH;
+    const scrollTop = elements.cellGridWrapper.scrollTop;
+    const scrollLeft = elements.cellGridWrapper.scrollLeft;
+    const viewportHeight = elements.cellGridWrapper.clientHeight;
+    const viewportWidth = elements.cellGridWrapper.clientWidth;
+    let newScrollTop = scrollTop;
+    let newScrollLeft = scrollLeft;
+    // Прокрутка по вертикали
+    if (cellTop < scrollTop) {
+        newScrollTop = cellTop;
+    }
+    else if (cellBottom > scrollTop + viewportHeight) {
+        newScrollTop = cellBottom - viewportHeight;
+    }
+    // Прокрутка по горизонтали
+    if (cellLeft < scrollLeft) {
+        newScrollLeft = cellLeft;
+    }
+    else if (cellRight > scrollLeft + viewportWidth) {
+        newScrollLeft = cellRight - viewportWidth;
+    }
+    // Применяем прокрутку
+    if (newScrollTop !== scrollTop || newScrollLeft !== scrollLeft) {
+        elements.cellGridWrapper.scrollTop = newScrollTop;
+        elements.cellGridWrapper.scrollLeft = newScrollLeft;
     }
 }
 // === ОБРАБОТЧИКИ ПЕРЕКЛЮЧЕНИЯ РЕЖИМОВ ИИ ===
@@ -2636,7 +3311,7 @@ async function executeSingleCommand(action, params) {
             console.log('[DEBUG] Converted cell', params.cell, 'to column:', params.column, 'row:', params.row);
         }
     }
-    // Проверяем что column и row существуют для команд которые их требуют
+    // Провер��ем что column и row существуют для команд которые их требуют
     const requiresColumnRow = ['set_cell', 'set_cell_color', 'set_formula', 'color_row'];
     if (requiresColumnRow.includes(action)) {
         if (params.column === undefined || params.column === null) {
@@ -3536,10 +4211,14 @@ function showExportMenu() {
     overflow: hidden;
   `;
     const options = [
-        { format: 'csv', label: 'CSV (.csv)', icon: '📄' },
         { format: 'xlsx', label: 'Excel (.xlsx)', icon: '📊' },
+        { format: 'ods', label: 'OpenDocument (.ods)', icon: '📑' },
+        { format: 'csv', label: 'CSV (.csv)', icon: '📄' },
+        { format: 'tsv', label: 'TSV (.tsv)', icon: '📝' },
         { format: 'json', label: 'JSON (.json)', icon: '📋' },
+        { format: 'xml', label: 'XML (.xml)', icon: '📄' },
         { format: 'html', label: 'HTML (.html)', icon: '🌐' },
+        { format: 'markdown', label: 'Markdown (.md)', icon: '📖' },
     ];
     options.forEach(opt => {
         const btn = document.createElement('button');
@@ -3627,7 +4306,7 @@ ${data.map(row => `  <tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).
   <Worksheet ss:Name="Sheet1">
     <Table>
 ${data.map(row => `      <Row>
-${row.map(cell => `        <Cell><Data ss:Type="String">${cell}</Data></Cell>`).join('\n')}
+${row.map(cell => `        <Cell><Data ss:Type="String">${escapeXml(cell)}</Data></Cell>`).join('\n')}
       </Row>`).join('\n')}
     </Table>
   </Worksheet>
@@ -3635,17 +4314,102 @@ ${row.map(cell => `        <Cell><Data ss:Type="String">${cell}</Data></Cell>`).
             mimeType = 'application/vnd.ms-excel';
             extension = 'xls';
             break;
+        case 'xml':
+            // XML экспорт
+            content = `<?xml version="1.0" encoding="UTF-8"?>
+<SmartTable>
+  <Metadata>
+    <ExportDate>${new Date().toISOString()}</ExportDate>
+    <Rows>${CONFIG.ROWS}</Rows>
+    <Cols>${CONFIG.COLS}</Cols>
+  </Metadata>
+  <Data>
+${data.map((row, ri) => `    <Row index="${ri}">
+${row.map((cell, ci) => `      <Cell index="${ci}">${escapeXml(cell)}</Cell>`).join('\n')}
+    </Row>`).join('\n')}
+  </Data>
+</SmartTable>`;
+            mimeType = 'application/xml';
+            extension = 'xml';
+            break;
+        case 'ods':
+            // OpenDocument Spreadsheet
+            content = `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tdc:office" xmlns:table="urn:oasis:names:tdc:table" xmlns:text="urn:oasis:names:tdc:text">
+  <office:body>
+    <office:spreadsheet>
+      <table:table table:name="Sheet1">
+${data.map(row => row.map(cell => `        <table:table-cell><text:p>${escapeXml(cell)}</text:p></table:table-cell>`).join('\n') + `
+      </table:table-row>`).join('\n')}
+      </table:table>
+    </office:spreadsheet>
+  </office:body>
+</office:document-content>`;
+            mimeType = 'application/vnd.oasis.opendocument.spreadsheet';
+            extension = 'ods';
+            break;
+        case 'tsv':
+            // Tab-separated values
+            content = data.map(row => row.join('\t')).join('\n');
+            mimeType = 'text/tab-separated-values';
+            extension = 'tsv';
+            break;
+        case 'markdown':
+            // Markdown таблица
+            const header = data[0] || [];
+            const separator = header.map(() => '---').join(' | ');
+            const rows = data.slice(1).map(row => row.join(' | '));
+            content = `| ${header.join(' | ')} |
+| ${separator} |
+${rows.map(row => `| ${row} |`).join('\n')}`;
+            mimeType = 'text/markdown';
+            extension = 'md';
+            break;
     }
-    // Создать и скачать файл
+    // Создаём и скачиваем файл через IPC
     const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `SmartTable_${new Date().toISOString().slice(0, 10)}.${extension}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const reader = new FileReader();
+    reader.onload = async () => {
+        const base64Content = reader.result;
+        // Для IPC передаём содержимое как текст
+        const textContent = base64Content.split(',')[1]
+            ? atob(base64Content.split(',')[1])
+            : content;
+        if (ipcRenderer) {
+            try {
+                const result = await ipcRenderer.invoke('save-file', {
+                    content: textContent,
+                    mimeType,
+                    extension,
+                    defaultName: `SmartTable_${new Date().toISOString().slice(0, 10)}`
+                });
+                if (result.success) {
+                    console.log('[Export] File saved successfully:', result.filePath);
+                }
+                else if (result.canceled) {
+                    console.log('[Export] Save cancelled by user');
+                }
+                else {
+                    console.error('[Export] Save failed:', result.error);
+                }
+            }
+            catch (error) {
+                console.error('[Export] Error saving file:', error);
+            }
+        }
+        else {
+            // Fallback: скачивание через браузер
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `SmartTable_${new Date().toISOString().slice(0, 10)}.${extension}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    };
+    reader.readAsDataURL(blob);
 }
 function generateAiResponse(message) {
     const lowerMessage = message.toLowerCase();
@@ -4139,6 +4903,101 @@ function toggleFilter() {
     });
     updateAIDataCache();
 }
+// Перенос текста
+function toggleWrapText() {
+    const { row, col } = state.selectedCell;
+    const key = getCellKey(row, col);
+    const data = getCurrentData();
+    const cellData = data.get(key) || { value: '' };
+    cellData.style = cellData.style || {};
+    cellData.style.wrapText = !cellData.style.wrapText;
+    data.set(key, cellData);
+    renderCells();
+    updateAIDataCache();
+    autoSave();
+}
+// Сортировка A-Z
+function sortColumnAZ() {
+    const { col } = state.selectedCell;
+    const data = getCurrentData();
+    const rowsMap = new Map();
+    data.forEach((cellData, key) => {
+        const [row, cellCol] = key.split('-').map(Number);
+        if (!rowsMap.has(row))
+            rowsMap.set(row, new Map());
+        rowsMap.get(row).set(cellCol, cellData.value);
+    });
+    const sortedRows = Array.from(rowsMap.entries()).sort((a, b) => {
+        const valA = a[1].get(col) || '';
+        const valB = b[1].get(col) || '';
+        return valA.localeCompare(valB, 'ru');
+    });
+    const newData = new Map();
+    sortedRows.forEach(([, rowData], newRow) => {
+        rowData.forEach((value, oldCol) => { const newKey = `${newRow}-${oldCol}`; newData.set(newKey, { value }); });
+    });
+    data.clear();
+    newData.forEach((value, key) => data.set(key, value));
+    renderCells();
+    updateAIDataCache();
+    autoSave();
+}
+// Фильтр данных (полный)
+function filterDataFull() {
+    const { col } = state.selectedCell;
+    const cell = getCellElement(state.selectedCell.row, state.selectedCell.col);
+    const value = cell?.textContent || '';
+    if (!value) {
+        alert('Введите значение для фильтрации в активной ячейке');
+        return;
+    }
+    const data = getCurrentData();
+    data.forEach((cellData, key) => {
+        const [row, cellCol] = key.split('-').map(Number);
+        if (cellCol === col) {
+            const cellEl = getCellElement(row, col);
+            if (cellEl)
+                cellEl.style.display = cellData.value.includes(value) ? '' : 'none';
+        }
+    });
+    updateAIDataCache();
+    autoSave();
+}
+// Удаление дубликатов
+function removeDuplicates() {
+    const { col } = state.selectedCell;
+    const data = getCurrentData();
+    const seen = new Set();
+    const rowsToDelete = new Set();
+    const rowsMap = new Map();
+    data.forEach((cellData, key) => {
+        const [row, cellCol] = key.split('-').map(Number);
+        if (!rowsMap.has(row))
+            rowsMap.set(row, new Map());
+        rowsMap.get(row).set(cellCol, cellData.value);
+    });
+    rowsMap.forEach((rowData, row) => {
+        const val = rowData.get(col) || '';
+        if (seen.has(val)) {
+            rowsToDelete.add(row);
+        }
+        else {
+            seen.add(val);
+        }
+    });
+    rowsToDelete.forEach(row => {
+        const rowToDelete = rowsMap.get(row);
+        if (rowToDelete) {
+            rowToDelete.forEach((_, c) => {
+                const key = getCellKey(row, c);
+                data.delete(key);
+            });
+        }
+    });
+    renderCells();
+    updateAIDataCache();
+    autoSave();
+}
 // Экспорт глобальных функций
 window.getSelectedRangeData = getSelectedRangeData;
 window.getSelectedRange = getSelectedRange;
@@ -4516,5 +5375,264 @@ function getColLetter(colIndex) {
 // Функция для получения данных таблицы (для AI контекста)
 window.getTableData = () => getCurrentData();
 console.log('[Renderer] Global AI functions registered');
+/**
+ * Показать модальное окно с prompt (замена prompt())
+ */
+function showPromptModal(message, callback, defaultValue = '') {
+    // Удаляем старое модальное окно если есть
+    const oldModal = document.querySelector('.prompt-modal-overlay');
+    if (oldModal)
+        oldModal.remove();
+    const overlay = document.createElement('div');
+    overlay.className = 'prompt-modal-overlay';
+    overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  `;
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+    background: var(--surface-color, #fff);
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    min-width: 400px;
+    max-width: 90vw;
+  `;
+    modal.innerHTML = `
+    <div style="margin-bottom: 16px; font-size: 16px; font-weight: 500; color: var(--text-primary, #000);">${message}</div>
+    <input type="text" class="prompt-modal-input" value="${defaultValue}" 
+      style="width: 100%; padding: 10px 12px; border: 2px solid var(--border-color, #ddd); border-radius: 6px; font-size: 14px; margin-bottom: 16px; box-sizing: border-box;">
+    <div style="display: flex; gap: 12px; justify-content: flex-end;">
+      <button class="prompt-modal-cancel" 
+        style="padding: 10px 20px; border: 1px solid var(--border-color, #ddd); background: var(--hover-bg, #f5f5f5); border-radius: 6px; cursor: pointer; font-size: 14px;">Отмена</button>
+      <button class="prompt-modal-ok" 
+        style="padding: 10px 20px; border: none; background: var(--primary-color, #10b981); color: white; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;">OK</button>
+    </div>
+  `;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    const input = modal.querySelector('.prompt-modal-input');
+    const okBtn = modal.querySelector('.prompt-modal-ok');
+    const cancelBtn = modal.querySelector('.prompt-modal-cancel');
+    const close = (value) => {
+        overlay.remove();
+        callback(value);
+    };
+    okBtn?.addEventListener('click', () => close(input.value || null));
+    cancelBtn?.addEventListener('click', () => close(null));
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter')
+            close(input.value || null);
+        if (e.key === 'Escape')
+            close(null);
+    });
+    input.focus();
+    input.select();
+}
+/**
+ * Экспорт данных с выбором листов
+ */
+async function exportDataWithSheets(format, sheetIds) {
+    console.log('[Export] Exporting sheets:', sheetIds, 'format:', format);
+    // Собрать данные из выбранных листов
+    const sheetsData = [];
+    sheetIds.forEach(sheetId => {
+        const sheet = state.sheets.find(s => s.id === sheetId);
+        if (!sheet)
+            return;
+        const sheetData = state.sheetsData.get(sheetId) || new Map();
+        const rowData = [];
+        // Собрать данные из таблицы
+        for (let row = 0; row < CONFIG.ROWS; row++) {
+            const rowDataArray = [];
+            for (let col = 0; col < CONFIG.COLS; col++) {
+                const key = getCellKey(row, col);
+                const cellData = sheetData.get(key);
+                rowDataArray.push(cellData?.value || '');
+            }
+            rowData.push(rowDataArray);
+        }
+        sheetsData.push({ name: sheet.name, data: rowData });
+    });
+    let content = '';
+    let mimeType = 'text/plain';
+    let extension = format;
+    switch (format) {
+        case 'xlsx':
+            // XML Spreadsheet с несколькими листами
+            content = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet">
+${sheetsData.map(sheet => `  <Worksheet ss:Name="${escapeXml(sheet.name)}">
+    <Table>
+${sheet.data.map(row => `      <Row>
+${row.map(cell => `        <Cell><Data ss:Type="String">${escapeXml(cell)}</Data></Cell>`).join('\n')}
+      </Row>`).join('\n')}
+    </Table>
+  </Worksheet>`).join('\n')}
+</Workbook>`;
+            mimeType = 'application/vnd.ms-excel';
+            extension = 'xls';
+            break;
+        case 'csv':
+            // CSV экспортирует только первый выбранный лист
+            if (sheetsData.length > 0) {
+                content = sheetsData[0].data.map(row => row.map(cell => {
+                    if (cell.includes(',') || cell.includes('"') || cell.includes('\n')) {
+                        return `"${cell.replace(/"/g, '""')}"`;
+                    }
+                    return cell;
+                }).join(',')).join('\n');
+            }
+            mimeType = 'text/csv;charset=utf-8';
+            break;
+        case 'json':
+            // JSON со всеми листами
+            content = JSON.stringify(sheetsData.map(s => ({ sheetName: s.name, data: s.data })), null, 2);
+            mimeType = 'application/json';
+            break;
+        case 'html':
+            // HTML с несколькими листами как таблицы
+            content = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>SmartTable Export</title></head>
+<body>
+${sheetsData.map(sheet => `<h2>Sheet: ${escapeXml(sheet.name)}</h2>
+<table border="1">
+${sheet.data.map(row => `  <tr>${row.map(cell => `<td>${escapeXml(cell)}</td>`).join('')}</tr>`).join('\n')}
+</table>`).join('\n')}
+</body>
+</html>`;
+            mimeType = 'text/html';
+            break;
+        case 'xml':
+            // XML экспорт
+            content = `<?xml version="1.0" encoding="UTF-8"?>
+<SmartTable>
+  <Metadata>
+    <ExportDate>${new Date().toISOString()}</ExportDate>
+    <Sheets>${sheetsData.length}</Sheets>
+  </Metadata>
+  <Data>
+${sheetsData.map(sheet => `    <Sheet name="${escapeXml(sheet.name)}">
+${sheet.data.map((row, ri) => `      <Row index="${ri}">
+${row.map((cell, ci) => `        <Cell index="${ci}">${escapeXml(cell)}</Cell>`).join('\n')}
+      </Row>`).join('\n')}
+    </Sheet>`).join('\n')}
+  </Data>
+</SmartTable>`;
+            mimeType = 'application/xml';
+            extension = 'xml';
+            break;
+        case 'markdown':
+            // Markdown с несколькими листами
+            content = sheetsData.map(sheet => `## ${sheet.name}\n\n` +
+                `| ${sheet.data[0]?.map(() => 'Column').join(' | ')} |\n` +
+                `| ${sheet.data[0]?.map(() => '---').join(' | ')} |\n` +
+                sheet.data.map(row => `| ${row.join(' | ')} |`).join('\n')).join('\n\n');
+            mimeType = 'text/markdown';
+            extension = 'md';
+            break;
+        case 'ods':
+            // ODS (простой XML)
+            content = `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tdc:office" xmlns:table="urn:oasis:names:tdc:table">
+  <office:body>
+    <office:spreadsheet>
+${sheetsData.map(sheet => `      <table:table table:name="${escapeXml(sheet.name)}">
+${sheet.data.map(row => `        <table:table-row>
+${row.map(cell => `          <table:table-cell><text:p>${escapeXml(cell)}</text:p></table:table-cell>`).join('\n')}
+        </table:table-row>`).join('\n')}
+      </table:table>`).join('\n')}
+    </office:spreadsheet>
+  </office:body>
+</office:document-content>`;
+            mimeType = 'application/vnd.oasis.opendocument.spreadsheet';
+            break;
+        case 'tsv':
+            // TSV экспортирует только первый выбранный лист
+            if (sheetsData.length > 0) {
+                content = sheetsData[0].data.map(row => row.join('\t')).join('\n');
+            }
+            mimeType = 'text/tab-separated-values';
+            break;
+    }
+    // Сохраняем через IPC
+    if (ipcRenderer) {
+        console.log('[Export] Calling save-file IPC handler...');
+        try {
+            const result = await ipcRenderer.invoke('save-file', {
+                content,
+                mimeType,
+                extension,
+                defaultName: `SmartTable_${new Date().toISOString().slice(0, 10)}`
+            });
+            console.log('[Export] Save result:', result);
+            if (result.success) {
+                console.log('[Export] File saved successfully:', result.filePath);
+            }
+            else {
+                console.log('[Export] Save cancelled by user');
+            }
+        }
+        catch (error) {
+            console.error('[Export] Error saving file:', error);
+        }
+    }
+    else {
+        console.error('[Export] ipcRenderer not available!');
+    }
+}
+// Глобальная функция для получения списка листов
+window.getSheets = () => state.sheets;
+// Глобальная функция для импорта листов
+window.importSheets = (sheets) => {
+    importSheetsImpl(sheets);
+};
+// Импорт листов из файла
+function importSheetsImpl(sheets) {
+    console.log('[Renderer] Importing sheets:', sheets.length);
+    // Очищаем текущие данные
+    state.sheetsData.clear();
+    state.sheets = [];
+    // Создаём листы из импортированных данных
+    sheets.forEach((sheet, index) => {
+        const id = index + 1;
+        const name = sheet.name || `Лист ${id}`;
+        state.sheets.push({ id, name });
+        // Создаём данные для листа
+        const sheetData = new Map();
+        // Заполняем данными из импортированного файла
+        sheet.data.forEach((row, rowIndex) => {
+            row.forEach((cellValue, colIndex) => {
+                if (cellValue && cellValue.trim() !== '') {
+                    const key = getCellKey(rowIndex, colIndex);
+                    sheetData.set(key, { value: cellValue });
+                }
+            });
+        });
+        state.sheetsData.set(id, sheetData);
+    });
+    // Переключаемся на первый лист
+    state.currentSheet = state.sheets[0]?.id || 1;
+    // Перерисовываем таблицу
+    renderCells();
+    renderSheets();
+    updateFormulaBar();
+    console.log('[Renderer] Import completed, sheets:', state.sheets.length);
+}
+// Делаем showExportMenu и exportData глобальными функциями
+window.showExportMenu = showExportMenu;
+window.exportData = exportData;
+window.exportDataWithSheets = exportDataWithSheets;
+window.importSheets = window.importSheets;
 export {};
 //# sourceMappingURL=renderer.js.map
