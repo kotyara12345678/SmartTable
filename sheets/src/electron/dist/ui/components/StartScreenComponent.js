@@ -1,6 +1,9 @@
 /**
  * Start Screen Component - начальный экран создания проекта
  */
+import { saveLastOpenedFile } from '../core/file-utils.js';
+import { createLogger } from '../core/logger.js';
+const log = createLogger('StartScreen');
 export class StartScreenComponent {
     constructor() {
         this.container = null;
@@ -13,6 +16,87 @@ export class StartScreenComponent {
         this.onProjectOpen = onOpen;
         this.render();
         this.bindEvents();
+        // Проверяем есть ли последний открытый файл
+        await this.restoreLastOpenedFile(onOpen);
+    }
+    /**
+     * Восстановление последнего открытого файла
+     */
+    async restoreLastOpenedFile(onOpen) {
+        try {
+            const lastFileData = localStorage.getItem('smarttable-last-opened-file');
+            if (!lastFileData) {
+                log.debug('No last opened file found');
+                return;
+            }
+            const lastFile = JSON.parse(lastFileData);
+            const filePath = lastFile.path;
+            if (!filePath) {
+                log.warn('Invalid last file data');
+                return;
+            }
+            // Проверяем существует ли файл
+            const fs = await import('fs');
+            if (!fs.existsSync(filePath)) {
+                log.warn('Last file no longer exists:', filePath);
+                localStorage.removeItem('smarttable-last-opened-file');
+                return;
+            }
+            // Показываем уведомление
+            const shouldRestore = confirm(`Восстановить последний открытый файл?\n\n${lastFile.name || filePath}`);
+            if (!shouldRestore) {
+                log.debug('User declined to restore last file');
+                return;
+            }
+            // Открываем файл
+            const electronAPI = window.electronAPI;
+            if (!electronAPI) {
+                log.error('Electron API not available');
+                return;
+            }
+            const ext = filePath.split('.').pop()?.toLowerCase();
+            let sheets = [];
+            if (ext === 'csv') {
+                const csvResult = await electronAPI.ipcRenderer.invoke('read-csv-file', { filePath });
+                if (csvResult.success) {
+                    sheets = [{ name: lastFile.name || 'CSV', data: csvResult.data }];
+                }
+                else {
+                    throw new Error(csvResult.error || 'Ошибка чтения CSV');
+                }
+            }
+            else {
+                const xlsxResult = await electronAPI.ipcRenderer.invoke('read-xlsx-file', { filePath });
+                if (xlsxResult.success) {
+                    sheets = xlsxResult.sheets;
+                }
+                else {
+                    throw new Error(xlsxResult.error || 'Ошибка чтения XLSX');
+                }
+            }
+            if (sheets.length === 0) {
+                log.error('Failed to read last file - empty sheets');
+                localStorage.removeItem('smarttable-last-opened-file');
+                return;
+            }
+            log.info('Restoring last opened file:', lastFile.name);
+            // Проверяем что importSheets доступен
+            const importFunc = window.importSheets;
+            if (typeof importFunc !== 'function') {
+                log.error('importSheets function not available!');
+                alert('Ошибка: функция импорта недоступна. Попробуйте открыть файл через меню.');
+                return;
+            }
+            if (this.onProjectOpen) {
+                this.onProjectOpen(sheets);
+            }
+            this.hide();
+        }
+        catch (error) {
+            log.errorWithContext('Error restoring last file', error);
+            localStorage.removeItem('smarttable-last-opened-file');
+            alert('Ошибка восстановления файла: ' + error.message);
+        }
     }
     render() {
         if (!this.container)
@@ -172,42 +256,55 @@ export class StartScreenComponent {
         try {
             const electronAPI = window.electronAPI;
             if (!electronAPI) {
-                alert('Electron API недоступен');
+                alert('Electron API недоступен. Проверьте консоль для подробностей.');
+                log.error('Electron API not available');
                 return;
             }
             const result = await electronAPI.ipcRenderer.invoke('open-file-dialog');
             if (result.canceled || !result.success)
                 return;
             const filePath = result.filePath;
-            const fileName = filePath.split(/[/\\]/).pop() || 'Импортированный файл';
-            const ext = filePath.split('.').pop()?.toLowerCase();
-            let sheets = [];
-            if (ext === 'csv') {
-                const csvResult = await electronAPI.ipcRenderer.invoke('read-csv-file', { filePath });
-                if (csvResult.success) {
-                    sheets = [{ name: fileName.replace(/\.[^.]+$/, ''), data: csvResult.data }];
-                }
-            }
-            else {
-                const xlsxResult = await electronAPI.ipcRenderer.invoke('read-xlsx-file', { filePath });
-                if (xlsxResult.success) {
-                    sheets = xlsxResult.sheets;
-                }
-            }
-            if (sheets.length === 0) {
+            const sheets = await this.loadFileFromPath(filePath);
+            if (!sheets || sheets.length === 0) {
                 alert('Не удалось прочитать файл или он пуст');
                 return;
             }
+            const fileName = filePath.split(/[/\\]/).pop() || 'Импортированный файл';
+            // Сохраняем путь к последнему файлу
+            saveLastOpenedFile(filePath, fileName);
             if (this.onProjectOpen) {
                 this.onProjectOpen(sheets);
             }
             this.addRecentProject(fileName);
             this.hide();
+            log.info('File opened successfully:', fileName);
         }
         catch (error) {
-            console.error('[StartScreen] openFile error:', error);
-            alert('Ошибка при открытии файла: ' + error.message);
+            log.errorWithContext('openFile error', error);
+            alert('Ошибка при открытии файла: ' + (error.message || 'Неизвестная ошибка'));
         }
+    }
+    /**
+     * Загрузить файл из пути (общая логика)
+     */
+    async loadFileFromPath(filePath) {
+        const electronAPI = window.electronAPI;
+        const ext = filePath.split('.').pop()?.toLowerCase();
+        if (ext === 'csv') {
+            const csvResult = await electronAPI.ipcRenderer.invoke('read-csv-file', { filePath });
+            if (!csvResult.success) {
+                throw new Error(csvResult.error || 'Ошибка чтения CSV');
+            }
+            return [{ name: filePath.split(/[/\\]/).pop()?.replace(/\.[^.]+$/, '') || 'CSV', data: csvResult.data }];
+        }
+        if (ext === 'xlsx' || ext === 'xls') {
+            const xlsxResult = await electronAPI.ipcRenderer.invoke('read-xlsx-file', { filePath });
+            if (!xlsxResult.success) {
+                throw new Error(xlsxResult.error || 'Ошибка чтения XLSX');
+            }
+            return xlsxResult.sheets;
+        }
+        throw new Error('Неподдерживаемый формат файла: ' + ext);
     }
     async openFolder() {
         try {

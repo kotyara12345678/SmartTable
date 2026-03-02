@@ -65,6 +65,7 @@ async function initApp(): Promise<void> {
     logs.push('[App] Creating TopBarComponent...');
     topBar = new TopBarComponent();
     topBar.init();
+    (window as any).topBar = topBar;  // Делаем доступным глобально
     logs.push('[App] TopBarComponent initialized');
 
     logs.push('[App] Creating RibbonComponent...');
@@ -116,12 +117,42 @@ async function initApp(): Promise<void> {
     
     // Проверяем есть ли сохранённый проект
     const savedProject = localStorage.getItem('smarttable-current-project');
+    const lastSaved = localStorage.getItem('smarttable-last-saved');
+    
     if (savedProject && startScreen) {
       // Если есть проект - скрываем начальный экран и загружаем
       logs.push('[App] Found saved project: ' + savedProject);
       startScreen.hide();
       if (topBar) {
         topBar.setProjectName(savedProject);
+      }
+      
+      // Восстанавливаем последние сохраненные данные если они есть
+      if (lastSaved) {
+        try {
+          const saveData = localStorage.getItem(`smarttable-autosave-${lastSaved}`);
+          if (saveData) {
+            const parsed = JSON.parse(saveData);
+            // Восстанавливаем данные таблицы
+            if (parsed.data && typeof parsed.data === 'string') {
+              // Передаем данные в таблицу через глобальную функцию
+              setTimeout(() => {
+                const importSheets = (window as any).importSheets;
+                if (typeof importSheets === 'function') {
+                  try {
+                    const sheets = JSON.parse(parsed.data);
+                    importSheets(sheets);
+                    logs.push('[App] Restored data from last save');
+                  } catch (e) {
+                    logs.push('[App] Failed to restore data: ' + String(e));
+                  }
+                }
+              }, 500);
+            }
+          }
+        } catch (e) {
+          logs.push('[App] Error recovering saved data: ' + String(e));
+        }
       }
     } else if (startScreen) {
       // Если нет проекта - показываем начальный экран
@@ -349,7 +380,26 @@ function handleKeyDown(event: KeyboardEvent): void {
  */
 function saveFile(): void {
   console.log('[App] Saving file...');
-  // Будет реализовано в FileManager
+  
+  try {
+    // Получаем данные таблицы через автосохранение callback
+    const autosave = (window as any).autosaveManager;
+    if (!autosave) {
+      console.error('[App] AutoSaveManager not available');
+      return;
+    }
+
+    // Сохраняем через встроенную функцию автосохранения
+    autosave.forceSave?.();
+
+    if (topBar) {
+      topBar.showSaveSuccess();
+    }
+
+    console.log('[App] File saved successfully');
+  } catch (error) {
+    console.error('[App] Save error:', error);
+  }
 }
 
 /**
@@ -587,22 +637,46 @@ window.addEventListener('beforeunload', cleanup);
 
 // Глобальные функции для автосохранения
 (window as any).setupAutoSave = (getContentCallback: () => string) => {
-  if (autosaveManager) {
-    autosaveManager.setGetContentCallback(getContentCallback);
-    autosaveManager.setOnSaveCallback(async (content: string) => {
-      try {
-        const result = await (window as any).electronAPI.ipcRenderer.invoke('autosave-file', {
-          content,
-          filePath: null
-        });
-        if (!result.success) {
-          console.error('[App] AutoSave failed:', result.error);
-        }
-      } catch (error) {
-        console.error('[App] AutoSave error:', error);
-      }
-    });
+  if (!autosaveManager) {
+    console.error('[App] AutoSaveManager not initialized!');
+    return;
   }
+  
+  // Устанавливаем callbacks
+  autosaveManager.setGetContentCallback(getContentCallback);
+  autosaveManager.setOnSaveCallback(async (content: string) => {
+    try {
+      // Показываем индикатор автосохранения
+      if (topBar) {
+        topBar.showAutoSaveIndicator();
+      }
+
+      const result = await (window as any).electronAPI.ipcRenderer.invoke('autosave-file', {
+        content,
+        filePath: null
+      });
+      if (!result.success) {
+        console.error('[App] AutoSave failed:', result.error);
+        if (topBar) {
+          topBar.showSaveError(result.error);
+        }
+      } else {
+        console.log('[App] AutoSave successful:', result.filePath);
+        if (topBar) {
+          topBar.showSaveSuccess();
+        }
+      }
+    } catch (error) {
+      console.error('[App] AutoSave error:', error);
+      if (topBar) {
+        topBar.showSaveError(error instanceof Error ? error.message : 'Неизвестная ошибка');
+      }
+    }
+  });
+
+  // Включаем и запускаем автосохранение
+  autosaveManager.enable();
+  console.log('[App] AutoSave setup completed');
 };
 
 (window as any).markAutoSaveDirty = () => {

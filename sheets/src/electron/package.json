@@ -32,8 +32,9 @@
   },
   "dependencies": {
     "node-fetch": "^3.3.2",
+    "sqlite": "^5.1.1",
     "sqlite3": "^5.1.6",
-    "sqlite": "^5.1.1"
+    "xlsx": "^0.18.5"
   },
   "build": {
     "appId": "com.smarttable.app",
@@ -53,7 +54,9 @@
       "target": [
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "dist/SmartTable.png"
@@ -62,7 +65,10 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "icon": "dist/SmartTable.png",
@@ -72,11 +78,15 @@
       "target": [
         {
           "target": "AppImage",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "deb",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "dist/SmartTable.png",

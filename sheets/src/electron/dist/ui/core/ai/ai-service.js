@@ -1,7 +1,3 @@
-/**
- * AI Service - сервис для работы с ИИ
- * Optimized for minimal token usage
- */
 import https from 'https';
 export const OPENROUTER_KEYS = [
     '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',

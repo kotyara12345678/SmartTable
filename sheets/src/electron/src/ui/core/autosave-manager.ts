@@ -70,8 +70,10 @@ export class AutoSaveManager {
    */
   async init(): Promise<void> {
     console.log('[AutoSave] Manager initialized');
+    // НЕ запускаем таймер сразу — он запустится когда установят callbacks
+    this.loadConfig();
     if (this.config.enabled) {
-      this.startAutoSave();
+      console.log('[AutoSave] Was enabled, will start when callbacks are set');
     }
   }
 
@@ -95,8 +97,14 @@ export class AutoSaveManager {
   enable(): void {
     this.config.enabled = true;
     this.saveConfig();
-    this.startAutoSave();
-    console.log('[AutoSave] Enabled');
+    
+    // Запускаем таймер только если оба callback установлены
+    if (this.getContentCallback && this.onSaveCallback) {
+      this.startAutoSave();
+      console.log('[AutoSave] Enabled and started');
+    } else {
+      console.log('[AutoSave] Enabled but callbacks not set yet');
+    }
   }
 
   /**

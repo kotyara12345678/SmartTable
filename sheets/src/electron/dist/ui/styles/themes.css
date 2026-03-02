@@ -705,3 +705,56 @@
 .btn-delete-theme:hover {
   background: #fecaca;
 }
+
+/* О приложении */
+.about-section {
+  padding: 20px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.about-logo {
+  text-align: center;
+  padding: 20px;
+}
+
+.about-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.about-features > div {
+  transition: transform 0.2s;
+}
+
+.about-features > div:hover {
+  transform: translateY(-2px);
+}
+
+.about-tech {
+  margin: 24px 0;
+  padding: 16px;
+  background: var(--hover-bg);
+  border-radius: 8px;
+}
+
+.about-links {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.about-links a:hover {
+  text-decoration: underline;
+}
+
+.about-copyright {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
