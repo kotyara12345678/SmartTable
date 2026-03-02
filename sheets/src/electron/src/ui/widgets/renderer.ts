@@ -6374,11 +6374,11 @@ ${row.map(cell => `          <table:table-cell><text:p>${escapeXml(cell)}</text:
 function importSheetsImpl(sheets: Array<{ name: string; data: string[][] }>): void {
   console.log('[Renderer] Importing sheets:', sheets.length);
 
-  try {
-    // Сохраняем старые данные для undo
-    const oldSheetsData = new Map(state.sheetsData);
-    const oldSheets = [...state.sheets];
+  // Сохраняем старые данные для undo и восстановления при ошибке
+  const oldSheetsData = new Map(state.sheetsData);
+  const oldSheets = [...state.sheets];
 
+  try {
     // Очищаем текущие данные
     state.sheetsData.clear();
     state.sheets = [];
