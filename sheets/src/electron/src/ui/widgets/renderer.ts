@@ -6370,45 +6370,67 @@ ${row.map(cell => `          <table:table-cell><text:p>${escapeXml(cell)}</text:
   importSheetsImpl(sheets);
 };
 
-// Импорт листов из файла
+// Импорт листов из файла - ИСПРАВЛЕНО
 function importSheetsImpl(sheets: Array<{ name: string; data: string[][] }>): void {
   console.log('[Renderer] Importing sheets:', sheets.length);
-  
-  // Очищаем текущие данные
-  state.sheetsData.clear();
-  state.sheets = [];
-  
-  // Создаём листы из импортированных данных
-  sheets.forEach((sheet, index) => {
-    const id = index + 1;
-    const name = sheet.name || `Лист ${id}`;
-    state.sheets.push({ id, name });
-    
-    // Создаём данные для листа
-    const sheetData = new Map<string, { value: string; style?: any }>();
-    
-    // Заполняем данными из импортированного файла
-    sheet.data.forEach((row, rowIndex) => {
-      row.forEach((cellValue, colIndex) => {
-        if (cellValue && cellValue.trim() !== '') {
-          const key = getCellKey(rowIndex, colIndex);
-          sheetData.set(key, { value: cellValue });
-        }
+
+  try {
+    // Сохраняем старые данные для undo
+    const oldSheetsData = new Map(state.sheetsData);
+    const oldSheets = [...state.sheets];
+
+    // Очищаем текущие данные
+    state.sheetsData.clear();
+    state.sheets = [];
+
+    // Создаём листы из импортированных данных
+    sheets.forEach((sheet, index) => {
+      const id = Date.now() + index; // Уникальные ID
+      const name = sheet.name || `Лист ${id}`;
+      state.sheets.push({ id, name });
+
+      // Создаём данные для листа
+      const sheetData = new Map<string, { value: string; style?: any }>();
+
+      // Заполняем данными из импортированного файла
+      sheet.data.forEach((row, rowIndex) => {
+        row.forEach((cellValue, colIndex) => {
+          if (cellValue && cellValue.trim() !== '') {
+            const key = getCellKey(rowIndex, colIndex);
+            // Проверяем, является ли значение формулой
+            if (cellValue.trim().startsWith('=')) {
+              sheetData.set(key, { value: cellValue, style: { isFormula: true } });
+            } else {
+              sheetData.set(key, { value: cellValue });
+            }
+          }
+        });
       });
+
+      state.sheetsData.set(id, sheetData);
     });
-    
-    state.sheetsData.set(id, sheetData);
-  });
-  
-  // Переключаемся на первый лист
-  state.currentSheet = state.sheets[0]?.id || 1;
-  
-  // Перерисовываем таблицу
-  renderCells();
-  renderSheets();
-  updateFormulaBar();
-  
-  console.log('[Renderer] Import completed, sheets:', state.sheets.length);
+
+    // Переключаемся на первый лист
+    state.currentSheet = state.sheets[0]?.id || 1;
+
+    // Перерисовываем таблицу
+    renderCells();
+    renderSheets();
+    updateFormulaBar();
+
+    // Добавляем в undo стек
+    pushUndo('import', { oldData: oldSheetsData, newData: new Map(state.sheetsData), oldSheets, newSheets: [...state.sheets] });
+
+    console.log('[Renderer] Import completed, sheets:', state.sheets.length);
+  } catch (error: any) {
+    console.error('[Renderer] Import error:', error);
+    alert('Ошибка при импорте данных: ' + error.message);
+    // Восстанавливаем старые данные при ошибке
+    state.sheetsData = oldSheetsData;
+    state.sheets = oldSheets;
+    renderCells();
+    renderSheets();
+  }
 }
 
 // Делаем showExportMenu и exportData глобальными функциями
