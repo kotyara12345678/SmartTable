@@ -131,6 +131,14 @@ export class SettingsPanelComponent {
                   </svg>
                   Автоподстраивание колонок
                 </button>
+                <button class="settings-tab-child" data-tab="about">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="16" x2="12" y2="12"/>
+                    <line x1="12" y1="8" x2="12.01" y2="8"/>
+                  </svg>
+                  О приложении
+                </button>
               </div>
             </div>
           </div>
@@ -312,6 +320,123 @@ export class SettingsPanelComponent {
                     <input type="checkbox" id="toggleAutoFitColumns">
                     <span class="toggle-slider"></span>
                   </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Вкладка: О приложении -->
+            <div class="settings-pane" id="aboutPane">
+              <div class="pane-header">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="16" x2="12" y2="12"/>
+                  <line x1="12" y1="8" x2="12.01" y2="8"/>
+                </svg>
+                <h2>О приложении SmartTable</h2>
+              </div>
+              <div class="about-section">
+                <div class="about-logo">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:80px;height:80px;color:var(--primary-color);">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <path d="M3 9h18"/>
+                    <path d="M9 21V9"/>
+                  </svg>
+                  <h1 style="font-size:28px;font-weight:700;margin:16px 0 8px;">SmartTable</h1>
+                  <p style="color:var(--text-secondary);font-size:14px;">Версия 2.0.0</p>
+                </div>
+                
+                <div class="about-description" style="margin:24px 0;">
+                  <p style="margin-bottom:12px;">
+                    <strong>SmartTable</strong> — это современное кроссплатформенное приложение для работы с электронными таблицами, 
+                    вдохновленное Excel, с интеграцией искусственного интеллекта для автоматизации рутинных задач.
+                  </p>
+                </div>
+
+                <div class="about-features" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin:20px 0;">
+                  <div style="padding:16px;background:var(--hover-bg);border-radius:8px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;color:var(--primary-color);margin-bottom:8px;">
+                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                      <polyline points="14,2 14,8 20,8"/>
+                    </svg>
+                    <h3 style="font-size:16px;margin-bottom:8px;">📊 Таблицы</h3>
+                    <p style="font-size:13px;color:var(--text-secondary);">100 строк × 100 столбцов, неограниченное количество листов, выделение диапазонов</p>
+                  </div>
+                  <div style="padding:16px;background:var(--hover-bg);border-radius:8px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;color:var(--primary-color);margin-bottom:8px;">
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M12 2a10 10 0 0 1 10 10"/>
+                    </svg>
+                    <h3 style="font-size:16px;margin-bottom:8px;">🎨 Форматирование</h3>
+                    <p style="font-size:13px;color:var(--text-secondary);">Шрифты, цвета, выравнивание, границы, числовые форматы</p>
+                  </div>
+                  <div style="padding:16px;background:var(--hover-bg);border-radius:8px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;color:var(--primary-color);margin-bottom:8px;">
+                      <line x1="18" y1="20" x2="18" y2="10"/>
+                      <line x1="12" y1="20" x2="12" y2="4"/>
+                      <line x1="6" y1="20" x2="6" y2="14"/>
+                    </svg>
+                    <h3 style="font-size:16px;margin-bottom:8px;">📈 Диаграммы</h3>
+                    <p style="font-size:13px;color:var(--text-secondary);">10 типов диаграмм: столбчатые, линейные, круговые и другие</p>
+                  </div>
+                  <div style="padding:16px;background:var(--hover-bg);border-radius:8px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;color:var(--primary-color);margin-bottom:8px;">
+                      <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/>
+                      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
+                    </svg>
+                    <h3 style="font-size:16px;margin-bottom:8px;">🧮 Формулы</h3>
+                    <p style="font-size:13px;color:var(--text-secondary);">SUM, AVERAGE, IF, VLOOKUP и другие математические функции</p>
+                  </div>
+                  <div style="padding:16px;background:var(--hover-bg);border-radius:8px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;color:var(--primary-color);margin-bottom:8px;">
+                      <path d="M12 2a4 4 0 00-4 4v2a4 4 0 008 0V6a4 4 0 00-4-4z"/>
+                      <path d="M12 14a6 6 0 100 12 6 6 0 000-12z"/>
+                    </svg>
+                    <h3 style="font-size:16px;margin-bottom:8px;">🤖 ИИ Помощник</h3>
+                    <p style="font-size:13px;color:var(--text-secondary);">Автоматизация задач, анализ данных, генерация формул</p>
+                  </div>
+                  <div style="padding:16px;background:var(--hover-bg);border-radius:8px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;color:var(--primary-color);margin-bottom:8px;">
+                      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                      <polyline points="7,10 12,15 17,10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    <h3 style="font-size:16px;margin-bottom:8px;">📤 Экспорт</h3>
+                    <p style="font-size:13px;color:var(--text-secondary);">Экспорт в форматах XLSX, CSV, JSON, HTML, XML, ODS, Markdown</p>
+                  </div>
+                </div>
+
+                <div class="about-tech" style="margin:24px 0;padding:16px;background:var(--hover-bg);border-radius:8px;">
+                  <h3 style="font-size:16px;margin-bottom:12px;">🛠 Технологии</h3>
+                  <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                    <span style="padding:6px 12px;background:var(--surface-color);border-radius:16px;font-size:13px;">Electron 35.2</span>
+                    <span style="padding:6px 12px;background:var(--surface-color);border-radius:16px;font-size:13px;">TypeScript 5.8</span>
+                    <span style="padding:6px 12px;background:var(--surface-color);border-radius:16px;font-size:13px;">Node.js 18+</span>
+                    <span style="padding:6px 12px;background:var(--surface-color);border-radius:16px;font-size:13px;">HTML5/CSS3</span>
+                    <span style="padding:6px 12px;background:var(--surface-color);border-radius:16px;font-size:13px;">OpenRouter API</span>
+                    <span style="padding:6px 12px;background:var(--surface-color);border-radius:16px;font-size:13px;">LocalStorage</span>
+                  </div>
+                </div>
+
+                <div class="about-links" style="margin-top:24px;padding-top:24px;border-top:1px solid var(--border-color);">
+                  <div style="display:flex;gap:16px;justify-content:center;">
+                    <a href="https://t.me/SmarTable_chat" target="_blank" style="display:flex;align-items:center;gap:8px;color:var(--primary-color);text-decoration:none;font-size:14px;">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;">
+                        <path d="M21.198 2.433a2.242 2.242 0 00-1.022.215l-8.609 3.33c-2.068.8-4.133 1.598-5.724 2.21a405.15 405.15 0 01-2.849 1.09c-.42.147-.99.332-1.473.901-.728.968.835 1.798 1.56 2.165 1.609.814 3.249 1.672 4.289 2.24.507 1.657.997 3.316 1.48 4.978.19.651.601 1.316 1.266 1.33.495.01.888-.408 1.219-.76l3.092-3.315 6.322 4.672c.582.43 1.268.603 1.962.472.923-.174 1.583-.916 1.766-1.827.366-1.819.715-3.641 1.003-5.476.285-1.817.52-3.64.702-5.468.086-.863-.376-1.686-1.095-2.14z"/>
+                      </svg>
+                      Telegram-чат
+                    </a>
+                    <a href="#" style="display:flex;align-items:center;gap:8px;color:var(--primary-color);text-decoration:none;font-size:14px;">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;">
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                        <polyline points="14,2 14,8 20,8"/>
+                      </svg>
+                      Документация
+                    </a>
+                  </div>
+                </div>
+
+                <div class="about-copyright" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-color);text-align:center;color:var(--text-muted);font-size:13px;">
+                  © 2025 SmartTable. Все права защищены.
                 </div>
               </div>
             </div>
