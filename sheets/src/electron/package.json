@@ -41,13 +41,22 @@
     "directories": {
       "output": "release"
     },
+    "extraResources": [
+      {
+        "from": "SmartTable.png",
+        "to": "SmartTable.png"
+      },
+      {
+        "from": "SmartTableStartApp.png",
+        "to": "SmartTableStartApp.png"
+      }
+    ],
     "files": [
       "dist/**/*",
-      "src/index.html",
-      "src/SmartTable.png",
-      "src/SmartTableStartApp.png",
       "node_modules/**/*",
-      "package.json"
+      "package.json",
+      "SmartTable.png",
+      "SmartTableStartApp.png"
     ],
     "win": {
       "target": [
@@ -56,7 +65,7 @@
           "arch": ["x64"]
         }
       ],
-      "icon": "dist/SmartTable.png"
+      "icon": "SmartTable.png"
     },
     "mac": {
       "target": [
@@ -65,7 +74,7 @@
           "arch": ["x64", "arm64"]
         }
       ],
-      "icon": "dist/SmartTable.png",
+      "icon": "SmartTable.png",
       "category": "public.app-category.productivity"
     },
     "linux": {
@@ -79,7 +88,7 @@
           "arch": ["x64"]
         }
       ],
-      "icon": "dist/SmartTable.png",
+      "icon": "SmartTable.png",
       "category": "Office"
     }
   }
