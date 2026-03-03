@@ -90,14 +90,6 @@ export class SettingsPanelComponent {
                   </svg>
                   Анимации
                 </button>
-                <button class="settings-tab-child" data-tab="autosave">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                    <polyline points="17 21 17 13 7 13 7 21"/>
-                    <polyline points="7 3 7 8 15 8"/>
-                  </svg>
-                  Автосохранение
-                </button>
                 <button class="settings-tab-child" data-tab="custom">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 19l7-7 3 3-7 7-3-3z"/>
@@ -110,7 +102,7 @@ export class SettingsPanelComponent {
               </div>
             </div>
 
-            <!-- Отдельная группа: Функциональность -->
+            <!-- Отдельная группа: Основые -->
             <div class="settings-tab-group">
               <div class="settings-tab-parent" data-parent="functionality" style="cursor:pointer;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -119,7 +111,7 @@ export class SettingsPanelComponent {
                   <line x1="9" y1="12" x2="15" y2="12"/>
                   <line x1="9" y1="15" x2="11" y2="15"/>
                 </svg>
-                <span>Функциональность</span>
+                <span>Основые</span>
                 <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-left:auto;">
                   <polyline points="6 9 12 15 18 9"/>
                 </svg>
@@ -130,6 +122,14 @@ export class SettingsPanelComponent {
                     <path d="M12 3v18M3 12h18M5 5l4 4-4 4M15 11l4 4-4 4"/>
                   </svg>
                   Автоподстраивание колонок
+                </button>
+                <button class="settings-tab-child" data-tab="autosave">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                  </svg>
+                  Автосохранение
                 </button>
                 <button class="settings-tab-child" data-tab="about">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
