@@ -1,7 +1,4 @@
-/**
- * AI Service - сервис для работы с ИИ
- * Optimized for minimal token usage
- */
+
 
 import https from 'https';
 

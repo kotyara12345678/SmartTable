@@ -11,7 +11,7 @@ const CONFIG = {
   HEADER_HEIGHT: 32,
 };
 
-// Переменные для virtual scrolling
+// Переменные для virtual scrolling и кэширования
 let visibleRange = {
   rowStart: 0,
   rowEnd: 0,
@@ -19,6 +19,18 @@ let visibleRange = {
   colEnd: 0
 };
 let renderScheduled = false;
+let renderDebounceTimer: NodeJS.Timeout | null = null;
+
+// Кэш отрисованных ячеек для оптимизации
+const cellCache = new Map<string, { 
+  element: HTMLElement; 
+  value: string; 
+  styleHash: string;
+  lastUsed: number;
+}>();
+
+// Ограничение размера кэша (макс 5000 ячеек в памяти)
+const MAX_CACHED_CELLS = 5000;
 
 // === СОСТОЯНИЕ ===
 const state = {
@@ -238,9 +250,7 @@ function autoSave(): void {
       sheetsData: dataToSave,
       currentSheet: state.currentSheet,
       timestamp: Date.now()
-      // dataValidations НЕ сохраняем чтобы избежать проблем
     }));
-    console.log('[AutoSave] Data saved to localStorage');
   } catch (e) {
     console.error('[AutoSave] Error:', e);
   }
@@ -249,54 +259,44 @@ function autoSave(): void {
 function autoLoad(): void {
   try {
     const saved = localStorage.getItem('smarttable-autosave');
-
-    // Загружаем данные
     const currentData = getCurrentData();
     currentData.clear();
 
     if (saved) {
       const data = JSON.parse(saved);
-      console.log('[AutoLoad] Found autosave from:', new Date(data.timestamp).toLocaleString());
 
       // Загружаем sheetsData
       if (data.sheetsData) {
         Object.keys(data.sheetsData).forEach(sheetKey => {
           const sheetData = data.sheetsData[sheetKey];
           const sheetMap = new Map();
-          
-          // Преобразуем объект в Map
+
           if (typeof sheetData === 'object') {
             Object.keys(sheetData).forEach(cellKey => {
               sheetMap.set(cellKey, sheetData[cellKey]);
             });
           }
-          
+
           state.sheetsData.set(parseInt(sheetKey), sheetMap);
         });
       } else if (data.cells) {
-        // Старый формат - только cells
         Object.keys(data.cells).forEach(key => {
           currentData.set(key, data.cells[key]);
         });
       }
 
       state.currentSheet = data.currentSheet || 1;
-      
-      // Обновляем имя файла в заголовке
+
       if (data.fileName) {
         updateFileNameInHeader(data.fileName);
       }
-
-      console.log('[AutoLoad] Data loaded successfully, sheets:', state.sheetsData.size);
     }
 
-    // ПРИНУДИТЕЛЬНО очищаем dataValidations при каждой загрузке!
+    // ПРИНУДИТЕЛЬНО очищаем dataValidations при каждой загрузке
     state.dataValidations.clear();
-    console.log('[AutoLoad] Force cleared dataValidations');
 
     renderCells();
     updateAIDataCache();
-    console.log('[AutoLoad] Completed successfully');
   } catch (e) {
     console.error('[AutoLoad] Error:', e);
   }
@@ -325,14 +325,38 @@ function clearAllState(): void {
   state.aiDataCache = [];
   renderCells();
   updateAIDataCache();
-  console.log('[ClearState] All state cleared');
 }
 
 // Очистить только dataValidations
 function clearAllDataValidations(): void {
   state.dataValidations.clear();
   renderCells();
-  console.log('[ClearValidation] All data validations cleared');
+}
+
+/**
+ * Очистить все обработчики событий и ресурсы
+ * Предотвращает утечки памяти при закрытии приложения
+ */
+function cleanupEventListeners(): void {
+  // Очищаем основные обработчики
+  elements.cellGridWrapper.replaceWith(elements.cellGridWrapper.cloneNode(true));
+  
+  // Сбрасываем ссылки на элементы (будут пересозданы при следующей инициализации)
+  // Это предотвращает удержание ссылок на удалённые DOM элементы
+}
+
+/**
+ * Очистить всё состояние и ресурсы
+ */
+function cleanup(): void {
+  cleanupEventListeners();
+  clearAllState();
+  
+  // Очищаем таймеры
+  if (ipcRenderer) {
+    ipcRenderer.removeAllListeners('close-app');
+    ipcRenderer.removeAllListeners('export');
+  }
 }
 
 console.log('[Renderer] Config and State initialized!');
@@ -709,11 +733,51 @@ function syncFixedHeaders(): void {
 function renderCells(): void {
   if (renderScheduled) return;
   renderScheduled = true;
-  
+
+  // Используем requestAnimationFrame для плавности
   requestAnimationFrame(() => {
     renderScheduled = false;
     renderVisibleCells();
+    
+    // Очищаем старые ячейки из кэша
+    cleanupCellCache();
   });
+}
+
+// Очистка старых ячеек из кэша
+function cleanupCellCache(): void {
+  if (cellCache.size > MAX_CACHED_CELLS) {
+    const now = Date.now();
+    const toDelete: string[] = [];
+    
+    cellCache.forEach((cached, key) => {
+      // Удаляем если не использовались больше 30 секунд
+      if (now - cached.lastUsed > 30000) {
+        toDelete.push(key);
+      }
+    });
+    
+    // Удаляем половину самых старых
+    toDelete.sort((a, b) => {
+      const aTime = cellCache.get(a)!.lastUsed;
+      const bTime = cellCache.get(b)!.lastUsed;
+      return aTime - bTime;
+    });
+    
+    const deleteCount = Math.floor(toDelete.length / 2);
+    for (let i = 0; i < deleteCount; i++) {
+      cellCache.delete(toDelete[i]);
+    }
+  }
+}
+
+// Вычисление хэша стиля для кэширования
+function hashStyle(style: any): string {
+  if (!style) return '';
+  return JSON.stringify(style).split('').reduce((a, b) => {
+    a = ((a << 5) - a) + b.charCodeAt(0);
+    return a & a;
+  }, 0).toString(36);
 }
 
 function renderVisibleCells(): void {
@@ -1008,7 +1072,6 @@ function finishEditing(): void {
   // Вычислить формулу если есть
   let finalValue = inputValue;
   if (inputValue.startsWith('=')) {
-    // Функция для получения значения ячейки
     const getCellValue = (cellRef: string): string => {
       const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
       if (!match) return '';
@@ -1030,15 +1093,9 @@ function finishEditing(): void {
     data.delete(key);
   }
 
-  // Сохраняем в undo историю
   pushUndo(key, oldValue);
-
-  // Обновить кэш для ИИ
   updateAIDataCache();
-
   updateFormulaBar();
-
-  // НЕ перерисовываем все ячейки, а обновляем только текущую
   updateSingleCell(state.selectedCell.row, state.selectedCell.col);
 
   // Автоподбор ширины если включен
@@ -1046,6 +1103,14 @@ function finishEditing(): void {
   if (autoFitEnabled && finalValue) {
     autoFitColumn(state.selectedCell.col);
   }
+
+  // === ВАЖНО: Таймаут на случай если focus остался на ячейке ===
+  setTimeout(() => {
+    const currentFocused = document.activeElement;
+    if (currentFocused === cell) {
+      cell.blur();
+    }
+  }, 100);
 }
 
 function updateSingleCell(row: number, col: number): void {
@@ -1493,11 +1558,14 @@ function setupCellEventListeners(): void {
     const row = parseInt(cell.dataset.row || '0');
     const col = parseInt(cell.dataset.col || '0');
 
+    // === ВАЖНО: Если застряло isEditing — завершаем принудительно! ===
+    if (state.isEditing) {
+      finishEditing();
+    }
+
     // Проверка на dropdown ячейку
     if (cell.dataset.hasDropdown === 'true') {
-      if (!state.isEditing) {
-        selectCell(row, col);
-      }
+      selectCell(row, col);
       const validation = getDataValidation(row, col);
       if (validation && validation.type === 'list') {
         showDropdownList(e, cell, row, col, validation.values);
@@ -1505,21 +1573,13 @@ function setupCellEventListeners(): void {
       return;
     }
 
-    // Если уже редактируем - не делаем ничего (клик внутри ячейки)
-    if (state.isEditing) {
-      return;
-    }
-
-    // Если ячейка уже выделена и содержит текст - начинаем редактирование без выделения
+    // Если ячейка уже выделена и содержит текст — начинаем редактирование
     const isSameCell = state.selectedCell.row === row && state.selectedCell.col === col;
     const cellHasContent = cell.textContent && cell.textContent.length > 0;
-    
+
     if (isSameCell && cellHasContent) {
-      // Начинаем редактирование без выделения текста (курсор в месте клика)
-      // Важно: НЕ вызываем selectCell, чтобы не завершить редактирование
       editCell(row, col, false);
     } else {
-      // Просто выделяем ячейку
       selectCell(row, col);
     }
   });
@@ -1557,16 +1617,32 @@ function setupCellEventListeners(): void {
   elements.cellGrid.addEventListener('keypress', (e: KeyboardEvent) => {
     const cell = (e.target as HTMLElement).closest('.cell') as HTMLElement;
     if (!cell) return;
-    
-    // Игнорируем если уже редактируем
-    if (state.isEditing) return;
-    
+
     const row = parseInt(cell.dataset.row || '0');
     const col = parseInt(cell.dataset.col || '0');
-    
+
+    // === ЕСЛИ УЖЕ РЕДАКТИРУЕМ — НЕ ВМЕШИВАЕМСЯ! ===
+    // Позволяем браузеру обрабатывать ввод текста в editing ячейке
+    if (state.isEditing) {
+      const prevCell = getCellElement(state.selectedCell.row, state.selectedCell.col);
+      if (prevCell && prevCell !== cell) {
+        // Перешли к другой ячейке — завершаем предыдущее редактирование
+        console.log('[DEBUG keypress] Switching cells, finishing editing');
+        finishEditing();
+        // Начинаем редактирование в новой ячейке
+        setTimeout(() => {
+          editCellWithChar(row, col, e.key);
+        }, 0);
+      }
+      // Если редактируем ту же ячейку — просто позволяем браузеру работать
+      return;
+    }
+
     // Начинаем редактирование если нажата printable клавиша
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      console.log('[DEBUG keypress] Starting edit with char:', e.key);
       editCellWithChar(row, col, e.key);
+      e.preventDefault(); // Предотвращаем дублирование символа
     }
   });
 }
@@ -4523,25 +4599,37 @@ function setupRowResize(): void {
   });
 }
 
-// === FILL HANDLE (растягивание ячеек) ===
+// === FILL HANDLE (растягивание ячеек) - ИСПРАВЛЕНО ===
 function setupFillHandle(): void {
   const fillHandle = document.getElementById('fillHandle');
   if (!fillHandle) return;
 
   let isDragging = false;
-  let startCell: { row: number; col: number } | null = null;
+  let dragStartCell: { row: number; col: number } | null = null;
   let previewCells: HTMLElement[] = [];
+  let fillDirection: 'vertical' | 'horizontal' | null = null;
+  let fillRange: { startRow: number; endRow: number; startCol: number; endCol: number } | null = null;
 
-  // Показать/скрыть fill handle при выделении ячейки
+  // Показать/скрыть fill handle при выделении ячейки или диапазона
   const updateFillHandle = () => {
-    const { row, col } = state.selectedCell;
-    const cell = getCellElement(row, col);
+    let targetRow = state.selectedCell.row;
+    let targetCol = state.selectedCell.col;
+
+    // Если выделен диапазон, используем нижний правый угол
+    if (state.selectionStart && state.selectionEnd) {
+      targetRow = Math.max(state.selectionStart.row, state.selectionEnd.row);
+      targetCol = Math.max(state.selectionStart.col, state.selectionEnd.col);
+    }
+
+    const cell = getCellElement(targetRow, targetCol);
     if (cell) {
       const rect = cell.getBoundingClientRect();
       const containerRect = elements.cellGridWrapper.getBoundingClientRect();
       fillHandle.style.display = 'block';
       fillHandle.style.left = `${rect.right - containerRect.left - 6}px`;
       fillHandle.style.top = `${rect.bottom - containerRect.top - 6}px`;
+    } else {
+      fillHandle.style.display = 'none';
     }
   };
 
@@ -4550,14 +4638,37 @@ function setupFillHandle(): void {
     e.stopPropagation();
     e.preventDefault();
     isDragging = true;
-    startCell = { ...state.selectedCell };
+
+    // Определяем начальную точку - правый нижний угол выделения
+    if (state.selectionStart && state.selectionEnd) {
+      dragStartCell = {
+        row: Math.max(state.selectionStart.row, state.selectionEnd.row),
+        col: Math.max(state.selectionStart.col, state.selectionEnd.col)
+      };
+      // Сохраняем диапазон для заполнения
+      fillRange = {
+        startRow: Math.min(state.selectionStart.row, state.selectionEnd.row),
+        endRow: Math.max(state.selectionStart.row, state.selectionEnd.row),
+        startCol: Math.min(state.selectionStart.col, state.selectionEnd.col),
+        endCol: Math.max(state.selectionStart.col, state.selectionEnd.col)
+      };
+    } else {
+      dragStartCell = { ...state.selectedCell };
+      fillRange = {
+        startRow: state.selectedCell.row,
+        endRow: state.selectedCell.row,
+        startCol: state.selectedCell.col,
+        endCol: state.selectedCell.col
+      };
+    }
+
     fillHandle.classList.add('dragging');
     document.body.style.cursor = 'crosshair';
     document.body.style.userSelect = 'none';
   });
 
   document.addEventListener('mousemove', (e) => {
-    if (!isDragging || !startCell) return;
+    if (!isDragging || !dragStartCell) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -4570,32 +4681,52 @@ function setupFillHandle(): void {
     const element = document.elementFromPoint(e.clientX, e.clientY);
     const cell = element?.closest('.cell') as HTMLElement | null;
     if (cell) {
-      const endRow = parseInt(cell.dataset.row || '0');
-      const endCol = parseInt(cell.dataset.col || '0');
+      const currentRow = parseInt(cell.dataset.row || '0');
+      const currentCol = parseInt(cell.dataset.col || '0');
 
-      // Вертикальное растягивание - показываем предпросмотр
-      if (endRow !== startCell.row) {
-        const minRow = Math.min(startCell.row, endRow);
-        const maxRow = Math.max(startCell.row, endRow);
+      // Определяем направление заполнения
+      const rowDiff = Math.abs(currentRow - dragStartCell.row);
+      const colDiff = Math.abs(currentCol - dragStartCell.col);
+
+      if (rowDiff >= colDiff && rowDiff > 0) {
+        // Вертикальное заполнение
+        fillDirection = 'vertical';
+        const minRow = Math.min(dragStartCell.row, currentRow);
+        const maxRow = Math.max(dragStartCell.row, currentRow);
+
+        // Показываем предпросмотр для всех строк в диапазоне
         for (let r = minRow; r <= maxRow; r++) {
-          if (r !== startCell.row) {
-            const targetCell = getCellElement(r, startCell.col);
-            if (targetCell) {
-              targetCell.classList.add('fill-preview');
-              previewCells.push(targetCell);
+          if (r !== dragStartCell.row) {
+            // Для каждой строки применяем ко всем колонкам исходного диапазона
+            if (fillRange) {
+              for (let c = fillRange.startCol; c <= fillRange.endCol; c++) {
+                const targetCell = getCellElement(r, c);
+                if (targetCell) {
+                  targetCell.classList.add('fill-preview');
+                  previewCells.push(targetCell);
+                }
+              }
             }
           }
         }
-      } else if (endCol !== startCell.col) {
-        // Горизонтальное растягивание - показываем предпросмотр
-        const minCol = Math.min(startCell.col, endCol);
-        const maxCol = Math.max(startCell.col, endCol);
+      } else if (colDiff > 0) {
+        // Горизонтальное заполнение
+        fillDirection = 'horizontal';
+        const minCol = Math.min(dragStartCell.col, currentCol);
+        const maxCol = Math.max(dragStartCell.col, currentCol);
+
+        // Показываем предпросмотр для всех колонок в диапазоне
         for (let c = minCol; c <= maxCol; c++) {
-          if (c !== startCell.col) {
-            const targetCell = getCellElement(startCell.row, c);
-            if (targetCell) {
-              targetCell.classList.add('fill-preview');
-              previewCells.push(targetCell);
+          if (c !== dragStartCell.col) {
+            // Для каждой колонки применяем ко всем строкам исходного диапазона
+            if (fillRange) {
+              for (let r = fillRange.startRow; r <= fillRange.endRow; r++) {
+                const targetCell = getCellElement(r, c);
+                if (targetCell) {
+                  targetCell.classList.add('fill-preview');
+                  previewCells.push(targetCell);
+                }
+              }
             }
           }
         }
@@ -4604,80 +4735,314 @@ function setupFillHandle(): void {
   });
 
   document.addEventListener('mouseup', (e) => {
-    if (!isDragging) return;
+    if (!isDragging || !dragStartCell || !fillRange) return;
 
-    // Найти ячейку под курсором для применения значений
     const element = document.elementFromPoint(e.clientX, e.clientY);
     const cell = element?.closest('.cell') as HTMLElement | null;
 
-    if (cell && startCell) {
+    if (cell) {
       const endRow = parseInt(cell.dataset.row || '0');
       const endCol = parseInt(cell.dataset.col || '0');
-
       const data = getCurrentData();
-      const startKey = getCellKey(startCell.row, startCell.col);
-      const startData = data.get(startKey);
-      const sourceValue = startData?.value || '';
 
-      // Пытаемся определить паттерн для автозаполнения
-      const pattern = detectFillPattern(startCell, data);
-
-      // Вертикальное заполнение
-      if (endRow !== startCell.row) {
-        const minRow = Math.min(startCell.row, endRow);
-        const maxRow = Math.max(startCell.row, endRow);
+      // Определяем направление
+      let targetCells: Array<{ row: number; col: number }> = [];
+      
+      if (fillDirection === 'vertical' && endRow !== dragStartCell.row) {
+        const minRow = Math.min(dragStartCell.row, endRow);
+        const maxRow = Math.max(dragStartCell.row, endRow);
         for (let r = minRow; r <= maxRow; r++) {
-          if (r !== startCell.row) {
-            const value = pattern ? calculatePatternValue(pattern, r - startCell.row) : sourceValue;
-            const targetCell = getCellElement(r, startCell.col);
-            if (targetCell) {
-              targetCell.textContent = String(value);
-              data.set(getCellKey(r, startCell.col), { value: String(value) });
+          if (r !== dragStartCell.row) {
+            for (let c = fillRange.startCol; c <= fillRange.endCol; c++) {
+              targetCells.push({ row: r, col: c });
             }
           }
         }
-      } else if (endCol !== startCell.col) {
-        // Горизонтальное заполнение
-        const minCol = Math.min(startCell.col, endCol);
-        const maxCol = Math.max(startCell.col, endCol);
+      } else if (fillDirection === 'horizontal' && endCol !== dragStartCell.col) {
+        const minCol = Math.min(dragStartCell.col, endCol);
+        const maxCol = Math.max(dragStartCell.col, endCol);
         for (let c = minCol; c <= maxCol; c++) {
-          if (c !== startCell.col) {
-            const value = pattern ? calculatePatternValue(pattern, c - startCell.col) : sourceValue;
-            const targetCell = getCellElement(startCell.row, c);
-            if (targetCell) {
-              targetCell.textContent = String(value);
-              data.set(getCellKey(startCell.row, c), { value: String(value) });
+          if (c !== dragStartCell.col) {
+            for (let r = fillRange.startRow; r <= fillRange.endRow; r++) {
+              targetCells.push({ row: r, col: c });
             }
           }
         }
       }
 
-      renderCells();
-      pushUndo('fill', { start: startCell, end: { row: endRow, col: endCol } });
+      // === ВАЖНО: Сначала определяем паттерн ПО ОБЩИМ ДАННЫМ ===
+      let pattern: any = null;
+      const sourceValues: any[] = [];
+      
+      // Собираем исходные значения из выделенного диапазона
+      if (fillDirection === 'vertical') {
+        for (let r = fillRange.startRow; r <= fillRange.endRow; r++) {
+          const key = getCellKey(r, fillRange.startCol);
+          const cellData = data.get(key);
+          if (cellData && cellData.value) {
+            const num = parseFloat(cellData.value);
+            sourceValues.push(isNaN(num) ? cellData.value : num);
+          }
+        }
+        // Определяем паттерн по последнему значению
+        if (sourceValues.length >= 1) {
+          const lastRow = fillRange.endRow;
+          pattern = detectFillPatternVertical(fillRange.startCol, lastRow, data);
+        }
+      } else {
+        for (let c = fillRange.startCol; c <= fillRange.endCol; c++) {
+          const key = getCellKey(fillRange.startRow, c);
+          const cellData = data.get(key);
+          if (cellData && cellData.value) {
+            const num = parseFloat(cellData.value);
+            sourceValues.push(isNaN(num) ? cellData.value : num);
+          }
+        }
+        if (sourceValues.length >= 1) {
+          const lastCol = fillRange.endCol;
+          pattern = detectFillPatternHorizontal(fillRange.startRow, lastCol, data);
+        }
+      }
+
+      // === Применяем заполнение ===
+      let stepCounter = 0;
+      for (const target of targetCells) {
+        const sourceKey = getCellKey(dragStartCell.row, dragStartCell.col);
+        const targetKey = getCellKey(target.row, target.col);
+        const sourceData = data.get(sourceKey);
+
+        let finalValue = '';
+        
+        // Если есть паттерн — используем его
+        if (pattern) {
+          stepCounter++;
+          finalValue = String(calculatePatternValue(pattern, stepCounter));
+        } else if (sourceData) {
+          // Иначе просто копируем значение
+          finalValue = sourceData.value;
+        }
+
+        if (finalValue) {
+          const newCellData: { value: string; style?: any } = { value: finalValue };
+          if (sourceData?.style) {
+            newCellData.style = { ...sourceData.style };
+          }
+          data.set(targetKey, newCellData);
+
+          const targetCellElement = getCellElement(target.row, target.col);
+          if (targetCellElement) {
+            targetCellElement.textContent = finalValue;
+            targetCellElement.classList.add('has-content');
+            if (sourceData?.style) {
+              Object.entries(sourceData.style).forEach(([prop, value]) => {
+                if (value !== undefined && value !== null && value !== '') {
+                  (targetCellElement.style as any)[prop] = value;
+                }
+              });
+            }
+          }
+        }
+      }
+
+      // Определяем конечную точку для undo
+      const finalEndRow = fillDirection === 'vertical' ? endRow : fillRange.endRow;
+      const finalEndCol = fillDirection === 'horizontal' ? endCol : fillRange.endCol;
+
+      pushUndo('fill', {
+        range: { ...fillRange },
+        direction: fillDirection,
+        end: { row: endRow, col: endCol }
+      });
     }
 
     // Очистка
     isDragging = false;
-    startCell = null;
+    dragStartCell = null;
+    fillDirection = null;
+    fillRange = null;
     previewCells.forEach(cell => cell.classList.remove('fill-preview'));
     previewCells = [];
     fillHandle.classList.remove('dragging');
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
     updateFillHandle();
+
+    // Перерисовка для применения всех изменений
+    renderCells();
+    updateAIDataCache();
+    autoSave();
   });
 
-  // Скры��ь при скр��лле
+  // Скрыть при скролле
   elements.cellGridWrapper.addEventListener('scroll', () => {
     fillHandle.style.display = 'none';
   }, true);
+
+  // Обновляем позицию handle при изменении выделения
+  (window as any).updateFillHandlePosition = updateFillHandle;
 }
 
-// === PATTERNS FOR FILL HANDLE ===
-function detectFillPattern(startCell: { row: number; col: number }, data: Map<string, any>): any | null {
+// === PATTERNS FOR FILL HANDLE - УЛУЧШЕНО ЕЩЁ БОЛЬШЕ ===
+function detectFillPatternVertical(col: number, startRow: number, data: Map<string, any>): any | null {
+  const values: (number | string)[] = [];
+  
+  // Собираем до 10 предыдущих значений
+  for (let r = startRow; r >= Math.max(0, startRow - 10); r--) {
+    const key = getCellKey(r, col);
+    const cellData = data.get(key);
+    if (cellData && cellData.value !== '') {
+      const num = parseFloat(cellData.value);
+      values.unshift(isNaN(num) ? cellData.value : num);
+    } else {
+      break;
+    }
+  }
+  
+  if (values.length < 2) return null;
+  
+  // === ЧИСЛОВЫЕ ПАТТЕРНЫ ===
+  const numValues = values.filter(v => typeof v === 'number') as number[];
+  if (numValues.length >= 2) {
+    // 1. Арифметическая прогрессия (1, 2, 3, 4...)
+    const diff = numValues[numValues.length - 1] - numValues[numValues.length - 2];
+    let isArithmetic = true;
+    for (let i = 2; i < numValues.length; i++) {
+      if (Math.abs((numValues[i] - numValues[i - 1]) - diff) > 0.0001) {
+        isArithmetic = false;
+        break;
+      }
+    }
+    if (isArithmetic) {
+      return { type: 'arithmetic', lastValue: numValues[numValues.length - 1], diff };
+    }
+    
+    // 2. Геометрическая прогрессия (2, 4, 8, 16...)
+    if (numValues[numValues.length - 2] !== 0) {
+      const ratio = numValues[numValues.length - 1] / numValues[numValues.length - 2];
+      let isGeometric = true;
+      for (let i = 2; i < numValues.length; i++) {
+        if (numValues[i - 1] === 0 || Math.abs((numValues[i] / numValues[i - 1]) - ratio) > 0.0001) {
+          isGeometric = false;
+          break;
+        }
+      }
+      if (isGeometric) {
+        return { type: 'geometric', lastValue: numValues[numValues.length - 1], ratio };
+      }
+    }
+    
+    // 3. Числа Фибоначчи (1, 1, 2, 3, 5, 8...)
+    if (numValues.length >= 3) {
+      const isFibonacci = numValues.every((val, i) => {
+        if (i < 2) return true;
+        return val === numValues[i - 1] + numValues[i - 2];
+      });
+      if (isFibonacci) {
+        return { 
+          type: 'fibonacci', 
+          lastValue: numValues[numValues.length - 1],
+          prevValue: numValues[numValues.length - 2]
+        };
+      }
+    }
+    
+    // 4. Квадраты чисел (1, 4, 9, 16, 25...)
+    if (numValues.length >= 2) {
+      const sqrtLast = Math.sqrt(numValues[numValues.length - 1]);
+      const sqrtPrev = Math.sqrt(numValues[numValues.length - 2]);
+      if (Number.isInteger(sqrtLast) && Number.isInteger(sqrtPrev)) {
+        const n = sqrtLast;
+        const isSquares = numValues.every((val, i) => {
+          const sqrt = Math.sqrt(val);
+          return Number.isInteger(sqrt) && sqrt === sqrtPrev + (i - (numValues.length - 2));
+        });
+        if (isSquares) {
+          return { type: 'squares', nextN: n + 1 };
+        }
+      }
+    }
+    
+    // 5. Кубы чисел (1, 8, 27, 64...)
+    if (numValues.length >= 2) {
+      const cbrtLast = Math.cbrt(numValues[numValues.length - 1]);
+      const cbrtPrev = Math.cbrt(numValues[numValues.length - 2]);
+      if (Number.isInteger(cbrtLast) && Number.isInteger(cbrtPrev)) {
+        return { type: 'cubes', nextN: cbrtLast + 1 };
+      }
+    }
+  }
+  
+  // === ТЕКСТОВЫЕ ПАТТЕРНЫ ===
+  const textValues = values.filter(v => typeof v === 'string') as string[];
+  if (textValues.length >= 2) {
+    const days = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
+    const daysShort = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+    const months = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+    const monthsShort = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+    const monthsGen = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+    
+    const lastText = textValues[textValues.length - 1].toLowerCase().trim();
+    const prevText = textValues[textValues.length - 2].toLowerCase().trim();
+    
+    // Дни недели
+    const dayIndex = days.findIndex(d => lastText === d || lastText.includes(d));
+    if (dayIndex !== -1) {
+      const prevIndex = days.findIndex(d => prevText === d || prevText.includes(d));
+      if (prevIndex !== -1 && (dayIndex - prevIndex === 1 || (prevIndex === 6 && dayIndex === 0))) {
+        return { type: 'days', index: dayIndex, list: days };
+      }
+    }
+    
+    // Дни недели краткие
+    const dayShortIndex = daysShort.findIndex(d => lastText === d);
+    if (dayShortIndex !== -1) {
+      const prevShortIndex = daysShort.findIndex(d => prevText === d);
+      if (prevShortIndex !== -1 && (dayShortIndex - prevShortIndex === 1 || (prevShortIndex === 6 && dayShortIndex === 0))) {
+        return { type: 'days', index: dayShortIndex, list: daysShort };
+      }
+    }
+    
+    // Месяцы (именительный падеж)
+    const monthIndex = months.findIndex(m => lastText === m || lastText.includes(m));
+    if (monthIndex !== -1) {
+      const prevIndex = months.findIndex(m => prevText === m || prevText.includes(m));
+      if (prevIndex !== -1 && (monthIndex - prevIndex === 1 || (prevIndex === 11 && monthIndex === 0))) {
+        return { type: 'months', index: monthIndex, list: months };
+      }
+    }
+    
+    // Месяцы (родительный падеж)
+    const monthGenIndex = monthsGen.findIndex(m => lastText === m || lastText.includes(m));
+    if (monthGenIndex !== -1) {
+      const prevGenIndex = monthsGen.findIndex(m => prevText === m || prevText.includes(m));
+      if (prevGenIndex !== -1 && (monthGenIndex - prevGenIndex === 1 || (prevGenIndex === 11 && monthGenIndex === 0))) {
+        return { type: 'months', index: monthGenIndex, list: monthsGen };
+      }
+    }
+    
+    // Месяцы краткие
+    const monthShortIndex = monthsShort.findIndex(m => lastText === m);
+    if (monthShortIndex !== -1) {
+      const prevShortIndex = monthsShort.findIndex(m => prevText === m);
+      if (prevShortIndex !== -1 && (monthShortIndex - prevShortIndex === 1 || (prevShortIndex === 11 && monthShortIndex === 0))) {
+        return { type: 'months', index: monthShortIndex, list: monthsShort };
+      }
+    }
+  }
+  
+  // === КОПИРОВАНИЕ ===
+  if (values.length >= 2 && values.every(v => v === values[0])) {
+    return { type: 'copy', value: values[0] };
+  }
+  
+  return null;
+}
+
+function detectFillPatternHorizontal(row: number, startCol: number, data: Map<string, any>): any | null {
   const values: number[] = [];
-  for (let r = startCell.row - 1; r >= Math.max(0, startCell.row - 5); r--) {
-    const key = getCellKey(r, startCell.col);
+  // Собираем до 5 предыдущих значений в этой же строке
+  for (let c = startCol; c >= Math.max(0, startCol - 5); c--) {
+    const key = getCellKey(row, c);
     const cellData = data.get(key);
     if (cellData) {
       const num = parseFloat(cellData.value);
@@ -4704,10 +5069,50 @@ function detectFillPattern(startCell: { row: number; col: number }, data: Map<st
   return null;
 }
 
-function calculatePatternValue(pattern: any, step: number): number {
-  if (pattern.type === 'arithmetic') return pattern.lastValue + (pattern.diff * step);
-  if (pattern.type === 'geometric') return pattern.lastValue * Math.pow(pattern.ratio, step);
-  return pattern.lastValue;
+// Старая функция для совместимости (можно удалить позже)
+function detectFillPattern(startCell: { row: number; col: number }, data: Map<string, any>): any | null {
+  return detectFillPatternVertical(startCell.col, startCell.row - 1, data);
+}
+
+function calculatePatternValue(pattern: any, step: number): any {
+  if (!pattern) return '';
+  
+  switch (pattern.type) {
+    case 'arithmetic':
+      return pattern.lastValue + (pattern.diff * step);
+    
+    case 'geometric':
+      return pattern.lastValue * Math.pow(pattern.ratio, step);
+    
+    case 'fibonacci':
+      // Вычисляем следующее число Фибоначчи
+      let a = pattern.prevValue;
+      let b = pattern.lastValue;
+      for (let i = 0; i < step; i++) {
+        const temp = a + b;
+        a = b;
+        b = temp;
+      }
+      return b;
+    
+    case 'squares':
+      return Math.pow(pattern.nextN + step - 1, 2);
+    
+    case 'cubes':
+      return Math.pow(pattern.nextN + step - 1, 3);
+    
+    case 'days':
+      return pattern.list[(pattern.index + step) % pattern.list.length];
+    
+    case 'months':
+      return pattern.list[(pattern.index + step) % pattern.list.length];
+    
+    case 'copy':
+      return pattern.value;
+    
+    default:
+      return pattern.lastValue;
+  }
 }
 
 // === ЭКСПОРТ ===
@@ -4896,16 +5301,50 @@ ${rows.map(row => `| ${row} |`).join('\n')}`;
       break;
   }
   
-  // Создать и скачать файл
+  // Создаём и скачиваем файл через IPC
   const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `SmartTable_${new Date().toISOString().slice(0,10)}.${extension}`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  const reader = new FileReader();
+  
+  reader.onload = async () => {
+    const base64Content = reader.result as string;
+    // Для IPC передаём содержимое как текст
+    const textContent = base64Content.split(',')[1] 
+      ? atob(base64Content.split(',')[1]) 
+      : content;
+    
+    if (ipcRenderer) {
+      try {
+        const result = await ipcRenderer.invoke('save-file', {
+          content: textContent,
+          mimeType,
+          extension,
+          defaultName: `SmartTable_${new Date().toISOString().slice(0,10)}`
+        });
+        
+        if (result.success) {
+          console.log('[Export] File saved successfully:', result.filePath);
+        } else if (result.canceled) {
+          console.log('[Export] Save cancelled by user');
+        } else {
+          console.error('[Export] Save failed:', result.error);
+        }
+      } catch (error) {
+        console.error('[Export] Error saving file:', error);
+      }
+    } else {
+      // Fallback: скачивание через браузер
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `SmartTable_${new Date().toISOString().slice(0,10)}.${extension}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  };
+  
+  reader.readAsDataURL(blob);
 }
 
 function generateAiResponse(message: string): string {
@@ -4998,31 +5437,24 @@ function evaluateFormulaLocal(formula: string, getCellValue: (ref: string) => st
  */
 function getRangeValues(col1: string, row1: number, col2: string, row2: number, getCellValue: (ref: string) => string): number[] {
   const values: number[] = [];
-  
+
   const startCol = colToIndex(col1);
   const endCol = colToIndex(col2);
   const startRow = row1 - 1;
   const endRow = row2 - 1;
-  
-  // Суммируем только первую и последнюю ячейку (A1 и B5)
-  const firstRef = `${col1}${row1}`;
-  const lastRef = `${col2}${row2}`;
-  
-  const firstVal = getCellValue(firstRef);
-  const firstNum = parseFloat(firstVal);
-  if (!isNaN(firstNum)) {
-    values.push(firstNum);
-  }
-  
-  // Если первая и последняя ячейки разные, добавляем последнюю
-  if (firstRef !== lastRef) {
-    const lastVal = getCellValue(lastRef);
-    const lastNum = parseFloat(lastVal);
-    if (!isNaN(lastNum)) {
-      values.push(lastNum);
+
+  // Проходим по ВСЕМУ диапазону ячеек (исправлено!)
+  for (let r = startRow; r <= endRow; r++) {
+    for (let c = startCol; c <= endCol; c++) {
+      const ref = `${colToLetter(c)}${r + 1}`;
+      const val = getCellValue(ref);
+      const num = parseFloat(val);
+      if (!isNaN(num)) {
+        values.push(num);
+      }
     }
   }
-  
+
   return values;
 }
 
@@ -5045,7 +5477,7 @@ function autoSum(): void {
   const data = getCurrentData();
 
   // Определяем, куда вставить сумму
-  // Если выделено несколько строк - сумма в нижней ячейке
+  // Если выделено несколь��о строк - сум����а в нижней ячейке
   // Если выделено несколько столбцов - сумма в правой ячейке
   let sumRow = endRow;
   let sumCol = endCol;
@@ -6197,60 +6629,187 @@ ${row.map(cell => `          <table:table-cell><text:p>${escapeXml(cell)}</text:
   }
 }
 
-// Глобальная функция для получения списка листов
-(window as any).getSheets = () => state.sheets;
+// === ГЛОБАЛЬНЫЕ ФУНКЦИИ (регистрация в window) ===
+// Делаем функции доступными из других модулей
 
-// Глобальная функция для импорта листов
-(window as any).importSheets = (sheets: Array<{ name: string; data: string[][] }>) => {
-  importSheetsImpl(sheets);
-};
+// Импорт листов из файла - с полным извлечением стилей и формул
+function importSheetsImpl(sheets: Array<{ 
+  name: string; 
+  data: string[][];
+  styles?: any[][];
+  formulas?: string[][];
+}>): void {
+  console.log('====== [DEBUG importSheets] START ======');
+  console.log('[DEBUG] Sheets count:', sheets.length);
+  if (sheets.length > 0) {
+    console.log('[DEBUG] First sheet name:', sheets[0].name);
+    console.log('[DEBUG] First sheet rows:', sheets[0].data?.length);
+    console.log('[DEBUG] First sheet cols:', sheets[0].data?.[0]?.length);
+    console.log('[DEBUG] Has styles:', !!sheets[0].styles);
+    console.log('[DEBUG] Has formulas:', !!sheets[0].formulas);
+  }
 
-// Импорт листов из файла
-function importSheetsImpl(sheets: Array<{ name: string; data: string[][] }>): void {
-  console.log('[Renderer] Importing sheets:', sheets.length);
-  
-  // Очищаем текущие данные
-  state.sheetsData.clear();
-  state.sheets = [];
-  
-  // Создаём листы из импортированных данных
-  sheets.forEach((sheet, index) => {
-    const id = index + 1;
-    const name = sheet.name || `Лист ${id}`;
-    state.sheets.push({ id, name });
-    
-    // Создаём данные для листа
-    const sheetData = new Map<string, { value: string; style?: any }>();
-    
-    // Заполняем данными из импортированного файла
-    sheet.data.forEach((row, rowIndex) => {
-      row.forEach((cellValue, colIndex) => {
-        if (cellValue && cellValue.trim() !== '') {
-          const key = getCellKey(rowIndex, colIndex);
-          sheetData.set(key, { value: cellValue });
-        }
+  const oldSheetsData = new Map(state.sheetsData);
+  const oldSheets = [...state.sheets];
+
+  try {
+    state.sheetsData.clear();
+    state.sheets = [];
+
+    sheets.forEach((sheet, index) => {
+      const id = Date.now() + index;
+      const name = sheet.name || `Лист ${id}`;
+      state.sheets.push({ id, name });
+      console.log('[DEBUG] Created sheet:', name, 'id:', id);
+
+      const sheetData = new Map<string, { value: string; style?: any }>();
+
+      // Заполняем данными с формулами и стилями
+      sheet.data.forEach((row, rowIndex) => {
+        row.forEach((cellValue, colIndex) => {
+          if (cellValue || (sheet.formulas && sheet.formulas[rowIndex]?.[colIndex])) {
+            const key = getCellKey(rowIndex, colIndex);
+            
+            // Проверяем формулу
+            const formula = sheet.formulas?.[rowIndex]?.[colIndex];
+            const finalValue = formula || cellValue;
+            
+            // Собираем стиль из XLSX
+            const xlsxStyle = sheet.styles?.[rowIndex]?.[colIndex];
+            const style: any = {};
+            
+            if (xlsxStyle) {
+              if (xlsxStyle.fill?.fgColor?.rgb) {
+                style.backgroundColor = '#' + xlsxStyle.fill.fgColor.rgb.substring(2);
+              }
+              if (xlsxStyle.font) {
+                if (xlsxStyle.font.color?.rgb) {
+                  style.color = '#' + xlsxStyle.font.color.rgb.substring(2);
+                }
+                if (xlsxStyle.font.bold) style.fontWeight = 'bold';
+                if (xlsxStyle.font.italic) style.fontStyle = 'italic';
+                if (xlsxStyle.font.sz) style.fontSize = xlsxStyle.font.sz + 'pt';
+                if (xlsxStyle.font.name) style.fontFamily = xlsxStyle.font.name;
+              }
+              if (xlsxStyle.alignment) {
+                if (xlsxStyle.alignment.horizontal) {
+                  style.textAlign = xlsxStyle.alignment.horizontal;
+                }
+                if (xlsxStyle.alignment.vertical) {
+                  style.verticalAlign = xlsxStyle.alignment.vertical;
+                }
+                if (xlsxStyle.alignment.wrapText) {
+                  style.whiteSpace = 'normal';
+                  style.wordWrap = 'break-word';
+                }
+              }
+              if (xlsxStyle.border) {
+                if (xlsxStyle.border.top) style.borderTop = '1px solid #000';
+                if (xlsxStyle.border.bottom) style.borderBottom = '1px solid #000';
+                if (xlsxStyle.border.left) style.borderLeft = '1px solid #000';
+                if (xlsxStyle.border.right) style.borderRight = '1px solid #000';
+              }
+            }
+
+            sheetData.set(key, { 
+              value: finalValue,
+              style: Object.keys(style).length > 0 ? style : undefined
+            });
+          }
+        });
       });
+
+      state.sheetsData.set(id, sheetData);
+      console.log('[DEBUG] Sheet data populated, cells:', sheetData.size);
+    });
+
+    state.currentSheet = state.sheets[0]?.id || 1;
+    console.log('[DEBUG] Switched to sheet:', state.currentSheet);
+    
+    // === ВАЖНО: ПОЛНЫЙ СБРОС СОСТОЯНИЯ РЕДАКТИРОВАНИЯ ===
+    console.log('[DEBUG] Resetting edit state...');
+    state.isEditing = false;
+    state.isSelecting = false;
+    state.selectionStart = null;
+    state.selectionEnd = null;
+    
+    // Принудительно снимаем contentEditable со ВСЕХ ячеек
+    const allCells = elements.cellGrid.querySelectorAll('.cell');
+    console.log('[DEBUG] Total cells to reset:', allCells.length);
+    allCells.forEach(cell => {
+      const cellEl = cell as HTMLElement;
+      cellEl.contentEditable = 'false';
+      cellEl.classList.remove('editing');
+      cellEl.classList.remove('has-content');
+      cellEl.blur();
     });
     
-    state.sheetsData.set(id, sheetData);
-  });
-  
-  // Переключаемся на первый лист
-  state.currentSheet = state.sheets[0]?.id || 1;
-  
-  // Перерисовываем таблицу
-  renderCells();
-  renderSheets();
-  updateFormulaBar();
-  
-  console.log('[Renderer] Import completed, sheets:', state.sheets.length);
+    console.log('[DEBUG] Calling renderCells()...');
+    renderCells();
+    renderSheets();
+    updateFormulaBar();
+    
+    // Снимаем focus если есть
+    const activeElement = document.activeElement as HTMLElement;
+    if (activeElement && activeElement.classList.contains('cell')) {
+      activeElement.blur();
+    }
+    
+    // Принудительно фокусируемся на cellGridWrapper чтобы клавиши работали
+    elements.cellGridWrapper.focus();
+    console.log('[DEBUG] Focused on cellGridWrapper');
+
+    pushUndo('import', {
+      oldData: oldSheetsData,
+      newData: new Map(state.sheetsData),
+      oldSheets,
+      newSheets: [...state.sheets]
+    });
+
+    console.log('[DEBUG] Import completed with styles:', state.sheets.length);
+    console.log('[DEBUG] State reset: isEditing=false, all cells non-editable');
+    console.log('====== [DEBUG importSheets] SUCCESS ======');
+  } catch (error: any) {
+    console.error('====== [DEBUG importSheets] ERROR ======');
+    console.error('[DEBUG] Error:', error.message);
+    console.error('[DEBUG] Stack:', error.stack);
+    alert('Ошибка при импорте данных: ' + error.message);
+    state.sheetsData = oldSheetsData;
+    state.sheets = oldSheets;
+    renderCells();
+    renderSheets();
+  }
 }
 
-// Делаем showExportMenu и exportData глобальными функциями
+(window as any).getSheets = () => state.sheets;
+(window as any).getSelectedRangeData = getSelectedRangeData;
+(window as any).getSelectedRange = getSelectedRange;
+(window as any).getSelectedCell = () => state.selectedCell;
+(window as any).getCurrentData = getCurrentData;
+(window as any).autoSum = autoSum;
+(window as any).mergeCells = mergeCells;
+(window as any).insertRow = insertRow;
+(window as any).deleteRow = deleteRow;
+(window as any).insertColumn = insertColumn;
+(window as any).deleteColumn = deleteColumn;
+(window as any).sortData = sortData;
+(window as any).toggleFilter = toggleFilter;
+(window as any).setDataValidation = setDataValidation;
+(window as any).removeDataValidation = removeDataValidation;
+(window as any).clearAllDataValidations = clearAllDataValidations;
+(window as any).addConditionalFormat = addConditionalFormat;
+(window as any).clearConditionalFormats = clearConditionalFormats;
+(window as any).findAndReplace = findAndReplace;
+(window as any).clearAllState = clearAllState;
+(window as any).fillTable = globalFillTable;
+(window as any).colorCells = globalColorCells;
+(window as any).boldColumn = globalBoldColumn;
+
+// КРИТИЧНО: Регистрируем importSheets ПРЯМО здесь
+(window as any).importSheets = importSheetsImpl;
 (window as any).showExportMenu = showExportMenu;
 (window as any).exportData = exportData;
 (window as any).exportDataWithSheets = exportDataWithSheets;
-(window as any).importSheets = (window as any).importSheets;
 
 // Экспорт для ES module
 export {};

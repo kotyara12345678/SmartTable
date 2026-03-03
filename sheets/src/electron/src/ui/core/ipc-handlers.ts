@@ -5,6 +5,9 @@
 
 import { ipcMain } from 'electron';
 import { aiService, AIRequest, AIResponse } from './ai/ai-service.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('IPC');
 
 /**
  * Зарегистрировать все IPC обработчики
@@ -46,7 +49,7 @@ export function registerIPCHandlers(): void {
       }> = [];
 
       const scanDirectory = (dir: string, depth = 0) => {
-        if (depth > 3) return; // Ограничение глубины сканирования
+        if (depth > 3) return;
 
         try {
           const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -70,29 +73,26 @@ export function registerIPCHandlers(): void {
                   });
                 }
               }
-            } catch (err) {
+            } catch {
               // Пропускаем файлы к которым нет доступа
             }
           }
-        } catch (err) {
+        } catch {
           // Пропускаем директории к которым нет доступа
         }
       };
 
-      // Сканируем каждую директорию
       for (const dir of directories) {
         if (fs.existsSync(dir)) {
           scanDirectory(dir);
         }
       }
 
-      // Сортируем по дате (новые сверху)
       files.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-      console.log(`[IPC] Scanned ${files.length} files`);
+      log.info(`Scanned ${files.length} files`);
       return { success: true, files };
     } catch (error: any) {
-      console.error('[IPC] scan-files error:', error);
+      log.errorWithContext('scan-files error', error);
       return {
         success: false,
         error: error.message || 'Ошибка сканирования файлов',
@@ -187,10 +187,11 @@ export function registerIPCHandlers(): void {
   });
 
   // Экспорт в Excel (XLSX)
-  ipcMain.handle('export-to-excel', async (event, { data, filePath }) => {
+  ipcMain.handle('export-to-excel', async (event, { data, filePath, sheets }) => {
     try {
       const pathModule = await import('path');
       const { app, dialog } = await import('electron');
+      const XLSX = await import('xlsx');
 
       // Если путь не указан, открываем диалог сохранения
       let savePath = filePath;
@@ -209,10 +210,24 @@ export function registerIPCHandlers(): void {
         savePath = result.filePath;
       }
 
-      // Для простоты сохраняем как JSON с расширением .xlsx
-      // В будущем можно подключить библиотеку xlsx для полноценного экспорта
+      // Создаём workbook из данных
+      const workbook = XLSX.utils.book_new();
+      
+      // Если переданы листы - используем их
+      if (sheets && sheets.length > 0) {
+        sheets.forEach((sheet: { name: string; data: string[][] }) => {
+          const worksheet = XLSX.utils.aoa_to_sheet(sheet.data);
+          XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name);
+        });
+      } else if (data) {
+        // Для совместимости со старым форматом
+        const worksheet = XLSX.utils.aoa_to_sheet(data);
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+      }
+
+      // Сохраняем файл
       const fs = await import('fs');
-      fs.writeFileSync(savePath, JSON.stringify(data, null, 2), 'utf8');
+      XLSX.writeFile(workbook, savePath);
 
       console.log('[IPC] Exported to Excel:', savePath);
       return { success: true, filePath: savePath };
@@ -221,6 +236,299 @@ export function registerIPCHandlers(): void {
       return {
         success: false,
         error: error.message || 'Ошибка экспорта'
+      };
+    }
+  });
+
+  // Сохранение файла через диалог
+  ipcMain.handle('save-file', async (event, { content, mimeType, extension, defaultName }) => {
+    try {
+      const pathModule = await import('path');
+      const { app, dialog } = await import('electron');
+
+      const result = await dialog.showSaveDialog({
+        title: 'Сохранить файл',
+        defaultPath: pathModule.join(app.getPath('documents'), `${defaultName}.${extension}`),
+        filters: [
+          { name: `${extension.toUpperCase()} Files`, extensions: [extension] }
+        ]
+      });
+
+      if (result.canceled || !result.filePath) {
+        return { success: false, canceled: true };
+      }
+
+      const fs = await import('fs');
+      fs.writeFileSync(result.filePath, content, 'utf8');
+
+      console.log('[IPC] File saved:', result.filePath);
+      return { success: true, filePath: result.filePath };
+    } catch (error: any) {
+      console.error('[IPC] save-file error:', error);
+      return {
+        success: false,
+        error: error.message || 'Ошибка сохранения файла'
+      };
+    }
+  });
+
+  // Диалог открытия файла
+  ipcMain.handle('open-file-dialog', async () => {
+    try {
+      const { dialog } = await import('electron');
+
+      const result = await dialog.showOpenDialog({
+        title: 'Открыть файл',
+        filters: [
+          { name: 'Spreadsheet Files', extensions: ['xlsx', 'xls', 'csv'] }
+        ],
+        properties: ['openFile']
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, canceled: true };
+      }
+
+      return { success: true, filePath: result.filePaths[0] };
+    } catch (error: any) {
+      console.error('[IPC] open-file-dialog error:', error);
+      return {
+        success: false,
+        error: error.message || 'Ошибка открытия диалога файла'
+      };
+    }
+  });
+
+  // Чтение CSV файла
+  ipcMain.handle('read-csv-file', async (event, { filePath }) => {
+    try {
+      const fs = await import('fs');
+
+      if (!fs.existsSync(filePath)) {
+        return { success: false, error: 'Файл не найден' };
+      }
+
+      const content = fs.readFileSync(filePath, 'utf8');
+      const lines = content.split('\n').map(line => line.trim()).filter(line => line);
+      const data = lines.map(line => {
+        const row: string[] = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            row.push(current.trim().replace(/^"|"$/g, ''));
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        row.push(current.trim().replace(/^"|"$/g, ''));
+        return row;
+      });
+
+      return { success: true, data };
+    } catch (error: any) {
+      console.error('[IPC] read-csv-file error:', error);
+      return {
+        success: false,
+        error: error.message || 'Ошибка чтения CSV'
+      };
+    }
+  });
+
+  // Чтение XLSX файла с полным извлечением данных и стилей
+  ipcMain.handle('read-xlsx-file', async (event, { filePath }) => {
+    console.log('====== [DEBUG IPC] read-xlsx-file START ======');
+    console.log('[DEBUG] filePath:', filePath);
+    
+    try {
+      const fs = await import('fs');
+      const XLSX = await import('xlsx');
+
+      if (!fs.existsSync(filePath)) {
+        console.error('[DEBUG] File does not exist:', filePath);
+        return { success: false, error: 'Файл не найден' };
+      }
+
+      // Читаем файл с полным извлечением
+      const buffer = fs.readFileSync(filePath);
+      console.log('[DEBUG] File size:', buffer.length, 'bytes');
+      
+      const workbook = XLSX.read(buffer, { 
+        type: 'buffer',
+        cellStyles: true,      // Извлекать стили ячеек
+        cellNF: true,          // Извлекать форматы чисел
+        cellFormula: true,     // Извлекать формулы
+        sheetStubs: true       // Извлекать пустые ячейки
+      });
+      
+      console.log('[DEBUG] Workbook loaded, sheets:', workbook.SheetNames.length);
+      
+      const sheets: Array<{ 
+        name: string; 
+        data: string[][];
+        styles?: any[][];
+        formulas?: string[][];
+      }> = [];
+      
+      workbook.SheetNames.forEach(sheetName => {
+        const worksheet = workbook.Sheets[sheetName];
+        console.log('[DEBUG] Processing sheet:', sheetName);
+        
+        // Конвертируем в JSON с полным извлечением
+        const jsonData: any[][] = XLSX.utils.sheet_to_json(worksheet, { 
+          header: 1,
+          defval: ''  // Пустые ячейки = пустая строка
+        });
+        
+        console.log('[DEBUG] Sheet rows:', jsonData.length);
+        
+        // Извлекаем стили и формулы
+        const styles: any[][] = [];
+        const formulas: string[][] = [];
+        const data: string[][] = [];
+        
+        // Получаем диапазон ячеек
+        const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+        console.log('[DEBUG] Sheet range:', range);
+        
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+          const rowData: string[] = [];
+          const rowStyles: any[] = [];
+          const rowFormulas: string[] = [];
+          
+          for (let C = range.s.c; C <= range.e.c; ++C) {
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell = worksheet[cellAddress];
+            
+            if (cell) {
+              // Значение
+              rowData.push(cell.v != null ? String(cell.v) : '');
+              
+              // Формула
+              if (cell.f) {
+                rowFormulas.push('=' + cell.f);
+              } else {
+                rowFormulas.push('');
+              }
+              
+              // Стиль
+              if (cell.s) {
+                rowStyles.push({
+                  fill: cell.s.fill,
+                  font: cell.s.font,
+                  alignment: cell.s.alignment,
+                  border: cell.s.border,
+                  numFmt: cell.s.numFmt
+                });
+              } else {
+                rowStyles.push(null);
+              }
+            } else {
+              rowData.push('');
+              rowFormulas.push('');
+              rowStyles.push(null);
+            }
+          }
+          
+          data.push(rowData);
+          styles.push(rowStyles);
+          formulas.push(rowFormulas);
+        }
+        
+        sheets.push({
+          name: sheetName,
+          data,
+          styles,
+          formulas
+        });
+        
+        console.log('[DEBUG] Sheet processed:', sheetName, 'rows:', data.length, 'cols:', data[0]?.length);
+      });
+
+      console.log('[DEBUG] Total sheets:', sheets.length);
+      console.log('[DEBUG] read-xlsx-file SUCCESS');
+      console.log('====== [DEBUG IPC] read-xlsx-file END ======');
+      
+      return { success: true, sheets };
+    } catch (error: any) {
+      console.error('====== [DEBUG IPC] read-xlsx-file ERROR ======');
+      console.error('[DEBUG] Error:', error.message);
+      console.error('[DEBUG] Stack:', error.stack);
+      return {
+        success: false,
+        error: error.message || 'Ошибка чтения XLSX'
+      };
+    }
+  });
+
+  // Диалог открытия папки
+  ipcMain.handle('open-folder-dialog', async () => {
+    try {
+      const { dialog } = await import('electron');
+
+      const result = await dialog.showOpenDialog({
+        title: 'Открыть папку',
+        properties: ['openDirectory']
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, canceled: true };
+      }
+
+      return { success: true, folderPath: result.filePaths[0] };
+    } catch (error: any) {
+      console.error('[IPC] open-folder-dialog error:', error);
+      return {
+        success: false,
+        error: error.message || 'Ошибка открытия диалога папки'
+      };
+    }
+  });
+
+  // Импорт файлов из папки
+  ipcMain.handle('import-folder', async (event, { folderPath }) => {
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+
+      if (!fs.existsSync(folderPath)) {
+        return { success: false, error: 'Папка не найдена' };
+      }
+
+      const files = fs.readdirSync(folderPath)
+        .filter(f => /\.(xlsx|xls|csv)$/i.test(f))
+        .map(f => ({
+          name: f,
+          path: path.join(folderPath, f)
+        }));
+
+      const sheets: Array<{ name: string; data: string[][] }> = [];
+
+      for (const file of files) {
+        const ext = path.extname(file.name).toLowerCase();
+
+        if (ext === '.csv') {
+          const content = fs.readFileSync(file.path, 'utf8');
+          const lines = content.split('\n').map(line => line.trim()).filter(line => line);
+          const data = lines.map(line => line.split(',').map(cell => cell.trim()));
+          sheets.push({ name: file.name.replace(/\.[^.]+$/, ''), data });
+        } else {
+          // Для XLSX - заглушка
+          sheets.push({ name: file.name.replace(/\.[^.]+$/, ''), data: [] });
+        }
+      }
+
+      return { success: true, sheets };
+    } catch (error: any) {
+      console.error('[IPC] import-folder error:', error);
+      return {
+        success: false,
+        error: error.message || 'Ошибка импорта папки'
       };
     }
   });
@@ -239,5 +547,10 @@ export function cleanupIPCHandlers(): void {
   ipcMain.removeHandler('autosave-file');
   ipcMain.removeHandler('load-autosave');
   ipcMain.removeHandler('export-to-excel');
-  console.log('[IPC] All handlers cleaned up');
+  ipcMain.removeHandler('save-file');
+  ipcMain.removeHandler('open-file-dialog');
+  ipcMain.removeHandler('read-csv-file');
+  ipcMain.removeHandler('read-xlsx-file');
+  ipcMain.removeHandler('open-folder-dialog');
+  ipcMain.removeHandler('import-folder');
 }

@@ -109,11 +109,24 @@ function extractTableData(content) {
                 return parsed.tableData;
             }
         }
-        catch (e) { }
+        catch (e) {
+            console.error('[AI] Failed to parse direct tableData:', e);
+        }
     }
-    return null;
-}
-function extractFromCommands(content) {
+    // Пробуем найти fill_table команду
+    const fillTableMatch = content.match(/\{[\s\S]*"action"[\s\S]*"fill_table"[\s\S]*\}/);
+    if (fillTableMatch) {
+        try {
+            const parsed = JSON.parse(fillTableMatch[0]);
+            if (parsed.params?.data && Array.isArray(parsed.params.data)) {
+                console.log('[AI] Found fill_table data:', parsed.params.data.length, 'rows');
+                return parsed.params.data;
+            }
+        }
+        catch (e) {
+            console.error('[AI] Failed to parse fill_table:', e);
+        }
+    }
     // Ищем commands[0].params.data
     const commandsMatch = content.match(/\{[\s\S]*"commands"[\s\S]*\}/);
     if (commandsMatch) {
@@ -129,6 +142,10 @@ function extractFromCommands(content) {
         }
     }
     return null;
+}
+// Функция для извлечения данных из старых форматов (оставлена для совместимости)
+function extractFromCommands(content) {
+    return extractTableData(content);
 }
 function cleanContent(content) {
     return content

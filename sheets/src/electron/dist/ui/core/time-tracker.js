@@ -162,7 +162,6 @@ export class TimeTracker {
             date,
             total_seconds: 0,
             spreadsheet_seconds: 0,
-            dashboard_seconds: 0,
             ai_chat_seconds: 0,
             other_seconds: 0,
             session_count: daySessions.length
@@ -231,7 +230,6 @@ export class TimeTracker {
                 date,
                 total_seconds: 0,
                 spreadsheet_seconds: 0,
-                dashboard_seconds: 0,
                 ai_chat_seconds: 0,
                 other_seconds: 0,
                 session_count: daySessions.length

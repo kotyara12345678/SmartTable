@@ -2,6 +2,10 @@
  * TopBar Component - верхняя панель приложения
  */
 import { BaseComponent } from '../core/component.js';
+import { saveLastOpenedFile, FileSheet } from '../core/file-utils.js';
+import { createLogger } from '../core/logger.js';
+
+const log = createLogger('TopBar');
 
 export class TopBarComponent extends BaseComponent {
   private fileName: HTMLElement | null = null;
@@ -111,6 +115,44 @@ export class TopBarComponent extends BaseComponent {
   setFileStatus(status: string): void {
     if (this.fileStatus) {
       this.fileStatus.textContent = status;
+    }
+  }
+
+  /**
+   * Показать индикатор автосохранения
+   */
+  showAutoSaveIndicator(): void {
+    if (this.fileStatus) {
+      this.fileStatus.textContent = 'Автосохранение...';
+      this.fileStatus.style.color = '#666';
+    }
+  }
+
+  /**
+   * Показать успешное сохранение
+   */
+  showSaveSuccess(): void {
+    if (this.fileStatus) {
+      this.fileStatus.textContent = 'Сохранено';
+      this.fileStatus.style.color = '#28a745';
+      setTimeout(() => {
+        if (this.fileStatus) {
+          this.fileStatus.style.color = '#666';
+        }
+      }, 2000);
+    }
+  }
+
+  /**
+   * Показать ошибку сохранения
+   */
+  showSaveError(errorMsg?: string): void {
+    if (this.fileStatus) {
+      this.fileStatus.textContent = 'Ошибка сохранения';
+      this.fileStatus.style.color = '#dc3545';
+      if (errorMsg) {
+        console.error('[TopBar] Save error:', errorMsg);
+      }
     }
   }
 
@@ -558,6 +600,7 @@ export class TopBarComponent extends BaseComponent {
       const electronAPI = (window as any).electronAPI;
       if (!electronAPI) {
         alert('Electron API недоступен');
+        log.error('Electron API not available');
         return;
       }
 
@@ -565,27 +608,17 @@ export class TopBarComponent extends BaseComponent {
       if (result.canceled || !result.success) return;
 
       const filePath = result.filePath;
-      const fileName = filePath.split(/[/\\]/).pop() || 'Импортированный файл';
-      const ext = filePath.split('.').pop()?.toLowerCase();
-
-      let sheets: Array<{ name: string; data: string[][] }> = [];
-
-      if (ext === 'csv') {
-        const csvResult = await electronAPI.ipcRenderer.invoke('read-csv-file', { filePath });
-        if (csvResult.success) {
-          sheets = [{ name: fileName.replace(/\.[^.]+$/, ''), data: csvResult.data }];
-        }
-      } else {
-        const xlsxResult = await electronAPI.ipcRenderer.invoke('read-xlsx-file', { filePath });
-        if (xlsxResult.success) {
-          sheets = xlsxResult.sheets;
-        }
-      }
-
-      if (sheets.length === 0) {
+      const sheets = await this.loadFileFromPath(filePath);
+      
+      if (!sheets || sheets.length === 0) {
         alert('Не удалось прочитать файл или он пуст');
         return;
       }
+
+      const fileName = filePath.split(/[/\\]/).pop() || 'Импортированный файл';
+      
+      // Сохраняем путь к последнему файлу
+      saveLastOpenedFile(filePath, fileName);
 
       const importFunc = (window as any).importSheets;
       if (typeof importFunc === 'function') {
@@ -597,10 +630,34 @@ export class TopBarComponent extends BaseComponent {
       if (startScreen) {
         startScreen.hide();
       }
+      
+      log.info('File opened:', fileName);
     } catch (error: any) {
-      console.error('[TopBar] openFile error:', error);
+      log.errorWithContext('openFile error', error);
       alert('Ошибка при открытии файла: ' + error.message);
     }
+  }
+
+  /**
+   * Загрузить файл из пути (общая логика)
+   */
+  private async loadFileFromPath(filePath: string): Promise<FileSheet[] | null> {
+    const electronAPI = (window as any).electronAPI;
+    const ext = filePath.split('.').pop()?.toLowerCase();
+
+    if (ext === 'csv') {
+      const csvResult = await electronAPI.ipcRenderer.invoke('read-csv-file', { filePath });
+      if (!csvResult.success) throw new Error(csvResult.error || 'Ошибка чтения CSV');
+      return [{ name: filePath.split(/[/\\]/).pop()?.replace(/\.[^.]+$/, '') || 'CSV', data: csvResult.data }];
+    }
+    
+    if (ext === 'xlsx' || ext === 'xls') {
+      const xlsxResult = await electronAPI.ipcRenderer.invoke('read-xlsx-file', { filePath });
+      if (!xlsxResult.success) throw new Error(xlsxResult.error || 'Ошибка чтения XLSX');
+      return xlsxResult.sheets;
+    }
+    
+    throw new Error('Неподдерживаемый формат файла: ' + ext);
   }
 
   private async openFolder(): Promise<void> {
@@ -608,14 +665,13 @@ export class TopBarComponent extends BaseComponent {
       const electronAPI = (window as any).electronAPI;
       if (!electronAPI) {
         alert('Electron API недоступен');
+        log.error('Electron API not available');
         return;
       }
 
-      // Сначала получаем путь к папке
       const folderResult = await electronAPI.ipcRenderer.invoke('open-folder-dialog');
       if (folderResult.canceled || !folderResult.success) return;
 
-      // Затем импортируем файлы из папки
       const importResult = await electronAPI.ipcRenderer.invoke('import-folder', {
         folderPath: folderResult.folderPath
       });
@@ -626,24 +682,28 @@ export class TopBarComponent extends BaseComponent {
       }
 
       const sheets = importResult.sheets;
-
       if (sheets.length === 0) {
         alert('Не удалось прочитать файлы из папки');
         return;
       }
+
+      // Сохраняем путь к последней папке
+      const folderName = folderResult.folderPath.split(/[/\\]/).pop() || 'Папка';
+      saveLastOpenedFile(folderResult.folderPath, folderName, true);
 
       const importFunc = (window as any).importSheets;
       if (typeof importFunc === 'function') {
         importFunc(sheets);
       }
 
-      // Скрываем начальный экран если открыт
       const startScreen = (window as any).startScreen;
       if (startScreen) {
         startScreen.hide();
       }
+      
+      log.info('Folder opened:', folderName);
     } catch (error: any) {
-      console.error('[TopBar] openFolder error:', error);
+      log.errorWithContext('openFolder error', error);
       alert('Ошибка при открытии папки: ' + error.message);
     }
   }

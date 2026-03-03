@@ -799,8 +799,19 @@ export class DashboardComponent {
     const closeBtn = modal.querySelector('.close-storage-detail');
     const overlay = modal.querySelector('.storage-detail-overlay');
 
-    closeBtn?.addEventListener('click', () => modal.remove());
-    overlay?.addEventListener('click', () => modal.remove());
+    const closeFn = () => {
+      modal.remove();
+      // Восстанавливаем фокус на таблицу
+      setTimeout(() => {
+        const gridWrapper = document.getElementById('cellGridWrapper');
+        if (gridWrapper) {
+          gridWrapper.focus();
+        }
+      }, 0);
+    };
+
+    closeBtn?.addEventListener('click', closeFn);
+    overlay?.addEventListener('click', closeFn);
 
     // Выбор элементов
     const checkboxes = modal.querySelectorAll('.item-checkbox') as NodeListOf<HTMLInputElement>;
@@ -865,6 +876,8 @@ export class DashboardComponent {
       const confirmed = confirm(`Вы уверены, что хотите удалить ${selectedKeys.length} элементов?\n\nЭто действие нельзя отменить.`);
 
       if (confirmed) {
+        console.log('====== [DEBUG Dashboard] Deleting from cache ======');
+        
         // Сохраняем важные данные
         const actions = localStorage.getItem('smarttable-actions');
         const avatar = localStorage.getItem('user-avatar');
@@ -888,8 +901,25 @@ export class DashboardComponent {
           type: 'cache',
           status: 'success'
         });
-
+        
+        // === ВАЖНО: Принудительно закрываем Dashboard и сбрасываем таблицу ===
+        console.log('[DEBUG] Calling close() after delete...');
+        this.close();
+        
         alert(`Удалено ${selectedKeys.length} элементов!`);
+        
+        // === ВАЖНО: Возвращаем focus на таблицу ПОСЛЕ alert ===
+        setTimeout(() => {
+          console.log('[DEBUG] Restoring focus to table after alert...');
+          const gridWrapper = document.getElementById('cellGridWrapper');
+          if (gridWrapper) {
+            gridWrapper.focus();
+          }
+          
+          // Сбрасываем состояние таблицы
+          this.resetTableState();
+          console.log('[DEBUG] Focus restored, table state reset');
+        }, 100);
       }
     });
 
@@ -1372,8 +1402,6 @@ export class DashboardComponent {
             // Импортируем данные
             localStorage.setItem(`smarttable-import-${Date.now()}`, JSON.stringify(data));
             
-            alert('Документ успешно импортирован!');
-            
             this.addAction({
               action: `Импорт документа: ${file.name}`,
               type: 'open',
@@ -1383,7 +1411,7 @@ export class DashboardComponent {
             // Обновляем список
             this.switchSection('documents');
           } catch (err) {
-            alert('Ошибка импорта файла. Убедитесь, что это корректный JSON.');
+            console.error('JSON import error:', err);
           }
         };
         reader.readAsText(file);
@@ -1396,106 +1424,93 @@ export class DashboardComponent {
   private async openDocument(filePath: string): Promise<void> {
     const confirmed = confirm(`Открыть файл "${filePath.split(/[\\/]/).pop()}"?\n\nТекущие несохранённые изменения будут утеряны.`);
 
-    if (confirmed) {
-      try {
-        // Используем filesAPI для открытия файла
-        const result = await (window as any).filesAPI?.openFile(filePath);
+    if (!confirmed) return;
 
-        if (result?.success) {
-          // Определяем тип файла по расширению
-          const ext = filePath.toLowerCase().split('.').pop();
-          const fileName = filePath.split(/[\\/]/).pop() || 'Import';
-
-          if (ext === 'csv') {
-            // Парсим CSV
-            let content: string;
-            if (typeof result.content === 'string') {
-              content = result.content;
-            } else if (result.content instanceof Uint8Array) {
-              content = new TextDecoder().decode(result.content);
-            } else {
-              content = String(result.content);
-            }
-
-            console.log('[Documents] CSV content preview:', content.substring(0, 200));
-
-            const rows = content.split(/\r?\n/).filter(row => row.trim() !== '');
-            
-            // Преобразуем в формат таблицы
-            const cells: { [key: string]: { value: string; type: string; style?: any } } = {};
-
-            rows.forEach((row, rowIndex) => {
-              const cells_in_row = row.split(',');
-              cells_in_row.forEach((cell, colIndex) => {
-                const cellValue = cell.trim().replace(/^"|"$/g, ''); // Удаляем кавычки
-                
-                if (cellValue) { // Сохраняем только непустые ячейки
-                  const cellKey = `${rowIndex}-${colIndex}`; // Формат ключа: row-col
-                  cells[cellKey] = {
-                    value: cellValue,
-                    type: 'text'
-                  };
-                }
-              });
-            });
-
-            // Формат совместимый с renderer.ts
-            const tableData: {
-              cells: { [key: string]: { value: string; type: string; style?: any } };
-              sheetsData: { [key: string]: { [key: string]: { value: string; type: string; style?: any } } };
-              fileName: string;
-              timestamp: string;
-              currentSheet: number;
-            } = {
-              cells: cells,
-              sheetsData: {
-                '1': cells // Лист 1
-              },
-              fileName: fileName,
-              timestamp: new Date().toISOString(),
-              currentSheet: 1
-            };
-
-            console.log('[Documents] CSV parsed:', Object.keys(cells).length, 'cells');
-            console.log('[Documents] Saving to smarttable-autosave');
-
-            localStorage.setItem('smarttable-autosave', JSON.stringify(tableData));
-
-            console.log('[Documents] CSV file loaded:', fileName);
-          } else if (ext === 'xlsx' || ext === 'xls') {
-            // Для XLSX - сохраняем информацию о файле
-            // В будущем можно подключить библиотеку xlsx для полноценного парсинга
-            const tableData = {
-              cells: {},
-              fileName: fileName,
-              sourcePath: filePath,
-              timestamp: new Date().toISOString(),
-              importedFrom: 'xlsx',
-              message: `Файл ${ext.toUpperCase()} выбран. Полная поддержка импорта будет добавлена в следующей версии.`
-            };
-
-            localStorage.setItem('smarttable-autosave', JSON.stringify(tableData));
-            
-            console.log('[Documents] XLSX file selected:', fileName);
-          }
-
-          // Добавляем действие в историю
-          this.addAction({
-            action: `Открытие файла: ${fileName}`,
-            type: 'open',
-            status: 'success'
-          });
-
-          // Перезагружаем страницу
-          window.location.reload();
-        } else {
-          console.error('[Documents] Failed to open file:', result?.error);
-          alert(`Ошибка открытия файла: ${result?.error || 'Неизвестная ошибка'}`);
-        }
-      } catch (e) {
-        console.error('[Documents] Failed to open document:', e);
-        alert(`Ошибка открытия файла: ${e instanceof Error ? e.message : String(e)}`);
+    try {
+      const electronAPI = (window as any).electronAPI;
+      if (!electronAPI) {
+        throw new Error('Electron API недоступен');
       }
+
+      const ext = filePath.toLowerCase().split('.').pop();
+      const fileName = filePath.split(/[\\/]/).pop() || 'Import';
+      let sheets: Array<{ name: string; data: string[][]; styles?: any[][]; formulas?: string[][] }> = [];
+
+      if (ext === 'csv') {
+        const csvResult = await electronAPI.ipcRenderer.invoke('read-csv-file', { filePath });
+        if (!csvResult.success) {
+          throw new Error(csvResult.error || 'Ошибка чтения CSV');
+        }
+        sheets = [{ name: fileName.replace(/\.[^.]+$/, ''), data: csvResult.data }];
+      } else if (ext === 'xlsx' || ext === 'xls') {
+        const xlsxResult = await electronAPI.ipcRenderer.invoke('read-xlsx-file', { filePath });
+        if (!xlsxResult.success) {
+          throw new Error(xlsxResult.error || 'Ошибка чтения XLSX');
+        }
+        sheets = xlsxResult.sheets;
+      } else {
+        throw new Error('Неподдерживаемый формат файла: ' + ext);
+      }
+
+      if (sheets.length === 0 || !sheets[0].data || sheets[0].data.length === 0) {
+        throw new Error('Файл пуст или не содержит данных');
+      }
+
+      // Сохраняем путь к последнему файлу
+      localStorage.setItem('smarttable-last-opened-file', JSON.stringify({
+        path: filePath,
+        name: fileName,
+        timestamp: Date.now()
+      }));
+
+      // Импортируем листы через глобальную функцию
+      const importFunc = (window as any).importSheets;
+      if (typeof importFunc !== 'function') {
+        throw new Error('Функция импорта недоступна');
+      }
+
+      console.log('[Documents] Opening file:', fileName, 'sheets:', sheets.length);
+      importFunc(sheets);
+
+      // Скрываем начальный экран если открыт
+      const startScreen = (window as any).startScreen;
+      if (startScreen) {
+        startScreen.hide();
+      }
+
+      // Обновляем TopBar
+      const topBar = (window as any).topBar;
+      if (topBar && typeof topBar.setFileName === 'function') {
+        topBar.setFileName(fileName);
+      } else {
+        // Fallback: напрямую через DOM
+        const fileNameEl = document.querySelector('#fileName') as HTMLElement;
+        if (fileNameEl) {
+          fileNameEl.textContent = fileName;
+        }
+      }
+
+      // Добавляем действие в историю
+      this.addAction({
+        action: `Открытие файла: ${fileName}`,
+        type: 'open',
+        status: 'success'
+      });
+
+      console.log('[DEBUG] File opened successfully:', fileName);
+      
+      // === ВАЖНО: Закрываем Dashboard и возвращаем focus ===
+      console.log('[DEBUG] Closing Dashboard after open...');
+      this.close();
+      
+      console.log('====== [DEBUG Dashboard] Document open END ======');
+    } catch (e: any) {
+      console.error('[Documents] Failed to open document:', e);
+      this.addAction({
+        action: `Ошибка открытия файла: ${filePath.split(/[\\/]/).pop()}`,
+        type: 'other',
+        status: 'error'
+      });
     }
   }
 
@@ -1728,9 +1743,92 @@ export class DashboardComponent {
   close(): void {
     if (!this.isOpen || !this.container) return;
 
+    // === DEBUG: Логирование перед закрытием ===
+    console.log('====== [DEBUG Dashboard] Closing Dashboard ======');
+    console.log('[DEBUG] isOpen:', this.isOpen);
+    
+    const editingCell = document.querySelector('.cell.editing');
+    console.log('[DEBUG] Editing cell found:', editingCell ? 'YES' : 'NO');
+    if (editingCell) {
+      console.log('[DEBUG] Editing cell contentEditable:', (editingCell as HTMLElement).contentEditable);
+      console.log('[DEBUG] Editing cell classes:', (editingCell as HTMLElement).className);
+    }
+
     this.isOpen = false;
     this.container.style.display = 'none';
     document.body.style.overflow = '';
+
+    // === СБРОС СОСТОЯНИЯ ТАБЛИЦЫ ===
+    console.log('[DEBUG] Calling resetTableState()...');
+    this.resetTableState();
+
+    // Восстанавливаем фокус на таблицу
+    setTimeout(() => {
+      const gridWrapper = document.getElementById('cellGridWrapper');
+      if (gridWrapper) {
+        gridWrapper.focus();
+        console.log('[DEBUG] Focus restored to table');
+      } else {
+        console.warn('[DEBUG] cellGridWrapper not found!');
+      }
+    }, 0);
+    
+    console.log('====== [DEBUG Dashboard] Dashboard closed ======');
+  }
+
+  /**
+   * Сброс состояния таблицы после работы с Dashboard
+   */
+  private resetTableState(): void {
+    try {
+      console.log('--- [DEBUG resetTableState] Starting ---');
+      
+      // 1. Завершаем редактирование если оно идет
+      const editingCell = document.querySelector('.cell.editing') as HTMLElement;
+      if (editingCell) {
+        console.log('[DEBUG resetTableState] Found editing cell, fixing...');
+        editingCell.contentEditable = 'false';
+        editingCell.classList.remove('editing');
+        editingCell.classList.remove('has-content');
+        editingCell.blur();
+        console.log('[DEBUG resetTableState] Editing cell fixed');
+      } else {
+        console.log('[DEBUG resetTableState] No editing cell found');
+      }
+      
+      // 2. Снимаем contentEditable со ВСЕХ ячеек
+      const allCells = document.querySelectorAll('.cell');
+      console.log('[DEBUG resetTableState] Total cells:', allCells.length);
+      
+      let fixedCount = 0;
+      allCells.forEach(cell => {
+        const cellEl = cell as HTMLElement;
+        if (cellEl.contentEditable === 'true') {
+          cellEl.contentEditable = 'false';
+          cellEl.classList.remove('editing');
+          cellEl.blur();
+          fixedCount++;
+        }
+      });
+      console.log('[DEBUG resetTableState] Fixed cells:', fixedCount);
+      
+      // 3. Сбрасываем состояние в renderer если доступен
+      const state = (window as any).getSelectedCell?.();
+      console.log('[DEBUG resetTableState] Renderer state:', state);
+      
+      if (state) {
+        const selectedCells = document.querySelectorAll('.cell.selected');
+        console.log('[DEBUG resetTableState] Selected cells:', selectedCells.length);
+        selectedCells.forEach(cell => {
+          (cell as HTMLElement).classList.remove('selected');
+        });
+      }
+      
+      console.log('[DEBUG resetTableState] Completed successfully');
+      console.log('--- [DEBUG resetTableState] End ---');
+    } catch (e) {
+      console.error('[DEBUG resetTableState] ERROR:', e);
+    }
   }
 
   toggle(): void {
