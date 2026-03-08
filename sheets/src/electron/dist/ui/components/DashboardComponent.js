@@ -929,6 +929,13 @@ export class DashboardComponent {
                 type: 'delete',
                 status: 'success'
             });
+            // Восстановить фокус на таблице после очистки
+            setTimeout(() => {
+                const gridWrapper = document.getElementById('cellGridWrapper');
+                if (gridWrapper) {
+                    gridWrapper.focus({ preventScroll: true });
+                }
+            }, 100);
         }
     }
     bindProfileAvatarEvents() {
@@ -1452,7 +1459,7 @@ export class DashboardComponent {
             </div>
             <div class="support-link-content">
               <h3>Telegram-чат сообщества</h3>
-              <p>Общайтесь с другими пользователями, делитесь опытом и получайте помощь</p>
+              <p>Общайтесь с другим������ пользователями, делитесь опытом и получайте помощь</p>
               <span class="support-link-hint">Откроется в браузере</span>
             </div>
             <div class="support-link-arrow">
@@ -1639,13 +1646,18 @@ export class DashboardComponent {
         setTimeout(() => {
             const gridWrapper = document.getElementById('cellGridWrapper');
             if (gridWrapper) {
-                gridWrapper.focus();
+                gridWrapper.focus({ preventScroll: true });
                 console.log('[DEBUG] Focus restored to table');
             }
             else {
                 console.warn('[DEBUG] cellGridWrapper not found!');
             }
-        }, 0);
+            // Дополнительно вызываем restoreFocus из Focus Manager
+            const { restoreFocus } = window;
+            if (typeof restoreFocus === 'function') {
+                restoreFocus();
+            }
+        }, 100);
         console.log('====== [DEBUG Dashboard] Dashboard closed ======');
     }
     /**
@@ -1693,6 +1705,13 @@ export class DashboardComponent {
             }
             console.log('[DEBUG resetTableState] Completed successfully');
             console.log('--- [DEBUG resetTableState] End ---');
+            // Восстановить фокус после сброса
+            setTimeout(() => {
+                const gridWrapper = document.getElementById('cellGridWrapper');
+                if (gridWrapper) {
+                    gridWrapper.focus({ preventScroll: true });
+                }
+            }, 50);
         }
         catch (e) {
             console.error('[DEBUG resetTableState] ERROR:', e);
