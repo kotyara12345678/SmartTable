@@ -4029,13 +4029,22 @@ function updateColumnWidth(col, width) {
         cell.style.maxWidth = `${width}px`;
     });
     // Обновляем grid-template-columns для правильного позиционирования
+    // Оптимизация: не пересчитываем всю сетку, только изменённую колонку
     const columnWidths = [];
     for (let c = 0; c < CONFIG.COLS; c++) {
-        const colHeader = elements.columnHeaders.querySelector(`.column-header[data-col="${c}"]`);
-        const colWidth = colHeader?.style.width || `${CONFIG.CELL_WIDTH}px`;
-        columnWidths.push(colWidth);
+        if (c === col) {
+            columnWidths.push(`${width}px`);
+        }
+        else {
+            const colHeader = elements.columnHeaders.querySelector(`.column-header[data-col="${c}"]`);
+            columnWidths.push(colHeader?.style.width || `${CONFIG.CELL_WIDTH}px`);
+        }
     }
     elements.cellGrid.style.gridTemplateColumns = columnWidths.join(' ');
+    // Синхронизируем скролл после изменения размера
+    requestAnimationFrame(() => {
+        renderVisibleCells();
+    });
 }
 // Функция обновления высоты строки
 function updateRowHeight(row, height) {
