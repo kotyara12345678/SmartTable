@@ -2,7 +2,7 @@
  * Интеграция формул в SmartTable Renderer - Полная поддержка IF/ELSE
  */
 
-import { evaluateFormula, FORMULAS, FORMULA_LIST, FormulaResult } from '../../core/formulas/formulas';
+import { evaluateFormula, FORMULAS, FORMULA_LIST, FormulaResult } from '../../core/formulas/formulas.js';
 
 let autocompleteVisible = false;
 let selectedFormulaIndex = 0;

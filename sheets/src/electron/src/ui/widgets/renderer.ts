@@ -2,7 +2,7 @@
 console.log('[Renderer] Script loaded!');
 
 // Импорт функций для работы с формулами
-import { calculateCellFormula as calcFormula, previewFormula, validateFormula } from './formulabar/formulas-renderer';
+import { calculateCellFormula as calcFormula, previewFormula, validateFormula } from './formulabar/formulas-renderer.js';
 
 // === КОНФИГУРАЦИЯ ===
 const CONFIG = {
