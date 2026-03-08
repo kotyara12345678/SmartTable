@@ -13,6 +13,7 @@ export class TopBarComponent extends BaseComponent {
   private menuItems: NodeListOf<HTMLElement> | null = null;
   private btnAI: HTMLElement | null = null;
   private btnSettings: HTMLElement | null = null;
+  private btnExtensions: HTMLElement | null = null;
   private appIcon: HTMLElement | null = null;
   private onReturnToStart: (() => void) | null = null;
 
@@ -35,6 +36,7 @@ export class TopBarComponent extends BaseComponent {
     this.menuItems = this.querySelectorAll('.menu-item');
     this.btnAI = this.querySelector('#btnAI');
     this.btnSettings = this.querySelector('#btnSettings');
+    this.btnExtensions = this.querySelector('#btnExtensions');
     this.appIcon = this.querySelector('.app-icon');
   }
 
@@ -44,7 +46,7 @@ export class TopBarComponent extends BaseComponent {
   private bindEvents(): void {
     // Клик по иконке приложения
     this.appIcon?.addEventListener('click', () => this.showAppMenu());
-    
+
     // Переключение вкладок меню
     this.menuItems?.forEach(item => {
       item.addEventListener('click', () => this.handleMenuClick(item));
@@ -55,6 +57,9 @@ export class TopBarComponent extends BaseComponent {
 
     // Кнопка настроек
     this.bindEvent(this.btnSettings, 'click', (e) => this.handleSettingsClick(e));
+
+    // Кнопка расширений
+    this.bindEvent(this.btnExtensions, 'click', (e) => this.handleExtensionsClick(e));
   }
   
   /**
@@ -93,6 +98,15 @@ export class TopBarComponent extends BaseComponent {
     event.stopPropagation();
     // Эмитим событие для открытия панели настроек
     document.dispatchEvent(new CustomEvent('settings-panel-open'));
+  }
+
+  /**
+   * Обработчик клика по кнопке расширений
+   */
+  private handleExtensionsClick(event: Event): void {
+    event.stopPropagation();
+    // Эмитим событие для открытия панели расширений
+    document.dispatchEvent(new CustomEvent('extensions-panel-open'));
   }
   
   /**

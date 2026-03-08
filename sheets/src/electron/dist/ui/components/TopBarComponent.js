@@ -13,6 +13,7 @@ export class TopBarComponent extends BaseComponent {
         this.menuItems = null;
         this.btnAI = null;
         this.btnSettings = null;
+        this.btnExtensions = null;
         this.appIcon = null;
         this.onReturnToStart = null;
     }
@@ -30,6 +31,7 @@ export class TopBarComponent extends BaseComponent {
         this.menuItems = this.querySelectorAll('.menu-item');
         this.btnAI = this.querySelector('#btnAI');
         this.btnSettings = this.querySelector('#btnSettings');
+        this.btnExtensions = this.querySelector('#btnExtensions');
         this.appIcon = this.querySelector('.app-icon');
     }
     /**
@@ -46,6 +48,8 @@ export class TopBarComponent extends BaseComponent {
         this.bindEvent(this.btnAI, 'click', (e) => this.handleAIClick(e));
         // Кнопка настроек
         this.bindEvent(this.btnSettings, 'click', (e) => this.handleSettingsClick(e));
+        // Кнопка расширений
+        this.bindEvent(this.btnExtensions, 'click', (e) => this.handleExtensionsClick(e));
     }
     /**
      * Обработчик клика по меню
@@ -78,6 +82,14 @@ export class TopBarComponent extends BaseComponent {
         event.stopPropagation();
         // Эмитим событие для открытия панели настроек
         document.dispatchEvent(new CustomEvent('settings-panel-open'));
+    }
+    /**
+     * Обработчик клика по кнопке расширений
+     */
+    handleExtensionsClick(event) {
+        event.stopPropagation();
+        // Эмитим событие для открытия панели расширений
+        document.dispatchEvent(new CustomEvent('extensions-panel-open'));
     }
     /**
      * Событие смены вкладки

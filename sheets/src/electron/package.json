@@ -24,6 +24,7 @@
   "author": "Pavel x Sava",
   "license": "ISC",
   "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
     "@types/node": "^22.13.10",
     "electron": "^28.3.3",
     "electron-builder": "^26.8.1",
@@ -31,6 +32,7 @@
     "typescript": "^5.8.2"
   },
   "dependencies": {
+    "adm-zip": "^0.5.10",
     "node-fetch": "^3.3.2",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.6",

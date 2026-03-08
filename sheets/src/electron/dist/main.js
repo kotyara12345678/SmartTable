@@ -25,7 +25,13 @@ function createSplashScreen() {
         skipTaskbar: true,
     });
     // Загружаем изображение заставки
-    splashWindow.loadFile(path.join(__dirname, '../SmartTableStartApp.png'));
+    // В разработке: ../SmartTableStartApp.png
+    // В сборке: ресурсы в process.resourcesPath
+    const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+    const splashPath = isDev
+        ? path.join(__dirname, '../SmartTableStartApp.png')
+        : path.join(process.resourcesPath, 'SmartTableStartApp.png');
+    splashWindow.loadFile(splashPath);
     // Центрируем окно
     splashWindow.center();
 }
@@ -33,6 +39,8 @@ function createSplashScreen() {
  * Создать главное окно приложения
  */
 function createWindow() {
+    // Проверяем, запущено ли приложение в режиме разработки
+    const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
     mainWindow = new BrowserWindow({
         width: 1400,
         height: 900,
@@ -51,8 +59,10 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
     // Отключаем стандартное меню Electron — используем свой Top Bar
     Menu.setApplicationMenu(null);
-    // Открываем DevTools для отладки
-    mainWindow.webContents.openDevTools();
+    // Открываем DevTools ТОЛЬКО в режиме разработки
+    if (isDev) {
+        mainWindow.webContents.openDevTools();
+    }
     // Когда окно загрузится - ждём 5 секунд и показываем приложение
     mainWindow.once('ready-to-show', () => {
         // Ждём 5 секунд пока показывается splash screen

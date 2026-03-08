@@ -1,0 +1,531 @@
+/**
+ * Стили для панели расширений (Extensions Panel)
+ * Дизайн в стиле VS Code Extensions Marketplace
+ */
+
+/* Контейнер панели */
+.extensions-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-secondary, #f5f5f5);
+}
+
+/* Заголовок панели */
+.extensions-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--bg-primary, #ffffff);
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+}
+
+.extensions-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #333);
+}
+
+.extensions-panel-title svg {
+  width: 24px;
+  height: 24px;
+  color: var(--accent-color, #107c41);
+}
+
+.extensions-panel-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.extensions-panel-close:hover {
+  background: var(--hover-bg, #f0f0f0);
+}
+
+.extensions-panel-close svg {
+  width: 20px;
+  height: 20px;
+  color: var(--text-secondary, #666);
+}
+
+/* Поиск плагинов */
+.extensions-search-container {
+  padding: 12px 20px;
+  background: var(--bg-primary, #ffffff);
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+}
+
+.extensions-search-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 6px;
+  font-size: 14px;
+  background: var(--bg-secondary, #f9f9f9);
+  color: var(--text-primary, #333);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.extensions-search-input:focus {
+  outline: none;
+  border-color: var(--accent-color, #107c41);
+  box-shadow: 0 0 0 2px rgba(16, 124, 65, 0.15);
+}
+
+.extensions-search-input::placeholder {
+  color: var(--text-secondary, #999);
+}
+
+/* Вкладки маркетплейса */
+.extensions-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px 20px 0;
+  background: var(--bg-primary, #ffffff);
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  overflow-x: auto;
+}
+
+.extensions-tab {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #666);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.extensions-tab:hover {
+  background: var(--hover-bg, #f5f5f5);
+  color: var(--text-primary, #333);
+}
+
+.extensions-tab.active {
+  background: var(--bg-secondary, #f5f5f5);
+  color: var(--accent-color, #107c41);
+  border-bottom: 2px solid var(--bg-secondary, #f5f5f5);
+}
+
+/* Секция списка плагинов */
+.extensions-list-section {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+/* Заголовок секции */
+.extensions-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.extensions-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary, #666);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.extensions-section-count {
+  font-size: 12px;
+  color: var(--text-secondary, #999);
+  background: var(--bg-secondary, #f5f5f5);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* Сетка плагинов */
+.plugins-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+/* Карточка плагина */
+.plugin-card {
+  display: flex;
+  gap: 14px;
+  padding: 14px;
+  background: var(--bg-primary, #ffffff);
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.plugin-card:hover {
+  border-color: var(--accent-color, #107c41);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+/* Карточка установленного плагина */
+.plugin-card-installed {
+  background: var(--bg-secondary, #f9f9f9);
+}
+
+.plugin-card-icon {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, var(--accent-light, #e8f5e9) 0%, var(--accent-lighter, #c8e6c9) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plugin-card-icon svg {
+  width: 28px;
+  height: 28px;
+  color: var(--accent-color, #107c41);
+}
+
+.plugin-card-icon img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
+.plugin-card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.plugin-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.plugin-card-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary, #333);
+  margin: 0;
+}
+
+.plugin-card-version {
+  font-size: 11px;
+  color: var(--text-secondary, #999);
+  background: var(--bg-secondary, #f5f5f5);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.plugin-card-description {
+  font-size: 13px;
+  color: var(--text-secondary, #666);
+  margin: 0 0 10px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.plugin-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--text-secondary, #999);
+}
+
+.plugin-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.plugin-meta-item svg {
+  width: 14px;
+  height: 14px;
+}
+
+.plugin-rating {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #f59e0b;
+}
+
+.plugin-downloads {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Кнопка установки */
+.plugin-install-btn {
+  padding: 6px 16px;
+  background: var(--accent-color, #107c41);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.plugin-install-btn:hover {
+  background: var(--accent-dark, #0d5c33);
+  box-shadow: 0 2px 6px rgba(16, 124, 65, 0.3);
+}
+
+.plugin-install-btn.installed {
+  background: var(--bg-secondary, #f5f5f5);
+  color: var(--text-secondary, #666);
+}
+
+.plugin-install-btn.installed:hover {
+  background: var(--hover-bg, #e8e8e8);
+}
+
+/* Действия для установленных плагинов */
+.plugin-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Кнопка включения/выключения плагина */
+.plugin-toggle-btn {
+  padding: 6px 12px;
+  background: var(--bg-secondary, #f5f5f5);
+  color: var(--text-secondary, #666);
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.plugin-toggle-btn.enabled {
+  background: var(--accent-color, #107c41);
+  color: white;
+  border-color: var(--accent-color, #107c41);
+}
+
+.plugin-toggle-btn.enabled:hover {
+  background: var(--accent-dark, #0d5c33);
+  border-color: var(--accent-dark, #0d5c33);
+}
+
+.plugin-toggle-btn.disabled:hover {
+  background: var(--hover-bg, #e8e8e8);
+}
+
+/* Кнопка удаления плагина */
+.plugin-uninstall-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-secondary, #666);
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.plugin-uninstall-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.plugin-uninstall-btn:hover {
+  background: #c62828;
+  border-color: #c62828;
+  color: white;
+}
+
+/* Теги плагина */
+.plugin-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.plugin-tag {
+  font-size: 11px;
+  color: var(--text-secondary, #666);
+  background: var(--bg-secondary, #f5f5f5);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* Состояние загрузки */
+.plugins-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--text-secondary, #666);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-color, #e0e0e0);
+  border-top-color: var(--accent-color, #107c41);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Пустое состояние */
+.extensions-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--text-secondary, #666);
+}
+
+.extensions-empty svg {
+  width: 80px;
+  height: 80px;
+  margin-bottom: 20px;
+  opacity: 0.3;
+}
+
+.extensions-empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #333);
+  margin-bottom: 8px;
+}
+
+.extensions-empty-text {
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 300px;
+}
+
+/* Подвал панели */
+.extensions-panel-footer {
+  padding: 16px 20px;
+  background: var(--bg-primary, #ffffff);
+  border-top: 1px solid var(--border-color, #e0e0e0);
+  text-align: center;
+}
+
+.extensions-footer-link {
+  font-size: 13px;
+  color: var(--accent-color, #107c41);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.2s;
+}
+
+.extensions-footer-link:hover {
+  color: var(--accent-dark, #0d5c33);
+  text-decoration: underline;
+}
+
+/* Скроллбар */
+.extensions-list-section::-webkit-scrollbar {
+  width: 8px;
+}
+
+.extensions-list-section::-webkit-scrollbar-track {
+  background: var(--bg-secondary, #f5f5f5);
+}
+
+.extensions-list-section::-webkit-scrollbar-thumb {
+  background: var(--border-color, #e0e0e0);
+  border-radius: 4px;
+}
+
+.extensions-list-section::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary, #999);
+}
+
+/* Адаптивность для маленьких экранов */
+@media (max-width: 500px) {
+  .extensions-panel {
+    width: 100%;
+  }
+  
+  .plugin-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .plugin-card-icon {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+  }
+  
+  .plugin-install-btn {
+    width: 100%;
+    margin-top: 10px;
+  }
+}
+
+/* Toast уведомления */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

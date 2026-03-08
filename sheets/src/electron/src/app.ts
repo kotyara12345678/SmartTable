@@ -11,6 +11,8 @@ import { StartScreenComponent } from './ui/components/StartScreenComponent.js';
 import { UserProfileComponent } from './ui/components/UserProfileComponent.js';
 import { DashboardComponent } from './ui/components/DashboardComponent.js';
 import { AIChatComponent } from './ui/components/AIChatComponent.js';
+import { ExtensionsPanelComponent } from './ui/components/ExtensionsPanelComponent.js';
+import { pluginManager } from './ui/core/plugins/PluginManager.js';
 import { themeManager } from './ui/core/theme-manager.js';
 import { aiContextService } from './ui/core/ai/ai-context-service.js';
 import { timeTracker } from './ui/core/time-tracker.js';
@@ -38,6 +40,7 @@ let settingsPanel: SettingsPanelComponent | null = null;
 let userProfile: UserProfileComponent | null = null;
 let dashboard: DashboardComponent | null = null;
 let aiChat: AIChatComponent | null = null;
+let extensionsPanel: ExtensionsPanelComponent | null = null;
 
 /**
  * Инициализация приложения
@@ -167,6 +170,18 @@ async function initApp(): Promise<void> {
     (window as any).settingsPanel = settingsPanel;
     logs.push('[App] SettingsPanelComponent initialized');
 
+    // Инициализация панели расширений
+    logs.push('[App] Creating ExtensionsPanelComponent...');
+    extensionsPanel = new ExtensionsPanelComponent();
+    extensionsPanel.init();
+    (window as any).extensionsPanel = extensionsPanel;
+    logs.push('[App] ExtensionsPanelComponent initialized');
+
+    // Инициализация менеджера плагинов
+    logs.push('[App] Initializing PluginManager...');
+    await initPluginManager();
+    logs.push('[App] PluginManager initialized');
+
     // Инициализация компонента профиля пользователя
     logs.push('[App] Creating UserProfileComponent...');
     userProfile = new UserProfileComponent();
@@ -242,6 +257,11 @@ function setupGlobalEventListeners(): void {
   // Событие открытия панели настроек
   document.addEventListener('settings-panel-open', () => {
     openSettingsPanel();
+  });
+
+  // Событие открытия панели расширений
+  document.addEventListener('extensions-panel-open', () => {
+    openExtensionsPanel();
   });
 
   // Событие действий от Ribbon (диаграммы, сортировка и т.д.)
@@ -344,6 +364,171 @@ function openSettingsPanel(): void {
   if (settingsPanel) {
     settingsPanel.open();
   }
+}
+
+/**
+ * Открытие панели расширений
+ */
+function openExtensionsPanel(): void {
+  if (extensionsPanel) {
+    extensionsPanel.open();
+  }
+}
+
+/**
+ * Инициализация менеджера плагинов
+ */
+async function initPluginManager(): Promise<void> {
+  // Массив для хранения кнопок плагинов
+  const pluginButtons: Array<{ id: string; groupId: string; element?: HTMLElement }> = [];
+
+  // Создаем API для плагинов
+  const pluginAPI = {
+    version: '1.0.0',
+    sheets: {
+      getCell: () => null,
+      setCell: () => {},
+      getSelectedRange: () => null,
+      getSheet: () => null,
+      createSheet: () => 0,
+      deleteSheet: () => {},
+      getAllSheets: () => []
+    },
+    ui: {
+      addRibbonButton: (config: { id: string; groupId: string; icon: string; label: string; tooltip?: string; size?: string; onClick?: () => void }) => {
+        console.log('[PluginAPI] Adding ribbon button:', config.id, 'to group:', config.groupId);
+        
+        // Находим группу в ribbon
+        const groupSelector = `.ribbon-group[data-group="${config.groupId}"]`;
+        const group = document.querySelector(groupSelector);
+        
+        if (!group) {
+          console.warn('[PluginAPI] Ribbon group not found:', config.groupId);
+          return null;
+        }
+
+        // Создаём кнопку
+        const button = document.createElement('button');
+        button.className = config.size === 'lg' ? 'ribbon-btn-lg' : 'ribbon-btn-sm';
+        button.id = config.id;
+        button.title = config.tooltip || config.label;
+        button.innerHTML = `
+          ${config.icon}
+          ${config.label ? `<span>${config.label}</span>` : ''}
+        `;
+        
+        // Добавляем обработчик клика
+        if (config.onClick) {
+          button.addEventListener('click', (e) => {
+            e.stopPropagation();
+            config.onClick?.();
+          });
+        }
+
+        // Добавляем кнопку в группу
+        group.appendChild(button);
+        
+        // Сохраняем ссылку на кнопку
+        const buttonInfo = { id: config.id, groupId: config.groupId, element: button };
+        pluginButtons.push(buttonInfo);
+        
+        console.log('[PluginAPI] Ribbon button added:', config.id);
+        return button;
+      },
+      addMenuItem: () => {},
+      addPanel: () => {},
+      showModal: (content: HTMLElement) => {
+        console.log('[PluginAPI] showModal called');
+        // Простая реализация модального окна
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0,0,0,0.5);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 100000;
+        `;
+        
+        const modalContent = document.createElement('div');
+        modalContent.style.cssText = `
+          background: white;
+          border-radius: 8px;
+          padding: 20px;
+          max-width: 600px;
+          max-height: 80vh;
+          overflow: auto;
+        `;
+        modalContent.appendChild(content);
+        
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = 'Закрыть';
+        closeBtn.style.cssText = `
+          margin-top: 16px;
+          padding: 8px 16px;
+          background: #107c41;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+        `;
+        closeBtn.addEventListener('click', () => {
+          modal.remove();
+        });
+        content.appendChild(closeBtn);
+        
+        modal.appendChild(modalContent);
+        document.body.appendChild(modal);
+        
+        return modal;
+      },
+      closeModals: () => {
+        console.log('[PluginAPI] closeModals called');
+        document.querySelectorAll('[style*="z-index: 100000"]').forEach(el => el.remove());
+      },
+      showNotification: () => {},
+      getActiveTheme: () => 'default'
+    },
+    events: {
+      onCellChange: () => {},
+      onSheetCreate: () => {},
+      onSheetDelete: () => {},
+      onSelectionChange: () => {},
+      onFileOpen: () => {},
+      onFileSave: () => {},
+      off: () => {}
+    },
+    storage: {
+      get: (key: string) => {
+        try {
+          return JSON.parse(localStorage.getItem('plugin_' + key) || 'null');
+        } catch {
+          return null;
+        }
+      },
+      set: (key: string, value: any) => {
+        try {
+          localStorage.setItem('plugin_' + key, JSON.stringify(value));
+        } catch {}
+      },
+      remove: (key: string) => {
+        localStorage.removeItem('plugin_' + key);
+      },
+      clear: () => {
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('plugin_')) {
+            localStorage.removeItem(key);
+          }
+        });
+      }
+    }
+  };
+
+  await pluginManager.init(pluginAPI as any);
 }
 
 /**

@@ -3,11 +3,135 @@
  * Регистрация всех IPC обработчиков для main процесса
  */
 
-import { ipcMain } from 'electron';
+import { ipcMain, app, dialog, net } from 'electron';
 import { aiService, AIRequest, AIResponse } from './ai/ai-service.js';
 import { createLogger } from './logger.js';
+import * as path from 'path';
+import * as fs from 'fs';
 
 const log = createLogger('IPC');
+
+/**
+ * Получить путь к папке с плагинами (в папке проекта)
+ */
+function getPluginsDir(): string {
+  // Путь к папке приложения
+  let appPath = app.getAppPath();
+  
+  // Если приложение упаковано в .asar, app.getAppPath() возвращает путь к .asar файлу
+  // Нужно получить путь к родительской директории
+  if (appPath.endsWith('.asar') || appPath.includes('app.asar')) {
+    // Для упакованного приложения используем userData
+    const userDataPlugins = path.join(app.getPath('userData'), 'plugins');
+    log.info('App is packaged, using userData plugins dir:', userDataPlugins);
+    return userDataPlugins;
+  }
+  
+  // Для разработки: appPath = .../sheets/src/electron
+  let projectRoot = path.resolve(appPath);
+  
+  // Поднимаемся до корня проекта (ищем папку sheets и README.md)
+  let maxDepth = 10;
+  while (maxDepth > 0) {
+    const hasSheets = fs.existsSync(path.join(projectRoot, 'sheets'));
+    const hasReadme = fs.existsSync(path.join(projectRoot, 'README.md'));
+    
+    if (hasSheets && hasReadme) {
+      break;
+    }
+    
+    const parent = path.dirname(projectRoot);
+    if (parent === projectRoot) break;
+    projectRoot = parent;
+    maxDepth--;
+  }
+  
+  const pluginsDir = path.join(projectRoot, 'plugins');
+  log.info('getPluginsDir (dev mode): projectRoot=', projectRoot, '=> pluginsDir=', pluginsDir);
+  
+  return pluginsDir;
+}
+
+/**
+ * Найти все manifest.json в директории (рекурсивно)
+ */
+function findManifestFiles(dir: string): string[] {
+  const results: string[] = [];
+
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+
+      if (entry.isDirectory() && !entry.name.startsWith('.')) {
+        results.push(...findManifestFiles(fullPath));
+      } else if (entry.isFile() && entry.name === 'manifest.json') {
+        results.push(fullPath);
+      }
+    }
+  } catch {
+    // Игнорируем ошибки доступа
+  }
+
+  return results;
+}
+
+/**
+ * Скачать файл через net модуль (обходит CORS ограничения)
+ */
+async function downloadFileViaNet(url: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    log.info('Downloading file from:', url);
+    
+    const request = net.request({
+      url,
+      method: 'GET',
+      headers: {
+        'User-Agent': 'SmartTable-Plugin-Installer'
+      }
+    });
+    
+    const chunks: Buffer[] = [];
+
+    request.on('response', (response) => {
+      log.info('Download response status:', response.statusCode);
+      
+      if (response.statusCode === 302 || response.statusCode === 301) {
+        // Обработка редиректа
+        const redirectUrl = response.headers.location;
+        if (redirectUrl) {
+          const url = Array.isArray(redirectUrl) ? redirectUrl[0] : redirectUrl;
+          log.info('Redirecting to:', url);
+          downloadFileViaNet(url).then(resolve).catch(reject);
+          return;
+        }
+      }
+      
+      if (response.statusCode !== 200) {
+        reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+        return;
+      }
+
+      response.on('data', (chunk) => {
+        chunks.push(Buffer.from(chunk));
+      });
+
+      response.on('end', () => {
+        const buffer = Buffer.concat(chunks);
+        log.info('Download completed, size:', buffer.length, 'bytes');
+        resolve(buffer);
+      });
+    });
+
+    request.on('error', (error) => {
+      log.error('Download network error:', error.message);
+      reject(new Error(`Network error: ${error.message}`));
+    });
+
+    request.end();
+  });
+}
 
 /**
  * Зарегистрировать все IPC обработчики
@@ -533,6 +657,402 @@ export function registerIPCHandlers(): void {
     }
   });
 
+  // ============================================================================
+  // Plugin Installer - установка плагинов из GitHub Releases
+  // ============================================================================
+  ipcMain.handle('install-plugin', async (event, data: {
+    zipData: ArrayBuffer;
+    pluginId: string;
+    releaseUrl?: string;
+  }) => {
+    try {
+      log.info('Installing plugin:', data.pluginId);
+
+      const pluginsDir = getPluginsDir();
+
+      // Создаём папку plugins если нет
+      if (!fs.existsSync(pluginsDir)) {
+        fs.mkdirSync(pluginsDir, { recursive: true });
+        log.info('Created plugins directory:', pluginsDir);
+      }
+
+      // Динамически импортируем AdmZip (чтобы не нагружать сборку если не используется)
+      let AdmZip;
+      try {
+        AdmZip = (await import('adm-zip')).default;
+      } catch {
+        return { 
+          success: false, 
+          error: 'Модуль adm-zip не установлен. Выполните: npm install adm-zip' 
+        };
+      }
+
+      // Распаковываем ZIP
+      const zip = new AdmZip(Buffer.from(data.zipData));
+      const extractPath = path.join(pluginsDir, data.pluginId);
+      
+      // Удаляем старую версию если есть
+      if (fs.existsSync(extractPath)) {
+        log.info('Removing old plugin version:', extractPath);
+        fs.rmSync(extractPath, { recursive: true, force: true });
+      }
+      
+      // Распаковываем в временную папку сначала
+      const tempExtractPath = path.join(pluginsDir, '.temp-' + data.pluginId);
+      zip.extractAllTo(tempExtractPath, true);
+      log.info('Extracted to:', tempExtractPath);
+
+      // Удаляем .git папку если есть (не должна быть в плагине)
+      const gitPath = path.join(tempExtractPath, '.git');
+      if (fs.existsSync(gitPath)) {
+        fs.rmSync(gitPath, { recursive: true, force: true });
+        log.info('Removed .git folder from plugin');
+      }
+
+      // Валидируем manifest.json
+      const manifestPath = path.join(tempExtractPath, 'manifest.json');
+      if (!fs.existsSync(manifestPath)) {
+        // Возможно manifest.json в подпапке - ищем его
+        const manifestFiles = findManifestFiles(tempExtractPath);
+        if (manifestFiles.length > 0) {
+          // Копируем содержимое подпапки в основную
+          const pluginRoot = path.dirname(manifestFiles[0]);
+          if (pluginRoot !== tempExtractPath) {
+            fs.rmSync(extractPath, { recursive: true, force: true });
+            fs.renameSync(pluginRoot, extractPath);
+            fs.rmSync(tempExtractPath, { recursive: true, force: true });
+          } else {
+            fs.renameSync(tempExtractPath, extractPath);
+          }
+        } else {
+          fs.rmSync(tempExtractPath, { recursive: true, force: true });
+          return { success: false, error: 'manifest.json не найден в архиве' };
+        }
+      } else {
+        // Просто переименовываем временную папку
+        fs.renameSync(tempExtractPath, extractPath);
+      }
+
+      // Читаем и валидируем manifest.json
+      const manifestContent = fs.readFileSync(path.join(extractPath, 'manifest.json'), 'utf-8');
+      const manifest = JSON.parse(manifestContent);
+      
+      if (!manifest.id || !manifest.main) {
+        fs.rmSync(extractPath, { recursive: true, force: true });
+        return { 
+          success: false, 
+          error: 'Неверный manifest.json: отсутствуют поля id или main' 
+        };
+      }
+
+      // Проверяем наличие main.js
+      const mainPath = path.join(extractPath, manifest.main);
+      if (!fs.existsSync(mainPath)) {
+        fs.rmSync(extractPath, { recursive: true, force: true });
+        return { 
+          success: false, 
+          error: `Файл ${manifest.main} не найден` 
+        };
+      }
+
+      log.info('Plugin installed successfully:', manifest.id, 'at', extractPath);
+
+      return { 
+        success: true, 
+        pluginId: manifest.id,
+        path: extractPath,
+        manifest: manifest
+      };
+
+    } catch (error: any) {
+      log.error('Plugin installation failed:', error.message);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // ============================================================================
+  // Download & Install Plugin - скачивание и установка плагина через main процесс
+  // ============================================================================
+  ipcMain.handle('download-and-install-plugin', async (event, data: {
+    downloadUrl: string;
+    pluginId: string;
+    releaseUrl?: string;
+  }) => {
+    try {
+      log.info('Downloading and installing plugin from:', data.downloadUrl);
+      log.info('Plugin ID:', data.pluginId);
+      log.info('Plugins directory:', getPluginsDir());
+
+      const pluginsDir = getPluginsDir();
+
+      // Создаём папку plugins если нет
+      if (!fs.existsSync(pluginsDir)) {
+        fs.mkdirSync(pluginsDir, { recursive: true });
+        log.info('Created plugins directory:', pluginsDir);
+      }
+
+      // Скачиваем ZIP через net модуль (обходит CORS)
+      log.info('Starting download...');
+      const zipBuffer = await downloadFileViaNet(data.downloadUrl);
+      log.info('Downloaded ZIP, size:', zipBuffer.length, 'bytes');
+
+      // Динамически импортируем AdmZip
+      let AdmZip;
+      try {
+        AdmZip = (await import('adm-zip')).default;
+      } catch {
+        return {
+          success: false,
+          error: 'Модуль adm-zip не установлен. Выполните: npm install adm-zip'
+        };
+      }
+
+      // Распаковываем ZIP
+      const zip = new AdmZip(zipBuffer);
+      const extractPath = path.join(pluginsDir, data.pluginId);
+
+      // Удаляем старую версию если есть
+      if (fs.existsSync(extractPath)) {
+        log.info('Removing old plugin version:', extractPath);
+        fs.rmSync(extractPath, { recursive: true, force: true });
+      }
+
+      // Распаковываем в временную папку сначала
+      const tempExtractPath = path.join(pluginsDir, '.temp-' + data.pluginId);
+      zip.extractAllTo(tempExtractPath, true);
+      log.info('Extracted to:', tempExtractPath);
+
+      // Удаляем .git папку если есть (не должна быть в плагине)
+      const gitPath = path.join(tempExtractPath, '.git');
+      if (fs.existsSync(gitPath)) {
+        fs.rmSync(gitPath, { recursive: true, force: true });
+        log.info('Removed .git folder from plugin');
+      }
+
+      // Валидируем manifest.json
+      const manifestPath = path.join(tempExtractPath, 'manifest.json');
+      if (!fs.existsSync(manifestPath)) {
+        // Возможно manifest.json в подпапке - ищем его
+        const manifestFiles = findManifestFiles(tempExtractPath);
+        if (manifestFiles.length > 0) {
+          // Копируем содержимое подпапки в основную
+          const pluginRoot = path.dirname(manifestFiles[0]);
+          if (pluginRoot !== tempExtractPath) {
+            fs.rmSync(extractPath, { recursive: true, force: true });
+            fs.renameSync(pluginRoot, extractPath);
+            fs.rmSync(tempExtractPath, { recursive: true, force: true });
+          } else {
+            fs.renameSync(tempExtractPath, extractPath);
+          }
+        } else {
+          fs.rmSync(tempExtractPath, { recursive: true, force: true });
+          return { success: false, error: 'manifest.json не найден в архиве' };
+        }
+      } else {
+        // Просто переименовываем временную папку
+        fs.renameSync(tempExtractPath, extractPath);
+      }
+
+      // Читаем и валидируем manifest.json
+      const manifestContent = fs.readFileSync(path.join(extractPath, 'manifest.json'), 'utf-8');
+      const manifest = JSON.parse(manifestContent);
+
+      if (!manifest.id || !manifest.main) {
+        fs.rmSync(extractPath, { recursive: true, force: true });
+        return {
+          success: false,
+          error: 'Неверный manifest.json: отсутствуют поля id или main'
+        };
+      }
+
+      // Проверяем наличие main.js
+      const mainPath = path.join(extractPath, manifest.main);
+      if (!fs.existsSync(mainPath)) {
+        fs.rmSync(extractPath, { recursive: true, force: true });
+        return {
+          success: false,
+          error: `Файл ${manifest.main} не найден`
+        };
+      }
+
+      // Переименовываем папку в соответствии с manifest.id если отличается
+      const correctExtractPath = path.join(pluginsDir, manifest.id);
+      if (extractPath !== correctExtractPath) {
+        log.info(`Renaming plugin folder from ${extractPath} to ${correctExtractPath}`);
+        if (fs.existsSync(correctExtractPath)) {
+          fs.rmSync(correctExtractPath, { recursive: true, force: true });
+        }
+        fs.renameSync(extractPath, correctExtractPath);
+      }
+
+      log.info('Plugin installed successfully:', manifest.id, 'at', correctExtractPath);
+
+      return {
+        success: true,
+        pluginId: manifest.id,
+        path: correctExtractPath,
+        manifest: manifest
+      };
+
+    } catch (error: any) {
+      log.error('Download and install failed:', error.message);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Обработчик для открытия диалога выбора ZIP файла плагина
+  ipcMain.handle('open-plugin-zip-dialog', async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        title: 'Выберите ZIP файл плагина',
+        filters: [
+          { name: 'Plugin Package', extensions: ['zip'] }
+        ],
+        properties: ['openFile']
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, canceled: true };
+      }
+
+      return {
+        success: true,
+        filePath: result.filePaths[0]
+      };
+    } catch (error: any) {
+      log.error('open-plugin-zip-dialog error:', error.message);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Обработчик для получения списка установленных плагинов
+  ipcMain.handle('get-installed-plugins', async () => {
+    try {
+      const pluginsDir = getPluginsDir();
+
+      if (!fs.existsSync(pluginsDir)) {
+        return { success: true, plugins: [] };
+      }
+
+      const plugins: Array<{ id: string; manifest: any; path: string }> = [];
+      
+      const entries = fs.readdirSync(pluginsDir, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        if (entry.isDirectory() && !entry.name.startsWith('.')) {
+          const manifestPath = path.join(pluginsDir, entry.name, 'manifest.json');
+          
+          if (fs.existsSync(manifestPath)) {
+            try {
+              const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
+              const manifest = JSON.parse(manifestContent);
+              
+              if (manifest.id) {
+                plugins.push({
+                  id: manifest.id,
+                  manifest: manifest,
+                  path: path.join(pluginsDir, entry.name)
+                });
+              }
+            } catch (e) {
+              log.warn('Failed to read manifest:', entry.name);
+            }
+          }
+        }
+      }
+
+      return { success: true, plugins };
+    } catch (error: any) {
+      log.error('get-installed-plugins error:', error.message);
+      return { success: false, error: error.message, plugins: [] };
+    }
+  });
+
+  // ============================================================================
+  // Load Plugin File - чтение файла плагина (для загрузки main.js)
+  // ============================================================================
+  ipcMain.handle('load-plugin-file', async (event, data: {
+    pluginPath: string;
+    fileName: string;
+  }) => {
+    try {
+      const filePath = path.join(data.pluginPath, data.fileName);
+
+      // Проверяем, что файл находится внутри директории плагинов (безопасность)
+      const pluginsDir = getPluginsDir();
+      const resolvedPath = path.resolve(filePath);
+      const normalizedPluginsDir = path.resolve(pluginsDir);
+
+      if (!resolvedPath.startsWith(normalizedPluginsDir)) {
+        return {
+          success: false,
+          error: 'Access denied: file outside plugins directory'
+        };
+      }
+
+      if (!fs.existsSync(filePath)) {
+        return {
+          success: false,
+          error: `File not found: ${data.fileName}`
+        };
+      }
+      
+      const content = fs.readFileSync(filePath, 'utf-8');
+      
+      return {
+        success: true,
+        content,
+        fileName: data.fileName
+      };
+    } catch (error: any) {
+      log.error('load-plugin-file error:', error.message);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // ============================================================================
+  // Uninstall Plugin - удаление плагина
+  // ============================================================================
+  ipcMain.handle('uninstall-plugin', async (event, data: {
+    pluginId: string;
+  }) => {
+    try {
+      const pluginsDir = getPluginsDir();
+      const pluginPath = path.join(pluginsDir, data.pluginId);
+
+      // Проверяем, что папка находится внутри директории плагинов (безопасность)
+      const resolvedPath = path.resolve(pluginPath);
+      const normalizedPluginsDir = path.resolve(pluginsDir);
+
+      if (!resolvedPath.startsWith(normalizedPluginsDir)) {
+        return {
+          success: false,
+          error: 'Access denied: plugin path outside plugins directory'
+        };
+      }
+
+      if (!fs.existsSync(pluginPath)) {
+        return {
+          success: false,
+          error: `Plugin not found: ${data.pluginId}`
+        };
+      }
+      
+      // Удаляем папку плагина
+      fs.rmSync(pluginPath, { recursive: true, force: true });
+      
+      log.info(`Plugin uninstalled: ${data.pluginId}, path: ${pluginPath}`);
+      
+      return {
+        success: true,
+        pluginId: data.pluginId
+      };
+    } catch (error: any) {
+      log.error('uninstall-plugin error:', error.message);
+      return { success: false, error: error.message };
+    }
+  });
+
   // Дополнительные обработчики можно добавить здесь
   console.log('[IPC] All handlers registered');
 }
@@ -553,4 +1073,10 @@ export function cleanupIPCHandlers(): void {
   ipcMain.removeHandler('read-xlsx-file');
   ipcMain.removeHandler('open-folder-dialog');
   ipcMain.removeHandler('import-folder');
+  ipcMain.removeHandler('install-plugin');
+  ipcMain.removeHandler('download-and-install-plugin');
+  ipcMain.removeHandler('open-plugin-zip-dialog');
+  ipcMain.removeHandler('get-installed-plugins');
+  ipcMain.removeHandler('load-plugin-file');
+  ipcMain.removeHandler('uninstall-plugin');
 }

@@ -3176,14 +3176,17 @@ function getTableContext() {
 // === AI COMMANDS ===
 function parseAICommands(content) {
     const commands = [];
+    console.log('[DEBUG] parseAICommands - content:', content.substring(0, 500));
     // Find JSON blocks
     const jsonRegex = /```json\s*([\s\S]*?)\s*```/g;
     let match;
     while ((match = jsonRegex.exec(content)) !== null) {
         try {
             const jsonStr = match[1].trim();
+            console.log('[DEBUG] Found JSON block:', jsonStr.substring(0, 200));
             const parsed = JSON.parse(jsonStr);
             if (parsed.commands && Array.isArray(parsed.commands)) {
+                console.log('[DEBUG] Found commands array:', parsed.commands.length);
                 for (const cmd of parsed.commands) {
                     // Конвертируем cell в column и row если есть
                     if (cmd.params && cmd.params.cell && typeof cmd.params.cell === 'string') {
@@ -3239,14 +3242,32 @@ function parseAICommands(content) {
                 }
             }
             else if (parsed.action) {
+                console.log('[DEBUG] Found single action:', parsed.action);
                 commands.push(parsed);
             }
         }
         catch (e) {
-            console.warn('Failed to parse JSON from AI response:', e);
+            console.warn('[DEBUG] Failed to parse JSON from AI response:', e);
         }
     }
-    console.log('[DEBUG] Parsed commands:', commands);
+    // Если не найдено команд в JSON блоках, пробуем найти просто JSON
+    if (commands.length === 0) {
+        try {
+            // Пробуем найти JSON без markdown обёртки
+            const jsonMatch = content.match(/\{[\s\S]*"commands"[\s\S]*\}/);
+            if (jsonMatch) {
+                console.log('[DEBUG] Found raw JSON:', jsonMatch[0].substring(0, 200));
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (parsed.commands && Array.isArray(parsed.commands)) {
+                    commands.push(...parsed.commands);
+                }
+            }
+        }
+        catch (e) {
+            console.warn('[DEBUG] Failed to parse raw JSON:', e);
+        }
+    }
+    console.log('[DEBUG] Total parsed commands:', commands.length);
     return commands;
 }
 async function executeAICommands(commands) {
@@ -3365,7 +3386,7 @@ async function executeSingleCommand(action, params) {
         console.warn('[DEBUG] executeSingleCommand called without params:', action);
         return;
     }
-    // Если есть cell (например "E2"), конвертируем в column и row
+    // Если есть cell (��апример "E2"), конвертируем в column и row
     if (params.cell && typeof params.cell === 'string') {
         const cellMatch = params.cell.match(/^([A-Z])(\d+)$/i);
         if (cellMatch) {
