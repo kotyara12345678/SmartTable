@@ -1422,10 +1422,9 @@ export class DashboardComponent {
   }
 
   private async openDocument(filePath: string): Promise<void> {
-    const confirmed = confirm(`Открыть файл "${filePath.split(/[\\/]/).pop()}"?\n\nТекущие несохранённые изменения будут утеряны.`);
-
-    if (!confirmed) return;
-
+    // Убрали confirm() который блокировал поток на 2+ секунды
+    // Теперь просто открываем файл
+    
     try {
       const electronAPI = (window as any).electronAPI;
       if (!electronAPI) {
