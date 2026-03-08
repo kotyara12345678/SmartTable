@@ -269,10 +269,10 @@ function parseIfArgs(argsStr: string, getData: (cell: string) => string): any[] 
   let current = '';
   let parenDepth = 0;
   let inQuotes = false;
-  
+
   for (let i = 0; i < argsStr.length; i++) {
     const char = argsStr[i];
-    
+
     if (char === '"' && (i === 0 || argsStr[i-1] !== '\\')) {
       inQuotes = !inQuotes;
       current += char;
@@ -283,17 +283,27 @@ function parseIfArgs(argsStr: string, getData: (cell: string) => string): any[] 
       parenDepth--;
       current += char;
     } else if (char === ',' && parenDepth === 0 && !inQuotes) {
-      args.push(parseIfArg(current.trim(), getData));
+      const value = parseIfArg(current.trim(), getData);
+      if (Array.isArray(value)) {
+        args.push(...value);
+      } else {
+        args.push(value);
+      }
       current = '';
     } else {
       current += char;
     }
   }
-  
+
   if (current.trim()) {
-    args.push(parseIfArg(current.trim(), getData));
+    const value = parseIfArg(current.trim(), getData);
+    if (Array.isArray(value)) {
+      args.push(...value);
+    } else {
+      args.push(value);
+    }
   }
-  
+
   return args;
 }
 
@@ -526,7 +536,13 @@ function parseArgs(argsStr: string, getData: (cell: string) => string): any[] {
 
   for (const part of parts) {
     const trimmed = part.trim();
-    args.push(parseSingleValue(trimmed, getData));
+    const value = parseSingleValue(trimmed, getData);
+    // Разворачиваем массивы (диапазоны)
+    if (Array.isArray(value)) {
+      args.push(...value);
+    } else {
+      args.push(value);
+    }
   }
 
   return args;
