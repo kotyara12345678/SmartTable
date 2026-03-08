@@ -17,7 +17,7 @@ const log = createLogger('IPC');
 function getPluginsDir(): string {
   // Путь к папке приложения
   let appPath = app.getAppPath();
-  
+
   // Если приложение упаковано в .asar, app.getAppPath() возвращает путь к .asar файлу
   // Нужно получить путь к родительской директории
   if (appPath.endsWith('.asar') || appPath.includes('app.asar')) {
@@ -26,30 +26,66 @@ function getPluginsDir(): string {
     log.info('App is packaged, using userData plugins dir:', userDataPlugins);
     return userDataPlugins;
   }
-  
+
   // Для разработки: appPath = .../sheets/src/electron
   let projectRoot = path.resolve(appPath);
-  
+
   // Поднимаемся до корня проекта (ищем папку sheets и README.md)
   let maxDepth = 10;
   while (maxDepth > 0) {
     const hasSheets = fs.existsSync(path.join(projectRoot, 'sheets'));
     const hasReadme = fs.existsSync(path.join(projectRoot, 'README.md'));
-    
+
     if (hasSheets && hasReadme) {
       break;
     }
-    
+
     const parent = path.dirname(projectRoot);
     if (parent === projectRoot) break;
     projectRoot = parent;
     maxDepth--;
   }
-  
+
   const pluginsDir = path.join(projectRoot, 'plugins');
   log.info('getPluginsDir (dev mode): projectRoot=', projectRoot, '=> pluginsDir=', pluginsDir);
-  
+
   return pluginsDir;
+}
+
+/**
+ * Получить путь к файлу состояния плагинов
+ */
+function getPluginStatePath(): string {
+  return path.join(app.getPath('userData'), 'plugins-state.json');
+}
+
+/**
+ * Загрузить состояние плагинов из файла
+ */
+function loadPluginState(): Record<string, { enabled: boolean }> {
+  const statePath = getPluginStatePath();
+  try {
+    if (fs.existsSync(statePath)) {
+      const content = fs.readFileSync(statePath, 'utf-8');
+      return JSON.parse(content);
+    }
+  } catch (error: any) {
+    log.warn('Failed to load plugin state:', error.message);
+  }
+  return {};
+}
+
+/**
+ * Сохранить состояние плагинов в файл
+ */
+function savePluginState(state: Record<string, { enabled: boolean }>): void {
+  const statePath = getPluginStatePath();
+  try {
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2), 'utf-8');
+    log.info('Plugin state saved to:', statePath);
+  } catch (error: any) {
+    log.error('Failed to save plugin state:', error.message);
+  }
 }
 
 /**
@@ -934,24 +970,30 @@ export function registerIPCHandlers(): void {
         return { success: true, plugins: [] };
       }
 
-      const plugins: Array<{ id: string; manifest: any; path: string }> = [];
-      
+      const plugins: Array<{ id: string; manifest: any; path: string; enabled: boolean }> = [];
+      const savedState = loadPluginState();
+
       const entries = fs.readdirSync(pluginsDir, { withFileTypes: true });
-      
+
       for (const entry of entries) {
         if (entry.isDirectory() && !entry.name.startsWith('.')) {
           const manifestPath = path.join(pluginsDir, entry.name, 'manifest.json');
-          
+
           if (fs.existsSync(manifestPath)) {
             try {
               const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
               const manifest = JSON.parse(manifestContent);
-              
+
               if (manifest.id) {
+                // Загружаем состояние из файла или используем false по умолчанию
+                const pluginState = savedState[manifest.id];
+                const enabled = pluginState ? pluginState.enabled : false;
+
                 plugins.push({
                   id: manifest.id,
                   manifest: manifest,
-                  path: path.join(pluginsDir, entry.name)
+                  path: path.join(pluginsDir, entry.name),
+                  enabled: enabled
                 });
               }
             } catch (e) {
@@ -1037,12 +1079,17 @@ export function registerIPCHandlers(): void {
           error: `Plugin not found: ${data.pluginId}`
         };
       }
-      
+
       // Удаляем папку плагина
       fs.rmSync(pluginPath, { recursive: true, force: true });
-      
+
+      // Удаляем из состояния
+      const state = loadPluginState();
+      delete state[data.pluginId];
+      savePluginState(state);
+
       log.info(`Plugin uninstalled: ${data.pluginId}, path: ${pluginPath}`);
-      
+
       return {
         success: true,
         pluginId: data.pluginId
@@ -1050,6 +1097,64 @@ export function registerIPCHandlers(): void {
     } catch (error: any) {
       log.error('uninstall-plugin error:', error.message);
       return { success: false, error: error.message };
+    }
+  });
+
+  // ============================================================================
+  // Save Plugin State - сохранение состояния плагина (enabled/disabled)
+  // ============================================================================
+  ipcMain.handle('save-plugin-state', async (event, data: {
+    pluginId: string;
+    enabled: boolean;
+  }) => {
+    try {
+      const state = loadPluginState();
+      state[data.pluginId] = { enabled: data.enabled };
+      savePluginState(state);
+
+      log.info(`Plugin state saved: ${data.pluginId} = ${data.enabled}`);
+
+      return { success: true };
+    } catch (error: any) {
+      log.error('save-plugin-state error:', error.message);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // ============================================================================
+  // Load Plugin Styles - загрузка CSS файлов плагина
+  // ============================================================================
+  ipcMain.handle('load-plugin-styles', async (event, data: {
+    pluginPath: string;
+    styles: string[];
+  }) => {
+    try {
+      log.info('load-plugin-styles called:', data);
+      
+      const stylesContent: string[] = [];
+
+      for (const styleFile of data.styles) {
+        const filePath = path.join(data.pluginPath, styleFile);
+        log.info(`Checking style file: ${filePath}`);
+
+        if (fs.existsSync(filePath)) {
+          const content = fs.readFileSync(filePath, 'utf-8');
+          log.info(`Style file loaded: ${filePath}, size: ${content.length} bytes`);
+          stylesContent.push(content);
+        } else {
+          log.warn(`Style file not found: ${filePath}`);
+        }
+      }
+
+      log.info(`load-plugin-styles returning ${stylesContent.length} styles`);
+      
+      return {
+        success: true,
+        styles: stylesContent
+      };
+    } catch (error: any) {
+      log.error('load-plugin-styles error:', error.message);
+      return { success: false, error: error.message, styles: [] };
     }
   });
 
@@ -1079,4 +1184,6 @@ export function cleanupIPCHandlers(): void {
   ipcMain.removeHandler('get-installed-plugins');
   ipcMain.removeHandler('load-plugin-file');
   ipcMain.removeHandler('uninstall-plugin');
+  ipcMain.removeHandler('save-plugin-state');
+  ipcMain.removeHandler('load-plugin-styles');
 }

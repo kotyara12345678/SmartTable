@@ -437,8 +437,21 @@ async function initPluginManager(): Promise<void> {
       },
       addMenuItem: () => {},
       addPanel: () => {},
-      showModal: (content: HTMLElement) => {
-        console.log('[PluginAPI] showModal called');
+      showModal: (content: HTMLElement, options?: { size?: 'sm' | 'md' | 'lg' | 'xl' | 'full' }) => {
+        console.log('[PluginAPI] showModal called', options);
+        
+        // Размеры модального окна
+        const sizeMap = {
+          sm: 'max-width: 400px; max-height: 60vh;',
+          md: 'max-width: 600px; max-height: 70vh;',
+          lg: 'max-width: 900px; max-height: 85vh;',
+          xl: 'max-width: 1200px; max-height: 90vh;',
+          full: 'max-width: 95%; max-height: 95%;'
+        };
+        
+        const size = options?.size || 'lg';
+        const sizeStyle = sizeMap[size] || sizeMap.md;
+        
         // Простая реализация модального окна
         const modal = document.createElement('div');
         modal.style.cssText = `
@@ -453,42 +466,38 @@ async function initPluginManager(): Promise<void> {
           justify-content: center;
           z-index: 100000;
         `;
-        
+
         const modalContent = document.createElement('div');
         modalContent.style.cssText = `
-          background: white;
-          border-radius: 8px;
-          padding: 20px;
-          max-width: 600px;
-          max-height: 80vh;
-          overflow: auto;
+          background: var(--bg-secondary, #ffffff);
+          border-radius: 12px;
+          padding: 0;
+          ${sizeStyle}
+          width: 100%;
+          overflow: hidden;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
         `;
         modalContent.appendChild(content);
-        
-        const closeBtn = document.createElement('button');
-        closeBtn.textContent = 'Закрыть';
-        closeBtn.style.cssText = `
-          margin-top: 16px;
-          padding: 8px 16px;
-          background: #107c41;
-          color: white;
-          border: none;
-          border-radius: 4px;
-          cursor: pointer;
-        `;
-        closeBtn.addEventListener('click', () => {
-          modal.remove();
-        });
-        content.appendChild(closeBtn);
-        
+
         modal.appendChild(modalContent);
         document.body.appendChild(modal);
-        
+
+        // Закрытие по клику на фон
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            modal.remove();
+          }
+        });
+
         return modal;
       },
       closeModals: () => {
         console.log('[PluginAPI] closeModals called');
-        document.querySelectorAll('[style*="z-index: 100000"]').forEach(el => el.remove());
+        // Закрываем все модальные окна
+        const modals = document.body.querySelectorAll('div[style*="z-index: 100000"]');
+        modals.forEach(modal => {
+          modal.remove();
+        });
       },
       showNotification: () => {},
       getActiveTheme: () => 'default'

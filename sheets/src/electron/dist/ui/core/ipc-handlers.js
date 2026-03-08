@@ -43,6 +43,41 @@ function getPluginsDir() {
     return pluginsDir;
 }
 /**
+ * Получить путь к файлу состояния плагинов
+ */
+function getPluginStatePath() {
+    return path.join(app.getPath('userData'), 'plugins-state.json');
+}
+/**
+ * Загрузить состояние плагинов из файла
+ */
+function loadPluginState() {
+    const statePath = getPluginStatePath();
+    try {
+        if (fs.existsSync(statePath)) {
+            const content = fs.readFileSync(statePath, 'utf-8');
+            return JSON.parse(content);
+        }
+    }
+    catch (error) {
+        log.warn('Failed to load plugin state:', error.message);
+    }
+    return {};
+}
+/**
+ * Сохранить состояние плагинов в файл
+ */
+function savePluginState(state) {
+    const statePath = getPluginStatePath();
+    try {
+        fs.writeFileSync(statePath, JSON.stringify(state, null, 2), 'utf-8');
+        log.info('Plugin state saved to:', statePath);
+    }
+    catch (error) {
+        log.error('Failed to save plugin state:', error.message);
+    }
+}
+/**
  * Найти все manifest.json в директории (рекурсивно)
  */
 function findManifestFiles(dir) {
@@ -815,6 +850,7 @@ export function registerIPCHandlers() {
                 return { success: true, plugins: [] };
             }
             const plugins = [];
+            const savedState = loadPluginState();
             const entries = fs.readdirSync(pluginsDir, { withFileTypes: true });
             for (const entry of entries) {
                 if (entry.isDirectory() && !entry.name.startsWith('.')) {
@@ -824,10 +860,14 @@ export function registerIPCHandlers() {
                             const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
                             const manifest = JSON.parse(manifestContent);
                             if (manifest.id) {
+                                // Загружаем состояние из файла или используем false по умолчанию
+                                const pluginState = savedState[manifest.id];
+                                const enabled = pluginState ? pluginState.enabled : false;
                                 plugins.push({
                                     id: manifest.id,
                                     manifest: manifest,
-                                    path: path.join(pluginsDir, entry.name)
+                                    path: path.join(pluginsDir, entry.name),
+                                    enabled: enabled
                                 });
                             }
                         }
@@ -902,6 +942,10 @@ export function registerIPCHandlers() {
             }
             // Удаляем папку плагина
             fs.rmSync(pluginPath, { recursive: true, force: true });
+            // Удаляем из состояния
+            const state = loadPluginState();
+            delete state[data.pluginId];
+            savePluginState(state);
             log.info(`Plugin uninstalled: ${data.pluginId}, path: ${pluginPath}`);
             return {
                 success: true,
@@ -911,6 +955,52 @@ export function registerIPCHandlers() {
         catch (error) {
             log.error('uninstall-plugin error:', error.message);
             return { success: false, error: error.message };
+        }
+    });
+    // ============================================================================
+    // Save Plugin State - сохранение состояния плагина (enabled/disabled)
+    // ============================================================================
+    ipcMain.handle('save-plugin-state', async (event, data) => {
+        try {
+            const state = loadPluginState();
+            state[data.pluginId] = { enabled: data.enabled };
+            savePluginState(state);
+            log.info(`Plugin state saved: ${data.pluginId} = ${data.enabled}`);
+            return { success: true };
+        }
+        catch (error) {
+            log.error('save-plugin-state error:', error.message);
+            return { success: false, error: error.message };
+        }
+    });
+    // ============================================================================
+    // Load Plugin Styles - загрузка CSS файлов плагина
+    // ============================================================================
+    ipcMain.handle('load-plugin-styles', async (event, data) => {
+        try {
+            log.info('load-plugin-styles called:', data);
+            const stylesContent = [];
+            for (const styleFile of data.styles) {
+                const filePath = path.join(data.pluginPath, styleFile);
+                log.info(`Checking style file: ${filePath}`);
+                if (fs.existsSync(filePath)) {
+                    const content = fs.readFileSync(filePath, 'utf-8');
+                    log.info(`Style file loaded: ${filePath}, size: ${content.length} bytes`);
+                    stylesContent.push(content);
+                }
+                else {
+                    log.warn(`Style file not found: ${filePath}`);
+                }
+            }
+            log.info(`load-plugin-styles returning ${stylesContent.length} styles`);
+            return {
+                success: true,
+                styles: stylesContent
+            };
+        }
+        catch (error) {
+            log.error('load-plugin-styles error:', error.message);
+            return { success: false, error: error.message, styles: [] };
         }
     });
     // Дополнительные обработчики можно добавить здесь
@@ -938,5 +1028,7 @@ export function cleanupIPCHandlers() {
     ipcMain.removeHandler('get-installed-plugins');
     ipcMain.removeHandler('load-plugin-file');
     ipcMain.removeHandler('uninstall-plugin');
+    ipcMain.removeHandler('save-plugin-state');
+    ipcMain.removeHandler('load-plugin-styles');
 }
 //# sourceMappingURL=ipc-handlers.js.map
