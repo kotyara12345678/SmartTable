@@ -1,6 +1,9 @@
 // Проверка загрузки скрипта
 console.log('[Renderer] Script loaded!');
 
+// Импорт функций для работы с формулами
+import { calculateCellFormula as calcFormula, previewFormula, validateFormula } from './formulabar/formulas-renderer';
+
 // === КОНФИГУРАЦИЯ ===
 const CONFIG = {
   ROWS: 100,
@@ -1072,19 +1075,14 @@ function finishEditing(): void {
   // Вычислить формулу если есть
   let finalValue = inputValue;
   if (inputValue.startsWith('=')) {
-    const getCellValue = (cellRef: string): string => {
-      const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
-      if (!match) return '';
-
-      const c = match[1].toUpperCase().charCodeAt(0) - 65;
-      const r = parseInt(match[2]) - 1;
-      const cellKey = getCellKey(r, c);
+    const getCellValue = (row: number, col: number): string => {
+      const cellKey = getCellKey(row, col);
       const cellData = data.get(cellKey);
       return cellData?.value || '';
     };
 
-    const result = evaluateFormulaLocal(inputValue, getCellValue);
-    finalValue = String(result.value);
+    const result = calcFormula(inputValue, state.selectedCell.row, state.selectedCell.col, getCellValue);
+    finalValue = String(result);
   }
 
   if (finalValue) {
@@ -5386,52 +5384,6 @@ function getSelectedRange(): { startRow: number; endRow: number; startCol: numbe
   };
 }
 
-// Вычисление формул
-function evaluateFormulaLocal(formula: string, getCellValue: (ref: string) => string): { value: string | number } {
-  try {
-    let expr = formula.substring(1).toUpperCase(); // Убираем '=' и переводим в верхний регистр
-
-    // Сначала обрабатываем функции с диапазонами
-    expr = expr.replace(/SUM\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/g, (match, col1, row1, col2, row2) => {
-      const values = getRangeValues(col1, parseInt(row1), col2, parseInt(row2), getCellValue);
-      return values.reduce((a: number, b: number) => a + b, 0).toString();
-    });
-
-    expr = expr.replace(/AVERAGE\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/g, (match, col1, row1, col2, row2) => {
-      const values = getRangeValues(col1, parseInt(row1), col2, parseInt(row2), getCellValue);
-      return values.length > 0 ? (values.reduce((a: number, b: number) => a + b, 0) / values.length).toString() : '0';
-    });
-
-    expr = expr.replace(/MAX\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/g, (match, col1, row1, col2, row2) => {
-      const values = getRangeValues(col1, parseInt(row1), col2, parseInt(row2), getCellValue);
-      return values.length > 0 ? Math.max(...values).toString() : '0';
-    });
-
-    expr = expr.replace(/MIN\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/g, (match, col1, row1, col2, row2) => {
-      const values = getRangeValues(col1, parseInt(row1), col2, parseInt(row2), getCellValue);
-      return values.length > 0 ? Math.min(...values).toString() : '0';
-    });
-
-    expr = expr.replace(/COUNT\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/g, (match, col1, row1, col2, row2) => {
-      const values = getRangeValues(col1, parseInt(row1), col2, parseInt(row2), getCellValue);
-      return values.length.toString();
-    });
-
-    // Заменяем отдельные ссылки на ячейки (A1, B2 и т.д.) на значения
-    expr = expr.replace(/([A-Z]+)(\d+)/g, (match) => {
-      const val = getCellValue(match);
-      const num = parseFloat(val);
-      return isNaN(num) ? `"${val}"` : val.toString();
-    });
-
-    // Вычисляем выражение (безопасно)
-    const result = Function('"use strict";return (' + expr + ')')();
-    return { value: typeof result === 'number' ? result : String(result) };
-  } catch (e) {
-    return { value: '#ERROR!' };
-  }
-}
-
 /**
  * Получить все числовые значения из диапазона ячеек
  */
@@ -6125,23 +6077,19 @@ function globalSetCell(col: string, row: number, value: string): void {
   const rowIndex = row - 1;
   const key = getCellKey(rowIndex, colIndex);
   const data = getCurrentData();
-  
+
   // Вычисляем формулу если есть
   let finalValue = value;
   if (value.startsWith('=')) {
-    const getCellValue = (cellRef: string): string => {
-      const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
-      if (!match) return '';
-      const c = match[1].toUpperCase().charCodeAt(0) - 65;
-      const r = parseInt(match[2]) - 1;
-      const cellKey = getCellKey(r, c);
+    const getCellValue = (row: number, col: number): string => {
+      const cellKey = getCellKey(row, col);
       const cellData = data.get(cellKey);
       return cellData?.value || '';
     };
-    const result = evaluateFormulaLocal(value, getCellValue);
-    finalValue = String(result.value);
+    const result = calcFormula(value, rowIndex, colIndex, getCellValue);
+    finalValue = String(result);
   }
-  
+
   data.set(key, { value: finalValue });
   renderCells();
   updateAIDataCache();
@@ -6152,31 +6100,27 @@ function globalSetCell(col: string, row: number, value: string): void {
 function globalFillTable(data: string[][]): void {
   const tableData = getCurrentData();
   tableData.clear();
-  
+
   for (let r = 0; r < data.length; r++) {
     for (let c = 0; c < data[r].length; c++) {
       const key = getCellKey(r, c);
       let value = data[r][c];
-      
+
       // Вычисляем формулы
       if (value.startsWith('=')) {
-        const getCellValue = (cellRef: string): string => {
-          const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
-          if (!match) return '';
-          const colIdx = match[1].toUpperCase().charCodeAt(0) - 65;
-          const rowIdx = parseInt(match[2]) - 1;
-          const cellKey = getCellKey(rowIdx, colIdx);
+        const getCellValue = (row: number, col: number): string => {
+          const cellKey = getCellKey(row, col);
           const cellData = tableData.get(cellKey);
           return cellData?.value || '';
         };
-        const result = evaluateFormulaLocal(value, getCellValue);
-        value = String(result.value);
+        const result = calcFormula(value, r, c, getCellValue);
+        value = String(result);
       }
-      
+
       tableData.set(key, { value });
     }
   }
-  
+
   renderCells();
   updateAIDataCache();
   autoSave();
