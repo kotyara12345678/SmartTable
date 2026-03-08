@@ -2937,6 +2937,34 @@ function setupEventListeners(): void {
 
   // Глобальные горячие клавиши
   document.addEventListener('keydown', handleGlobalKeyDown);
+
+  // ==================== ОБРАБОТЧИКИ FOCUS/BLUR ДЛЯ ОКНА ====================
+  // Восстанавливаем фокус при возврате в окно
+  let lastFocusedCell: { row: number; col: number } | null = null;
+
+  window.addEventListener('blur', () => {
+    // Сохраняем текущую выделенную ячейку
+    lastFocusedCell = { ...state.selectedCell };
+  });
+
+  window.addEventListener('focus', () => {
+    // Восстанавливаем фокус на таблице при возврате в окно
+    if (lastFocusedCell) {
+      const cell = getCellElement(lastFocusedCell.row, lastFocusedCell.col);
+      if (cell) {
+        cell.focus();
+        // Убеждаемся что ячейка не в режиме редактирования
+        if (state.isEditing) {
+          finishEditing();
+        }
+      }
+    }
+    // Фокус на cellGridWrapper для работы навигации
+    const gridWrapper = elements.cellGridWrapper;
+    if (gridWrapper && document.activeElement !== gridWrapper) {
+      gridWrapper.focus({ preventScroll: true });
+    }
+  });
 }
 
 function handleGlobalKeyDown(e: KeyboardEvent): void {
