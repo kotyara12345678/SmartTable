@@ -2,7 +2,7 @@
 console.log('[Renderer] Script loaded!');
 
 // Импорт функций для работы с формулами
-import { calculateCellFormula as calcFormula, previewFormula, validateFormula } from './formulabar/formulas-renderer.js';
+import { calculateCellFormula as calcFormula, previewFormula, validateFormula, saveActiveCell } from './formulabar/formulas-renderer.js';
 
 // === КОНФИГУРАЦИЯ ===
 const CONFIG = {
@@ -976,6 +976,9 @@ function selectCell(row: number, col: number): void {
     cell.classList.add('selected');
     cell.focus();
   }
+  
+  // Сохранить активную ячейку для Focus Manager
+  saveActiveCell(row, col);
 
   // Выделить заголовки
   const rowHeader = elements.rowHeaders.querySelector(`.row-header[data-row="${row}"]`);
@@ -5397,7 +5400,7 @@ function generateAiResponse(message: string): string {
     return '🧹 Для очистки данных я могу:\n\n• Удалить пустые строки\n• Убрать дубликаты\n• Исправить формат\n• Нормализовать текст\n\nЧто именно нужно очистить?';
   }
   
-  return 'Я понял ваш запрос! Вот что я могу сделать:\n\n📝 **Создать формулу** - помогу с функциями\n📊 **Анализировать** - найду закономерности\n🧹 **Очистить данные** - уберу лишнее\n📈 **Визуализировать** - предложу графики\n\nЧт�� бы вы хотели сделать?';
+  return 'Я понял ваш запрос! Вот что я могу сделать:\n\n📝 **Создать формулу** - помогу с функциями\n📊 **Анализировать** - найду закономерности\n🧹 **Очистить данные** - ��беру лишнее\n📈 **Визуализировать** - предложу графики\n\nЧт���� бы вы хотели сделать?';
 }
 
 

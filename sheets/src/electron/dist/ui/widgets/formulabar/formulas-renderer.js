@@ -209,4 +209,60 @@ window.previewFormula = previewFormula;
 window.setupFormulaSupport = setupFormulaSupport;
 window.validateFormula = validateFormula;
 window.getFormulaInfo = getFormulaInfo;
+// ==================== SmartTable Focus Manager ====================
+// Менеджер фокуса для восстановления после операций
+let activeCell = null;
+/**
+ * Сохранить активную ячейку
+ */
+export function saveActiveCell(row, col) {
+    activeCell = { row, col };
+}
+/**
+ * Получить активную ячейку
+ */
+export function getActiveCell() {
+    return activeCell;
+}
+/**
+ * Восстановить фокус на активной ячейке
+ */
+export function restoreFocus() {
+    if (!activeCell)
+        return;
+    const cell = document.querySelector(`.cell[data-row="${activeCell.row}"][data-col="${activeCell.col}"]`);
+    if (cell) {
+        // Фокус на cellGridWrapper для работы навигации
+        const gridWrapper = document.getElementById('cellGridWrapper');
+        if (gridWrapper) {
+            gridWrapper.focus({ preventScroll: true });
+        }
+    }
+}
+/**
+ * Вызывать после операций с файлом/кешем
+ */
+export function onAfterFileOperation() {
+    // Небольшая задержка чтобы DOM обновился
+    setTimeout(() => {
+        restoreFocus();
+    }, 50);
+}
+/**
+ * Защита от потери фокуса при навигации
+ */
+document.addEventListener('keydown', (e) => {
+    // Если нажаты навигационные клавиши и фокус потерян
+    const navigationKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Tab'];
+    if (navigationKeys.includes(e.key)) {
+        const gridWrapper = document.getElementById('cellGridWrapper');
+        const activeElement = document.activeElement;
+        // Если фокус не на таблице и не на input
+        if (activeElement !== gridWrapper &&
+            activeElement?.tagName !== 'INPUT' &&
+            activeElement?.tagName !== 'TEXTAREA') {
+            restoreFocus();
+        }
+    }
+});
 //# sourceMappingURL=formulas-renderer.js.map
