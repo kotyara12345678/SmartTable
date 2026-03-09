@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="ui/styles/ai-chat.css">
   <link rel="stylesheet" href="ui/styles/storage-modal.css">
   <link rel="stylesheet" href="ui/styles/start-screen.css">
+  <link rel="stylesheet" href="ui/styles/template-manager.css">
   <link rel="stylesheet" href="ui/styles/extensions-panel.css">
   <style>
     body {
@@ -611,9 +612,10 @@
       </div>
     </footer>
     <div class="fill-handle" id="fillHandle"></div>
-    <div class="formula-autocomplete" id="formulaAutocomplete">
-      <div class="formula-autocomplete-header">Формулы</div>
-      <div class="formula-autocomplete-list" id="formulaList"></div>
+    <!-- Выпадающий список формул -->
+    <div class="formula-suggestions" id="formulaSuggestions">
+      <div class="formula-suggestions-header">Формулы</div>
+      <div class="formula-suggestions-list" id="formulaSuggestionsList"></div>
     </div>
   </div>
 
@@ -725,11 +727,11 @@
   <script src="ui/components/UserProfileComponent.js" type="module"></script>
   <script src="ui/components/DashboardComponent.js" type="module"></script>
   <script src="ui/components/AIChatComponent.js" type="module"></script>
-  
-  <!-- AutoComplete Module - автозаполнение ячеек и подсказки формул -->
-  <link rel="stylesheet" href="ui/widgets/autocomplete/autocomplete.css">
-  <script src="ui/widgets/autocomplete/autocomplete.js" type="module"></script>
-  
+
+  <!-- AutoComplete Module - ОТКЛЮЧЕНО ПОЛЬЗОВАТЕЛЕМ -->
+  <!-- <link rel="stylesheet" href="ui/widgets/autocomplete/autocomplete.css"> -->
+  <!-- <script src="ui/widgets/autocomplete/autocomplete.js" type="module"></script> -->
+
   <script src="app.js" type="module"></script>
 
   <!-- Context Menu for Sheets -->

@@ -62,6 +62,31 @@ export const FORMULAS = {
     PV: { name: 'PV', description: 'Текущая стоимость', syntax: '=PV(0.05/12, 60, -100)' },
     // ИИ формула
     AI: { name: 'AI', description: 'ИИ запрос', syntax: '=AI("Сумма столбцов A и B")' },
+    // Форматирование
+    COLOR: { name: 'COLOR', description: 'Закрасить ячейку/столбец/строку', syntax: '=COLOR(A1, "red") или =COLOR(A:B, "blue") или =COLOR(1:2, "green")' },
+};
+// 16 базовых цветов
+export const BASIC_COLORS = {
+    'black': '#000000',
+    'white': '#FFFFFF',
+    'red': '#FF0000',
+    'green': '#008000',
+    'blue': '#0000FF',
+    'yellow': '#FFFF00',
+    'cyan': '#00FFFF',
+    'magenta': '#FF00FF',
+    'gray': '#808080',
+    'grey': '#808080',
+    'silver': '#C0C0C0',
+    'maroon': '#800000',
+    'olive': '#808000',
+    'lime': '#00FF00',
+    'aqua': '#00FFFF',
+    'teal': '#008080',
+    'navy': '#000080',
+    'fuchsia': '#FF00FF',
+    'purple': '#800080',
+    'orange': '#FFA500',
 };
 // Список всех формул для автокомплита
 export const FORMULA_LIST = Object.keys(FORMULAS).sort();
@@ -99,7 +124,7 @@ export function evaluateFormula(formula, getData) {
         else if (upperFuncName === 'IFS') {
             return evaluateIfs(argsStr, getData);
         }
-        else if (upperFuncName === 'AND' || upperFuncName === 'OR') {
+        else if (upperFuncName === 'AND' || upperFuncName === 'OR' || upperFuncName === 'NOT') {
             args = parseLogicalArgs(argsStr, getData);
         }
         else {
@@ -202,6 +227,41 @@ export function evaluateFormula(formula, getData) {
                 return { value: new Date(0, 0, 0, args[0], args[1], args[2]).toLocaleTimeString('ru-RU') };
             case 'AI':
                 return { value: '#AI_PROCESSING...', error: 'AI request pending' };
+            // Форматирование - COLOR
+            case 'COLOR': {
+                // COLOR может принимать:
+                // - COLOR(A1, "red") - одна ячейка
+                // - COLOR(A:B, "blue") - весь столбец
+                // - COLOR(1:2, "green") - вся строка
+                // - COLOR(A1:B2, "yellow") - диапазон
+                const target = args[0];
+                const colorName = args[1];
+                // Определяем тип диапазона
+                let rangeType = 'cell';
+                let range = String(target);
+                // Проверка на диапазон столбцов (A:B)
+                const columnRangeMatch = String(target).match(/^([A-Z]):([A-Z])$/i);
+                if (columnRangeMatch) {
+                    rangeType = 'column';
+                }
+                // Проверка на диапазон строк (1:2)
+                const rowRangeMatch = String(target).match(/^(\d+):(\d+)$/);
+                if (rowRangeMatch) {
+                    rangeType = 'row';
+                }
+                // Проверка на диапазон ячеек (A1:B2)
+                const cellRangeMatch = String(target).match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/i);
+                if (cellRangeMatch) {
+                    rangeType = 'range';
+                }
+                return {
+                    value: '#COLOR_COMMAND',
+                    color: colorName,
+                    colorName: colorName,
+                    range: range,
+                    rangeType: rangeType
+                };
+            }
             // Поиск и ссылки
             case 'VLOOKUP':
                 return { value: vlookup(args, getData) };
@@ -451,6 +511,7 @@ function evaluateIfs(argsStr, getData) {
 }
 /**
  * Вычисление арифметического выражения
+ * Исправлено: безопасное вычисление без new Function()
  */
 function evaluateArithmeticExpression(expression, getData) {
     let calcExpression = expression;
@@ -474,17 +535,141 @@ function evaluateArithmeticExpression(expression, getData) {
         .replace(/!/g, '!');
     // Проверяем что выражение безопасное (разрешаем цифры, операторы, скобки, точки, пробелы)
     const safePattern = /^[\d+\-*/().\s!<>=|&'"A-Z]+$/i;
-    if (safePattern.test(calcExpression)) {
-        try {
-            // Используем Function вместо eval для безопасности
-            const result = new Function('return ' + calcExpression)();
-            return { value: result };
-        }
-        catch (e) {
-            return { value: '#ERROR!', error: 'Invalid expression' };
-        }
+    if (!safePattern.test(calcExpression)) {
+        return { value: '#ERROR!', error: 'Invalid characters in expression' };
     }
-    return { value: '#ERROR!', error: 'Invalid expression' };
+    // Безопасное вычисление арифметического выражения
+    try {
+        const result = safeEvaluate(calcExpression);
+        return { value: result };
+    }
+    catch (e) {
+        return { value: '#ERROR!', error: 'Invalid expression' };
+    }
+}
+/**
+ * Безопасное вычисление математических выражений
+ * Поддерживает: +, -, *, /, %, (), числа, операторы сравнения
+ */
+function safeEvaluate(expression) {
+    // Удаляем все пробелы для упрощения парсинга
+    const expr = expression.replace(/\s+/g, '');
+    // Простой рекурсивный спуск для вычисления
+    let pos = 0;
+    function parseComparison() {
+        let left = parseAdditive();
+        while (pos < expr.length) {
+            const op = expr.substring(pos, pos + 2);
+            if (op === '===' || op === '!==' || op === '>=' || op === '<=') {
+                pos += 2;
+                const right = parseAdditive();
+                if (op === '===')
+                    left = left === right;
+                else if (op === '!==')
+                    left = left !== right;
+                else if (op === '>=')
+                    left = left >= right;
+                else if (op === '<=')
+                    left = left <= right;
+            }
+            else if (op[0] === '>' || op[0] === '<' || op[0] === '=') {
+                pos += 1;
+                const right = parseAdditive();
+                if (op[0] === '>')
+                    left = left > right;
+                else if (op[0] === '<')
+                    left = left < right;
+                else if (op[0] === '=')
+                    left = left === right;
+            }
+            else {
+                break;
+            }
+        }
+        return left;
+    }
+    function parseAdditive() {
+        let left = parseMultiplicative();
+        while (pos < expr.length) {
+            if (expr[pos] === '+') {
+                pos++;
+                left = left + parseMultiplicative();
+            }
+            else if (expr[pos] === '-') {
+                pos++;
+                left = left - parseMultiplicative();
+            }
+            else {
+                break;
+            }
+        }
+        return left;
+    }
+    function parseMultiplicative() {
+        let left = parseUnary();
+        while (pos < expr.length) {
+            if (expr[pos] === '*') {
+                pos++;
+                left = left * parseUnary();
+            }
+            else if (expr[pos] === '/') {
+                pos++;
+                const right = parseUnary();
+                if (right === 0)
+                    throw new Error('Division by zero');
+                left = left / right;
+            }
+            else if (expr[pos] === '%') {
+                pos++;
+                left = left % parseUnary();
+            }
+            else {
+                break;
+            }
+        }
+        return left;
+    }
+    function parseUnary() {
+        if (pos < expr.length && expr[pos] === '-') {
+            pos++;
+            return -parseUnary();
+        }
+        if (pos < expr.length && expr[pos] === '+') {
+            pos++;
+            return parseUnary();
+        }
+        return parsePrimary();
+    }
+    function parsePrimary() {
+        if (expr[pos] === '(') {
+            pos++; // пропускаем '('
+            const result = parseComparison();
+            if (expr[pos] !== ')')
+                throw new Error('Missing closing parenthesis');
+            pos++; // пропускаем ')'
+            return result;
+        }
+        // Число
+        let numStr = '';
+        while (pos < expr.length && (/\d/.test(expr[pos]) || expr[pos] === '.')) {
+            numStr += expr[pos];
+            pos++;
+        }
+        if (numStr) {
+            return parseFloat(numStr);
+        }
+        // Булевы значения
+        if (expr.substring(pos, pos + 4) === 'true') {
+            pos += 4;
+            return true;
+        }
+        if (expr.substring(pos, pos + 5) === 'false') {
+            pos += 5;
+            return false;
+        }
+        throw new Error('Unexpected character: ' + expr[pos]);
+    }
+    return parseComparison();
 }
 /**
  * Парсинг аргументов формулы

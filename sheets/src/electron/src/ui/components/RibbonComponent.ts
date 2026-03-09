@@ -48,6 +48,8 @@ export class RibbonComponent extends BaseComponent {
   private btnInsertLink: HTMLElement | null = null;
   private btnInsertComment: HTMLElement | null = null;
   private btnInsertSymbol: HTMLElement | null = null;
+  private btnClipboardHistory: HTMLElement | null = null;
+  private btnTemplates: HTMLElement | null = null;
 
   // Элементы вкладки Формулы
   private btnCalcNow: HTMLElement | null = null;
@@ -132,6 +134,8 @@ export class RibbonComponent extends BaseComponent {
     this.btnInsertLink = this.querySelector('#btnInsertLink');
     this.btnInsertComment = this.querySelector('#btnInsertComment');
     this.btnInsertSymbol = this.querySelector('#btnInsertSymbol');
+    this.btnClipboardHistory = this.querySelector('#btnClipboardHistory');
+    this.btnTemplates = this.querySelector('#btnTemplates');
 
     // Вкладка Формулы
     this.btnCalcNow = this.querySelector('#btnCalcNow');
@@ -236,6 +240,8 @@ export class RibbonComponent extends BaseComponent {
     this.bindEvent(this.btnInsertLink, 'click', () => this.handleInsertLink());
     this.bindEvent(this.btnInsertComment, 'click', () => this.handleInsertComment());
     this.bindEvent(this.btnInsertSymbol, 'click', () => this.handleInsertSymbol());
+    this.bindEvent(this.btnClipboardHistory, 'click', () => this.handleClipboardHistory());
+    this.bindEvent(this.btnTemplates, 'click', () => this.handleTemplates());
 
     // ==================== ВКЛАДКА: ФОРМУЛЫ ====================
     this.bindEvent(this.btnCalcNow, 'click', () => this.handleCalcNow());
@@ -517,5 +523,95 @@ export class RibbonComponent extends BaseComponent {
     if (this.zoomLabel) {
       this.zoomLabel.textContent = `${level}%`;
     }
+  }
+
+  // ==================== ОБРАБОТЧИКИ: БУФЕР ОБМЕНА ====================
+  private handleTemplates(): void {
+    // Отправляем событие для открытия менеджера шаблонов
+    document.dispatchEvent(new CustomEvent('open-template-manager'));
+  }
+
+  private handleClipboardHistory(): void {
+    // Показать модальное окно истории буфера обмена
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal" style="max-width: 600px;">
+        <div class="modal-header">
+          <h3>📋 Буфер обмена</h3>
+          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+        </div>
+        <div class="modal-body">
+          <div style="margin-bottom: 15px; display: flex; gap: 10px;">
+            <button id="btnPasteFromClipboard" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">
+              Вставить выбранное
+            </button>
+            <button id="btnClearClipboard" style="padding: 8px 16px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">
+              Очистить историю
+            </button>
+          </div>
+          <div id="clipboardHistoryList" style="max-height: 400px; overflow-y: auto;">
+            <div style="color: #888; text-align: center; padding: 20px;">
+              История буфера обмена пуста<br>
+              Копируйте текст в таблице, и он появится здесь
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Загрузить историю из localStorage
+    const historyList = document.getElementById('clipboardHistoryList')!;
+    const history = JSON.parse(localStorage.getItem('clipboardHistory') || '[]');
+
+    if (history.length > 0) {
+      historyList.innerHTML = history.map((item: any, index: number) => `
+        <div class="clipboard-item" data-index="${index}" style="padding: 10px; margin: 5px 0; background: #f5f5f5; border-radius: 4px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+          <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 10px;">
+            ${this.escapeHtml(item.text)}
+          </div>
+          <div style="color: #888; font-size: 12px;">${new Date(item.timestamp).toLocaleString()}</div>
+        </div>
+      `).join('');
+
+      // Клик по элементу истории
+      historyList.querySelectorAll('.clipboard-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const index = parseInt(item.getAttribute('data-index') || '0');
+          const text = history[index]?.text;
+          if (text) {
+            navigator.clipboard.writeText(text);
+            // Вставить в активную ячейку
+            document.dispatchEvent(new CustomEvent('paste-from-clipboard', { detail: { text } }));
+            modal.remove();
+          }
+        });
+      });
+    }
+
+    // Кнопка вставки
+    document.getElementById('btnPasteFromClipboard')?.addEventListener('click', async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        document.dispatchEvent(new CustomEvent('paste-from-clipboard', { detail: { text } }));
+        modal.remove();
+      } catch (err) {
+        alert('Не удалось прочитать буфер обмена');
+      }
+    });
+
+    // Кнопка очистки
+    document.getElementById('btnClearClipboard')?.addEventListener('click', () => {
+      localStorage.removeItem('clipboardHistory');
+      historyList.innerHTML = '<div style="color: #888; text-align: center; padding: 20px;">История очищена</div>';
+    });
+  }
+
+  private escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 }

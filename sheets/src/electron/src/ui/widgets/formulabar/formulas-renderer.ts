@@ -1,11 +1,12 @@
 /**
- * Интеграция формул в SmartTable Renderer - Полная поддержка IF/ELSE
+ * Интеграция формул в SmartTable Renderer
+ * Выпадающий список формул при вводе =
  */
 
 import { evaluateFormula, FORMULAS, FORMULA_LIST, FormulaResult } from '../../core/formulas/formulas.js';
 
-let autocompleteVisible = false;
 let selectedFormulaIndex = 0;
+let formulaSuggestionsVisible = false;
 
 /**
  * Вычислить формулу для ячейки
@@ -75,155 +76,6 @@ function handleAIFormula(formula: string, row: number, col: number): string {
 }
 
 /**
- * Настройка поддержки формул
- */
-export function setupFormulaSupport(
-  formulaInput: HTMLInputElement,
-  cellGrid: HTMLElement,
-  autocompleteEl: HTMLElement,
-  formulaListEl: HTMLElement,
-  getData: (cellRef: string) => string,
-  setCurrentCellFormula: (formula: string) => void
-): void {
-
-  // Автокомплит при вводе =
-  formulaInput.addEventListener('input', (e) => {
-    const value = formulaInput.value;
-
-    if (value.startsWith('=')) {
-      const text = value.substring(1).toUpperCase();
-      const lastPart = text.split(/[\(\),\s]/).pop() || '';
-
-      if (lastPart.length > 0) {
-        showAutocomplete(lastPart, formulaInput, autocompleteEl, formulaListEl);
-      } else {
-        hideAutocomplete(autocompleteEl);
-      }
-    } else {
-      hideAutocomplete(autocompleteEl);
-    }
-  });
-
-  // Навигация по автокомплиту
-  formulaInput.addEventListener('keydown', (e) => {
-    if (!autocompleteVisible) return;
-
-    const items = formulaListEl.querySelectorAll('.formula-item');
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        selectedFormulaIndex = Math.min(selectedFormulaIndex + 1, items.length - 1);
-        updateSelectedFormula(items);
-        break;
-
-      case 'ArrowUp':
-        e.preventDefault();
-        selectedFormulaIndex = Math.max(selectedFormulaIndex - 1, 0);
-        updateSelectedFormula(items);
-        break;
-
-      case 'Enter':
-      case 'Tab':
-        if (autocompleteVisible && items[selectedFormulaIndex]) {
-          e.preventDefault();
-          const formulaName = (items[selectedFormulaIndex] as HTMLElement).dataset.formula || '';
-          insertFormula(formulaName, formulaInput);
-          hideAutocomplete(autocompleteEl);
-        }
-        break;
-
-      case 'Escape':
-        hideAutocomplete(autocompleteEl);
-        break;
-    }
-  });
-
-  // Клик по формуле
-  formulaListEl.addEventListener('click', (e) => {
-    const item = (e.target as HTMLElement).closest('.formula-item') as HTMLElement;
-    if (!item) return;
-
-    const formulaName = item.dataset.formula || '';
-    insertFormula(formulaName, formulaInput);
-    hideAutocomplete(autocompleteEl);
-  });
-
-  // Скрыть при клике вне
-  document.addEventListener('click', (e) => {
-    if (!autocompleteEl.contains(e.target as Node) && e.target !== formulaInput) {
-      hideAutocomplete(autocompleteEl);
-    }
-  });
-}
-
-function showAutocomplete(
-  filter: string,
-  formulaInput: HTMLInputElement,
-  autocompleteEl: HTMLElement,
-  formulaListEl: HTMLElement
-): void {
-  formulaListEl.innerHTML = '';
-  selectedFormulaIndex = 0;
-
-  const filtered = FORMULA_LIST.filter(name =>
-    name.startsWith(filter)
-  ).slice(0, 10);
-
-  if (filtered.length === 0) {
-    hideAutocomplete(autocompleteEl);
-    return;
-  }
-
-  filtered.forEach((name, index) => {
-    const formula = FORMULAS[name as keyof typeof FORMULAS];
-    const item = document.createElement('div');
-    item.className = 'formula-item' + (index === 0 ? ' selected' : '');
-    item.dataset.formula = name;
-    item.innerHTML = `
-      <span class="formula-name">${formula.name}</span>
-      <span class="formula-description">${formula.description}</span>
-      <span class="formula-syntax">${formula.syntax}</span>
-    `;
-    formulaListEl.appendChild(item);
-  });
-
-  // Позиционирование
-  const rect = formulaInput.getBoundingClientRect();
-  autocompleteEl.style.left = `${rect.left}px`;
-  autocompleteEl.style.top = `${rect.bottom + 5}px`;
-  autocompleteEl.classList.add('visible');
-  autocompleteVisible = true;
-}
-
-function hideAutocomplete(autocompleteEl: HTMLElement): void {
-  autocompleteEl.classList.remove('visible');
-  autocompleteVisible = false;
-}
-
-function updateSelectedFormula(items: NodeListOf<Element>): void {
-  items.forEach((item, index) => {
-    if (index === selectedFormulaIndex) {
-      item.classList.add('selected');
-    } else {
-      item.classList.remove('selected');
-    }
-  });
-}
-
-function insertFormula(formulaName: string, formulaInput: HTMLInputElement): void {
-  const value = formulaInput.value;
-  const text = value.substring(1).toUpperCase();
-  const lastPart = text.split(/[\(\),\s]/).pop() || '';
-
-  if (lastPart.length > 0) {
-    const newValue = value.slice(0, -lastPart.length) + formulaName + '(';
-    formulaInput.value = newValue;
-    formulaInput.focus();
-  }
-}
-
-/**
  * Проверка формулы на валидность (для подсветки ошибок)
  */
 export function validateFormula(formula: string): { valid: boolean; error?: string } {
@@ -234,7 +86,7 @@ export function validateFormula(formula: string): { valid: boolean; error?: stri
   // Проверка на парные скобки
   const openParens = (formula.match(/\(/g) || []).length;
   const closeParens = (formula.match(/\)/g) || []).length;
-  
+
   if (openParens !== closeParens) {
     return { valid: false, error: 'Несбалансированные скобки' };
   }
@@ -245,6 +97,159 @@ export function validateFormula(formula: string): { valid: boolean; error?: stri
   }
 
   return { valid: true };
+}
+
+/**
+ * Показать выпадающий список формул
+ */
+export function showFormulaSuggestions(
+  filter: string,
+  formulaInput: HTMLInputElement,
+  suggestionsEl: HTMLElement,
+  suggestionsListEl: HTMLElement
+): void {
+  suggestionsListEl.innerHTML = '';
+  selectedFormulaIndex = 0;
+
+  // Фильтруем формулы по введенному тексту
+  const filtered = FORMULA_LIST.filter(name =>
+    name.toUpperCase().startsWith(filter.toUpperCase())
+  ).slice(0, 15);
+
+  if (filtered.length === 0) {
+    hideFormulaSuggestions(suggestionsEl);
+    return;
+  }
+
+  filtered.forEach((name, index) => {
+    const formula = FORMULAS[name as keyof typeof FORMULAS];
+    const item = document.createElement('div');
+    item.className = 'formula-suggestion-item' + (index === 0 ? ' selected' : '');
+    item.dataset.formula = name;
+    item.innerHTML = `
+      <span class="formula-name">${formula.name}</span>
+      <span class="formula-description">${formula.description}</span>
+      <span class="formula-syntax">${formula.syntax}</span>
+    `;
+    
+    // Клик по формуле
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      insertFormula(name, formulaInput);
+      hideFormulaSuggestions(suggestionsEl);
+      formulaInput.focus();
+    });
+    
+    suggestionsListEl.appendChild(item);
+  });
+
+  // Позиционирование под строкой формул
+  const rect = formulaInput.getBoundingClientRect();
+  suggestionsEl.style.left = `${rect.left}px`;
+  suggestionsEl.style.top = `${rect.bottom + 5}px`;
+  suggestionsEl.classList.add('visible');
+  formulaSuggestionsVisible = true;
+}
+
+/**
+ * Скрыть выпадающий список формул
+ */
+export function hideFormulaSuggestions(suggestionsEl: HTMLElement): void {
+  suggestionsEl.classList.remove('visible');
+  formulaSuggestionsVisible = false;
+}
+
+/**
+ * Обновить выделенный элемент в списке
+ */
+export function updateSelectedFormulaInList(suggestionsListEl: HTMLElement): void {
+  const items = suggestionsListEl.querySelectorAll('.formula-suggestion-item');
+  items.forEach((item, index) => {
+    if (index === selectedFormulaIndex) {
+      item.classList.add('selected');
+    } else {
+      item.classList.remove('selected');
+    }
+  });
+  
+  // Прокрутка к выделенному элементу
+  const selectedItem = suggestionsListEl.querySelector('.formula-suggestion-item.selected');
+  if (selectedItem) {
+    selectedItem.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+/**
+ * Вставить формулу в строку ввода
+ */
+export function insertFormula(formulaName: string, formulaInput: HTMLInputElement): void {
+  const value = formulaInput.value;
+  
+  // Если уже есть начало формулы с частичным именем
+  if (value.startsWith('=')) {
+    const text = value.substring(1).toUpperCase();
+    const parts = text.split(/[\(\),\s]/);
+    const lastPart = parts[parts.length - 1] || '';
+    
+    if (lastPart.length > 0 && lastPart !== formulaName) {
+      // Заменяем частичное имя на полное
+      const newValue = value.slice(0, -lastPart.length) + formulaName + '(';
+      formulaInput.value = newValue;
+    } else if (lastPart === formulaName) {
+      // Имя уже введено, просто добавляем скобку
+      formulaInput.value = value + '(';
+    } else {
+      // Пустая строка после =
+      formulaInput.value = '=' + formulaName + '(';
+    }
+  } else {
+    formulaInput.value = '=' + formulaName + '(';
+  }
+}
+
+/**
+ * Обработать нажатие клавиш в списке формул
+ */
+export function handleFormulaSuggestionsKeydown(
+  e: KeyboardEvent,
+  suggestionsEl: HTMLElement,
+  suggestionsListEl: HTMLElement,
+  formulaInput: HTMLInputElement
+): boolean {
+  if (!formulaSuggestionsVisible) return false;
+
+  const items = suggestionsListEl.querySelectorAll('.formula-suggestion-item');
+  if (items.length === 0) return false;
+
+  switch (e.key) {
+    case 'ArrowDown':
+      e.preventDefault();
+      selectedFormulaIndex = Math.min(selectedFormulaIndex + 1, items.length - 1);
+      updateSelectedFormulaInList(suggestionsListEl);
+      return true;
+
+    case 'ArrowUp':
+      e.preventDefault();
+      selectedFormulaIndex = Math.max(selectedFormulaIndex - 1, 0);
+      updateSelectedFormulaInList(suggestionsListEl);
+      return true;
+
+    case 'Enter':
+    case 'Tab':
+      e.preventDefault();
+      const formulaName = (items[selectedFormulaIndex] as HTMLElement).dataset.formula || '';
+      insertFormula(formulaName, formulaInput);
+      hideFormulaSuggestions(suggestionsEl);
+      return true;
+
+    case 'Escape':
+      e.preventDefault();
+      hideFormulaSuggestions(suggestionsEl);
+      return true;
+  }
+
+  return false;
 }
 
 /**
@@ -261,9 +266,10 @@ export function getFormulaInfo(formulaName: string): { name: string; description
 // Делаем функции доступными глобально
 (window as any).calculateCellFormula = calculateCellFormula;
 (window as any).previewFormula = previewFormula;
-(window as any).setupFormulaSupport = setupFormulaSupport;
 (window as any).validateFormula = validateFormula;
 (window as any).getFormulaInfo = getFormulaInfo;
+(window as any).showFormulaSuggestions = showFormulaSuggestions;
+(window as any).hideFormulaSuggestions = hideFormulaSuggestions;
 
 // ==================== SmartTable Focus Manager ====================
 // Менеджер фокуса для восстановления после операций
@@ -289,11 +295,11 @@ export function getActiveCell(): { row: number; col: number } | null {
  */
 export function restoreFocus(): void {
   if (!activeCell) return;
-  
+
   const cell = document.querySelector(
     `.cell[data-row="${activeCell.row}"][data-col="${activeCell.col}"]`
   ) as HTMLElement;
-  
+
   if (cell) {
     // Фокус на cellGridWrapper для работы навигации
     const gridWrapper = document.getElementById('cellGridWrapper');
@@ -322,10 +328,10 @@ document.addEventListener('keydown', (e) => {
   if (navigationKeys.includes(e.key)) {
     const gridWrapper = document.getElementById('cellGridWrapper');
     const activeElement = document.activeElement;
-    
+
     // Если фокус не на таблице и не на input
-    if (activeElement !== gridWrapper && 
-        activeElement?.tagName !== 'INPUT' && 
+    if (activeElement !== gridWrapper &&
+        activeElement?.tagName !== 'INPUT' &&
         activeElement?.tagName !== 'TEXTAREA') {
       restoreFocus();
     }

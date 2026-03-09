@@ -7,3 +7,4 @@ __pycache__/
 sheets/src/electron/node_modules/
 sheets/src/electron/dist/
 plugins/
+.nh

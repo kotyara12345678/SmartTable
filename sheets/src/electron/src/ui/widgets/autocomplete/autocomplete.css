@@ -7,121 +7,37 @@
 #autocomplete-suggestion {
   position: absolute;
   pointer-events: none;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Consolas', 'Monaco', monospace;
   font-size: 13px;
-  color: #a0a0a0;
+  font-weight: 500;
+  color: #999;
   white-space: pre;
   overflow: hidden;
-  text-overflow: ellipsis;
   z-index: 1000;
-  padding: 4px 8px;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  transition: opacity 0.15s ease;
+  padding: 0 4px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  transition: opacity 0.1s ease;
+  text-shadow: 0 0 1px rgba(0,0,0,0.1);
 }
 
-/* Анимация появления подсказки */
+/* Анимация появления */
 #autocomplete-suggestion.fade-in {
-  animation: autoCompleteFadeIn 0.15s ease-out;
+  animation: autoCompleteFadeIn 0.1s ease-out;
 }
 
 @keyframes autoCompleteFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Выделение подсказки */
-#autocomplete-suggestion .suggestion-highlight {
-  color: #a0a0a0;
-  font-style: italic;
-}
-
-/* Ячейка с активной подсказкой */
-.cell.has-suggestion {
-  position: relative;
-}
-
-/* Панель с описанием формулы */
-.formula-description {
-  position: absolute;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  padding: 8px 12px;
-  font-size: 12px;
-  color: #666;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-  z-index: 1001;
-  max-width: 300px;
-}
-
-.formula-description .formula-name {
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 4px;
-}
-
-.formula-description .formula-example {
-  font-family: 'Consolas', 'Monaco', monospace;
-  background: #f5f5f5;
-  padding: 2px 6px;
-  border-radius: 3px;
-  color: #d63384;
-}
-
-/* Анимация мигания для принятия подсказки */
-@keyframes suggestionPulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(66, 133, 244, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 8px rgba(66, 133, 244, 0);
-  }
-}
-
-.cell.suggestion-available {
-  animation: suggestionPulse 1.5s infinite;
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* Тёмная тема */
 [data-theme="dark"] #autocomplete-suggestion {
-  background: rgba(30, 30, 30, 0.95);
-  border-color: #444;
-  color: #888;
+  color: #666;
 }
 
-[data-theme="dark"] .formula-description {
-  background: #2a2a2a;
-  border-color: #444;
-  color: #aaa;
-}
-
-[data-theme="dark"] .formula-description .formula-name {
-  color: #fff;
-}
-
-[data-theme="dark"] .formula-description .formula-example {
-  background: #333;
-  color: #f06292;
-}
-
-/* Адаптивность для мобильных */
-@media (max-width: 768px) {
-  #autocomplete-suggestion {
-    font-size: 14px;
-    padding: 6px 10px;
-  }
-  
-  .formula-description {
-    max-width: 250px;
-    font-size: 11px;
-  }
+/* Скрывать при скролле */
+#autocomplete-suggestion.hidden {
+  opacity: 0;
 }

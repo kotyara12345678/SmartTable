@@ -2,7 +2,11 @@
 console.log('[Renderer] Script loaded!');
 
 // Импорт функций для работы с формулами
-import { calculateCellFormula as calcFormula, previewFormula, validateFormula, saveActiveCell } from './formulabar/formulas-renderer.js';
+import { calculateCellFormula as calcFormula, previewFormula, validateFormula, saveActiveCell, showFormulaSuggestions, hideFormulaSuggestions, handleFormulaSuggestionsKeydown, insertFormula } from './formulabar/formulas-renderer.js';
+import { registerFormula, removeFormula, getDependentCells, extractCellReferences } from '../core/formulas/formula-dependencies.js';
+import FocusManager from '../core/focus/FocusManager.js';
+import TemplateManager from '../core/template-manager/TemplateManager.js';
+import { TemplateManagerComponent } from '../core/template-manager/TemplateManagerComponent.js';
 
 // === КОНФИГУРАЦИЯ ===
 const CONFIG = {
@@ -55,7 +59,23 @@ const state = {
   dataValidations: new Map<string, { type: string; values: string[] }>(),
   // Условное форматирование
   conditionalFormats: [] as Array<{ range: string; rule: string; style: any }>,
+  // Реактивное обновление формул
+  cellFormulas: new Map<string, string>(), // ячейка -> формула
+  // Фильтры и сортировка
+  activeFilters: new Map<number, { values: string[]; type: 'include' | 'exclude' }>(), // колонка -> фильтр
+  activeSort: { column: null as number | null, direction: null as 'asc' | 'desc' | null },
+  // Группировка
+  groupedColumns: new Set<number>(),
+  // Поиск
+  searchResults: new Set<string>(), // ячейки которые найдены
+  searchHighlight: false,
+  // Буфер обмена
+  clipboardHistory: [] as Array<{ text: string; timestamp: number; type: string }>,
 };
+
+// Инициализировать значения по умолчанию
+state.activeSort.column = null;
+state.activeSort.direction = null;
 
 // Инициализировать данные для первого листа
 state.sheetsData.set(1, new Map());
@@ -416,8 +436,8 @@ let elements: {
   sheetsList: HTMLElement;
   btnAddSheet: HTMLElement;
   contextMenu: HTMLElement;
-  formulaAutocomplete: HTMLElement;
-  formulaList: HTMLElement;
+  formulaSuggestions: HTMLElement;
+  formulaSuggestionsList: HTMLElement;
   zoomLabel: HTMLElement;
   btnZoomIn: HTMLElement;
   btnZoomOut: HTMLElement;
@@ -452,8 +472,8 @@ function initElements(): void {
     sheetsList: document.getElementById('sheetsList')!,
     btnAddSheet: document.getElementById('btnAddSheet')!,
     contextMenu: document.getElementById('contextMenu')!,
-    formulaAutocomplete: document.getElementById('formulaAutocomplete')!,
-    formulaList: document.getElementById('formulaList')!,
+    formulaSuggestions: document.getElementById('formulaSuggestions')!,
+    formulaSuggestionsList: document.getElementById('formulaSuggestionsList')!,
     zoomLabel: document.getElementById('zoomLabel')!,
     btnZoomIn: document.getElementById('btnZoomIn')!,
     btnZoomOut: document.getElementById('btnZoomOut')!,
@@ -563,6 +583,18 @@ async function init(): Promise<void> {
   // Инициализируем DOM элементы (после загрузки шаблонов)
   initElements();
   console.log('[Renderer] initElements() done');
+
+  // ==========================================
+  // === ИНИЦИАЛИЗАЦИЯ FOCUS MANAGER ===
+  // ==========================================
+  FocusManager.init({
+    getCellByCoords: (row: number, col: number) => {
+      return getCellElement(row, col);
+    },
+    containerSelector: '#cellGridWrapper'
+  });
+  console.log('[Renderer] FocusManager initialized');
+  // ==========================================
 
   // Рендерим таблицу
   renderColumnHeaders();
@@ -975,8 +1007,11 @@ function selectCell(row: number, col: number): void {
   if (cell) {
     cell.classList.add('selected');
     cell.focus();
+    
+    // Сообщить Focus Manager об активной ячейке
+    FocusManager.setActiveCell(cell, { row, col });
   }
-  
+
   // Сохранить активную ячейку для Focus Manager
   saveActiveCell(row, col);
 
@@ -1084,8 +1119,32 @@ function finishEditing(): void {
       return cellData?.value || '';
     };
 
-    const result = calcFormula(inputValue, state.selectedCell.row, state.selectedCell.col, getCellValue);
-    finalValue = String(result);
+    // Используем previewFormula для получения полного результата
+    const result = previewFormula(inputValue, (cellRef: string) => {
+      const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
+      if (!match) return '';
+      const col = match[1].toUpperCase().charCodeAt(0) - 65;
+      const row = parseInt(match[2]) - 1;
+      const cellKey = getCellKey(row, col);
+      const cellData = data.get(cellKey);
+      return cellData?.value || '';
+    });
+
+    finalValue = String(result.value);
+
+    // Обработка формулы COLOR
+    if (result.value === '#COLOR_COMMAND' && result.colorName) {
+      applyColorFromFormula(result, data);
+      finalValue = ''; // COLOR не отображает значение в ячейке
+    }
+    
+    // Зарегистрировать формулу для реактивного обновления
+    registerFormula(key, inputValue, (ref, formula) => {
+      state.cellFormulas.set(ref, formula);
+    });
+  } else {
+    // Если ввели обычное значение, удалить формулу
+    removeFormula(key);
   }
 
   if (finalValue) {
@@ -1097,6 +1156,12 @@ function finishEditing(): void {
   pushUndo(key, oldValue);
   updateAIDataCache();
   updateFormulaBar();
+  
+  // Реактивное обновление зависимых ячеек
+  if (inputValue.startsWith('=')) {
+    recalculateDependentCells(key, data);
+  }
+  
   updateSingleCell(state.selectedCell.row, state.selectedCell.col);
 
   // Автоподбор ширины если включен
@@ -1105,13 +1170,176 @@ function finishEditing(): void {
     autoFitColumn(state.selectedCell.col);
   }
 
-  // === ВАЖНО: Таймаут на случай если focus остался на ячейке ===
+  // === ВАЖНО: Восстановление фокуса через Focus Manager ===
   setTimeout(() => {
     const currentFocused = document.activeElement;
     if (currentFocused === cell) {
       cell.blur();
     }
+    
+    // Восстановить фокус на активной ячейке
+    FocusManager.restoreFocus();
   }, 100);
+}
+
+/**
+ * Реактивное пересчитывание зависимых ячеек
+ */
+function recalculateDependentCells(cellKey: string, data: Map<string, any>): void {
+  const dependents = getDependentCells(cellKey);
+  
+  for (const depKey of dependents) {
+    const formula = state.cellFormulas.get(depKey) || data.get(depKey)?.value;
+    if (formula && formula.startsWith('=')) {
+      // Разобрать ключ на row и col
+      const [row, col] = depKey.split('-').map(Number);
+      
+      const getCellValue = (r: number, c: number): string => {
+        const cellKey = getCellKey(r, c);
+        const cellData = data.get(cellKey);
+        return cellData?.value || '';
+      };
+      
+      const result = calcFormula(formula, row, col, getCellValue);
+      data.set(depKey, { value: result });
+      
+      // Обновить ячейку на экране
+      updateSingleCell(row, col);
+    }
+  }
+}
+
+/**
+ * Применение цвета из формулы COLOR
+ */
+function applyColorFromFormula(result: any, data: Map<string, any>): void {
+  const colorName = result.colorName;
+  const range = result.range;
+  const rangeType = result.rangeType || 'cell';
+  
+  // Получаем hex цвета из имени
+  const hexColor = getHexColorByName(colorName);
+  if (!hexColor) {
+    console.warn('[COLOR] Invalid color name:', colorName);
+    return;
+  }
+  
+  console.log('[COLOR] Applying color:', { colorName, hexColor, range, rangeType });
+  
+  if (rangeType === 'column') {
+    // Закрасить столбец (A:B)
+    const columnRangeMatch = range.match(/^([A-Z]):([A-Z])$/i);
+    if (columnRangeMatch) {
+      const startCol = columnRangeMatch[1].toUpperCase().charCodeAt(0) - 65;
+      const endCol = columnRangeMatch[2].toUpperCase().charCodeAt(0) - 65;
+      
+      for (let c = startCol; c <= endCol; c++) {
+        for (let r = 0; r < CONFIG.ROWS; r++) {
+          applyCellColor(r, c, hexColor, data);
+        }
+      }
+    } else {
+      // Один столбец (A)
+      const col = range.toUpperCase().charCodeAt(0) - 65;
+      for (let r = 0; r < CONFIG.ROWS; r++) {
+        applyCellColor(r, col, hexColor, data);
+      }
+    }
+  } else if (rangeType === 'row') {
+    // Закрасить строку (1:2)
+    const rowRangeMatch = range.match(/^(\d+):(\d+)$/);
+    if (rowRangeMatch) {
+      const startRow = parseInt(rowRangeMatch[1]) - 1;
+      const endRow = parseInt(rowRangeMatch[2]) - 1;
+      
+      for (let r = startRow; r <= endRow; r++) {
+        for (let c = 0; c < CONFIG.COLS; c++) {
+          applyCellColor(r, c, hexColor, data);
+        }
+      }
+    } else {
+      // Одна строка
+      const row = parseInt(range) - 1;
+      for (let c = 0; c < CONFIG.COLS; c++) {
+        applyCellColor(row, c, hexColor, data);
+      }
+    }
+  } else if (rangeType === 'range') {
+    // Диапазон ячеек (A1:B2)
+    const cellRangeMatch = range.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/i);
+    if (cellRangeMatch) {
+      const startCol = cellRangeMatch[1].toUpperCase().charCodeAt(0) - 65;
+      const startRow = parseInt(cellRangeMatch[2]) - 1;
+      const endCol = cellRangeMatch[3].toUpperCase().charCodeAt(0) - 65;
+      const endRow = parseInt(cellRangeMatch[4]) - 1;
+      
+      for (let r = startRow; r <= endRow; r++) {
+        for (let c = startCol; c <= endCol; c++) {
+          applyCellColor(r, c, hexColor, data);
+        }
+      }
+    }
+  } else {
+    // Одна ячейка (A1)
+    const cellMatch = range.match(/^([A-Z]+)(\d+)$/i);
+    if (cellMatch) {
+      const col = cellMatch[1].toUpperCase().charCodeAt(0) - 65;
+      const row = parseInt(cellMatch[2]) - 1;
+      applyCellColor(row, col, hexColor, data);
+    }
+  }
+  
+  updateAIDataCache();
+}
+
+/**
+ * Получить hex цвета по имени
+ */
+function getHexColorByName(colorName: string): string | null {
+  if (!colorName) return null;
+  
+  const color = colorName.toLowerCase().trim();
+  
+  // 16 базовых цветов
+  const colors: Record<string, string> = {
+    'black': '#000000',
+    'white': '#FFFFFF',
+    'red': '#FF0000',
+    'green': '#008000',
+    'blue': '#0000FF',
+    'yellow': '#FFFF00',
+    'cyan': '#00FFFF',
+    'aqua': '#00FFFF',
+    'magenta': '#FF00FF',
+    'fuchsia': '#FF00FF',
+    'gray': '#808080',
+    'grey': '#808080',
+    'silver': '#C0C0C0',
+    'maroon': '#800000',
+    'olive': '#808000',
+    'lime': '#00FF00',
+    'teal': '#008080',
+    'navy': '#000080',
+    'purple': '#800080',
+    'orange': '#FFA500',
+  };
+  
+  return colors[color] || colorName; // Если не найдено, пробуем использовать как hex
+}
+
+/**
+ * Применить цвет к ячейке
+ */
+function applyCellColor(row: number, col: number, hexColor: string, data: Map<string, any>): void {
+  const key = getCellKey(row, col);
+  const cellData = data.get(key) || { value: '' };
+  const newStyle = { ...cellData.style, backgroundColor: hexColor };
+  data.set(key, { ...cellData, style: newStyle });
+  
+  const cell = getCellElement(row, col);
+  if (cell) {
+    cell.style.backgroundColor = hexColor;
+  }
 }
 
 function updateSingleCell(row: number, col: number): void {
@@ -1133,9 +1361,33 @@ function updateSingleCell(row: number, col: number): void {
         }
       });
     }
+    
+    // Применить подсветку поиска
+    if (state.searchHighlight && state.searchResults.has(key)) {
+      cell.style.backgroundColor = '#FFEB3B';
+      cell.style.fontWeight = 'bold';
+    }
   } else {
     cell.textContent = '';
     cell.classList.remove('has-content');
+    
+    // Применить подсветку поиска для пустых ячеек
+    if (state.searchHighlight && state.searchResults.has(key)) {
+      cell.style.backgroundColor = '#FFEB3B';
+      cell.style.fontWeight = 'bold';
+    }
+  }
+  
+  // Применить фильтры
+  const filter = state.activeFilters.get(col);
+  if (filter && cellData && cellData.value) {
+    const value = String(cellData.value);
+    const isIncluded = filter.values.includes(value);
+    if ((filter.type === 'include' && !isIncluded) || (filter.type === 'exclude' && isIncluded)) {
+      cell.style.display = 'none';
+    } else {
+      cell.style.display = '';
+    }
   }
 }
 
@@ -1630,7 +1882,7 @@ function setupCellEventListeners(): void {
         // Перешли к другой ячейке — завершаем предыдущее редактирование
         console.log('[DEBUG keypress] Switching cells, finishing editing');
         finishEditing();
-        // Начинаем редактирование в новой ячейке
+        // Начин������ем редактирование в новой ячейке
         setTimeout(() => {
           editCellWithChar(row, col, e.key);
         }, 0);
@@ -1893,6 +2145,10 @@ function handleContextMenuAction(action: string): void {
         const cell = getCellElement(row, col);
         const value = cell?.textContent || '';
         navigator.clipboard.writeText(value);
+        
+        // Сохранить в историю буфера обмена
+        saveToClipboardHistory(value);
+        
         if (action === 'cut') {
           cell && (cell.textContent = '');
           data.delete(getCellKey(row, col));
@@ -1910,6 +2166,10 @@ function handleContextMenuAction(action: string): void {
       });
       break;
 
+    case 'delete-selected':
+      deleteSelectedCells();
+      break;
+
     case 'clear':
       {
         const cell = getCellElement(row, col);
@@ -1920,11 +2180,19 @@ function handleContextMenuAction(action: string): void {
       }
       break;
 
+    case 'find-in-selection':
+      showFindInSelectionModal();
+      break;
+
+    case 'filter-by-value':
+      showFilterByValueModal(col);
+      break;
+
     case 'bg-color':
       {
         showPromptModal('Введите цвет фона (hex, например #FFEBEE):', (color) => {
           if (!color) return;
-          
+
           const cell = getCellElement(row, col);
           if (cell) {
             cell.style.backgroundColor = color;
@@ -2033,6 +2301,465 @@ function deleteColumnAt(col: number): void {
     }
   });
   colsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
+}
+
+// ==========================================
+// === НОВЫЕ ФУНКЦИИ: УДАЛЕНИЕ, ПОИСК, ФИЛЬТРЫ ===
+// ==========================================
+
+/**
+ * Сохранить в историю буфера обмена
+ */
+function saveToClipboardHistory(text: string): void {
+  if (!text) return;
+  
+  const history = JSON.parse(localStorage.getItem('clipboardHistory') || '[]');
+  const MAX_HISTORY = 50;
+  
+  // Добавить в начало
+  history.unshift({
+    text: text,
+    timestamp: Date.now()
+  });
+  
+  // Ограничить размер
+  if (history.length > MAX_HISTORY) {
+    history.splice(MAX_HISTORY);
+  }
+  
+  localStorage.setItem('clipboardHistory', JSON.stringify(history));
+}
+
+/**
+ * Удалить выделенные ячейки
+ */
+function deleteSelectedCells(): void {
+  const data = getCurrentData();
+  
+  if (state.selectionStart && state.selectionEnd) {
+    // Выделен диапазон
+    const minRow = Math.min(state.selectionStart.row, state.selectionEnd.row);
+    const maxRow = Math.max(state.selectionStart.row, state.selectionEnd.row);
+    const minCol = Math.min(state.selectionStart.col, state.selectionEnd.col);
+    const maxCol = Math.max(state.selectionStart.col, state.selectionEnd.col);
+    
+    for (let r = minRow; r <= maxRow; r++) {
+      for (let c = minCol; c <= maxCol; c++) {
+        const key = getCellKey(r, c);
+        const cell = getCellElement(r, c);
+        if (cell) {
+          cell.textContent = '';
+          cell.style.backgroundColor = '';
+        }
+        data.delete(key);
+        removeFormula(key);
+      }
+    }
+  } else {
+    // Одна ячейка
+    const key = getCellKey(state.selectedCell.row, state.selectedCell.col);
+    const cell = getCellElement(state.selectedCell.row, state.selectedCell.col);
+    if (cell) {
+      cell.textContent = '';
+      cell.style.backgroundColor = '';
+    }
+    data.delete(key);
+    removeFormula(key);
+  }
+  
+  updateAIDataCache();
+  console.log('[Delete] Deleted selected cells');
+}
+
+/**
+ * Показать модальное окно поиска в выделенном
+ */
+function showFindInSelectionModal(): void {
+  // Создать модальное окно
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3>🔍 Поиск в выделенном</h3>
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom: 15px;">
+          <label style="display: block; margin-bottom: 5px;">Поисковый запрос:</label>
+          <input type="text" id="searchInput" placeholder="Введите текст для поиска..." 
+                 style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+        </div>
+        <div style="margin-bottom: 15px;">
+          <label style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="searchCaseSensitive">
+            Учитывать регистр
+          </label>
+        </div>
+        <div style="margin-bottom: 15px;">
+          <label style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="searchExactMatch">
+            Точное совпадение
+          </label>
+        </div>
+        <div id="searchResults" style="padding: 10px; background: #f5f5f5; border-radius: 4px; max-height: 200px; overflow-y: auto;">
+          <div style="color: #888;">Результаты поиска появятся здесь...</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnSearchNow" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">
+          Найти
+        </button>
+        <button id="btnClearSearch" style="padding: 8px 16px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">
+          Очистить результаты
+        </button>
+        <button onclick="this.closest('.modal-overlay').remove()" 
+                style="padding: 8px 16px; background: #9e9e9e; color: white; border: none; border-radius: 4px; cursor: pointer;">
+          Закрыть
+        </button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  
+  // Обработчики событий
+  const searchInput = document.getElementById('searchInput') as HTMLInputElement;
+  const searchResults = document.getElementById('searchResults')!;
+  const btnSearchNow = document.getElementById('btnSearchNow')!;
+  const btnClearSearch = document.getElementById('btnClearSearch')!;
+  
+  btnSearchNow.addEventListener('click', () => {
+    const query = searchInput.value.trim();
+    if (!query) {
+      alert('Введите поисковый запрос');
+      return;
+    }
+    
+    const caseSensitive = (document.getElementById('searchCaseSensitive') as HTMLInputElement).checked;
+    const exactMatch = (document.getElementById('searchExactMatch') as HTMLInputElement).checked;
+    
+    performSearch(query, caseSensitive, exactMatch, searchResults);
+  });
+  
+  btnClearSearch.addEventListener('click', () => {
+    searchResults.innerHTML = '<div style="color: #888;">Результаты поиска появятся здесь...</div>';
+    clearSearchHighlight();
+  });
+  
+  // Поиск по нажатию Enter
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      btnSearchNow.click();
+    }
+  });
+  
+  // Автофокус на поле ввода
+  setTimeout(() => searchInput.focus(), 100);
+}
+
+/**
+ * Выполнить поиск в выделенных ячейках
+ */
+function performSearch(query: string, caseSensitive: boolean, exactMatch: boolean, resultsContainer: HTMLElement): void {
+  const data = getCurrentData();
+  const results: Array<{ row: number; col: number; value: string; cellKey: string }> = [];
+  
+  // Определить диапазон поиска
+  let minRow = 0, maxRow = CONFIG.ROWS - 1, minCol = 0, maxCol = CONFIG.COLS - 1;
+  
+  if (state.selectionStart && state.selectionEnd) {
+    minRow = Math.min(state.selectionStart.row, state.selectionEnd.row);
+    maxRow = Math.max(state.selectionStart.row, state.selectionEnd.row);
+    minCol = Math.min(state.selectionStart.col, state.selectionEnd.col);
+    maxCol = Math.max(state.selectionStart.col, state.selectionEnd.col);
+  }
+  
+  // Поиск
+  for (let r = minRow; r <= maxRow; r++) {
+    for (let c = minCol; c <= maxCol; c++) {
+      const key = getCellKey(r, c);
+      const cellData = data.get(key);
+      if (!cellData || !cellData.value) continue;
+      
+      const value = String(cellData.value);
+      let searchValue = value;
+      let searchQuery = query;
+      
+      if (!caseSensitive) {
+        searchValue = value.toLowerCase();
+        searchQuery = query.toLowerCase();
+      }
+      
+      const found = exactMatch 
+        ? searchValue === searchQuery 
+        : searchValue.includes(searchQuery);
+      
+      if (found) {
+        results.push({ row: r, col: c, value: value.substring(0, 50), cellKey: key });
+      }
+    }
+  }
+  
+  // Отобразить результаты
+  state.searchResults = new Set(results.map(r => r.cellKey));
+  state.searchHighlight = true;
+  
+  if (results.length === 0) {
+    resultsContainer.innerHTML = '<div style="color: #f44336;">Ничего не найдено</div>';
+  } else {
+    resultsContainer.innerHTML = `
+      <div style="color: #4CAF50; margin-bottom: 10px;">Найдено: ${results.length}</div>
+      <div style="max-height: 150px; overflow-y: auto;">
+        ${results.slice(0, 20).map(r => `
+          <div style="padding: 5px; margin: 3px 0; background: white; border-left: 3px solid #4CAF50; cursor: pointer;"
+               onclick="document.dispatchEvent(new CustomEvent('goto-cell', { detail: { row: ${r.row}, col: ${r.col} } }))">
+            <strong>${String.fromCharCode(65 + r.col)}${r.row + 1}</strong>: ${r.value}${r.value.length > 50 ? '...' : ''}
+          </div>
+        `).join('')}
+        ${results.length > 20 ? `<div style="color: #888; padding: 5px;">... и ещё ${results.length - 20}</div>` : ''}
+      </div>
+    `;
+    
+    // Обработчик перехода к ячейке
+    document.addEventListener('goto-cell', ((e: any) => {
+      const { row, col } = e.detail;
+      selectCell(row, col);
+      const cell = getCellElement(row, col);
+      cell?.scrollIntoView({ block: 'center', inline: 'center' });
+    }) as EventListener, { once: false });
+  }
+  
+  renderCells();
+}
+
+/**
+ * Очистить подсветку поиска
+ */
+function clearSearchHighlight(): void {
+  state.searchResults.clear();
+  state.searchHighlight = false;
+  renderCells();
+}
+
+/**
+ * Показать модальное окно фильтра по значению
+ */
+function showFilterByValueModal(columnIndex: number): void {
+  const data = getCurrentData();
+  const columnValues = new Map<string, number>();
+  
+  // Собрать все уникальные значения в колонке
+  data.forEach((cellData, key) => {
+    const [row, col] = key.split('-').map(Number);
+    if (col === columnIndex && cellData.value) {
+      const value = String(cellData.value);
+      columnValues.set(value, (columnValues.get(value) || 0) + 1);
+    }
+  });
+  
+  // Создать модальное окно
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3>📊 Фильтр по столбцу ${String.fromCharCode(65 + columnIndex)}</h3>
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom: 15px;">
+          <label style="display: block; margin-bottom: 5px;">Тип фильтра:</label>
+          <select id="filterType" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            <option value="include">Показывать выбранные</option>
+            <option value="exclude">Скрыть выбранные</option>
+          </select>
+        </div>
+        <div style="margin-bottom: 15px;">
+          <input type="text" id="filterSearch" placeholder="Поиск значений..." 
+                 style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+        </div>
+        <div id="filterValues" style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 10px;">
+          ${Array.from(columnValues.entries()).slice(0, 100).map(([value, count]) => `
+            <label style="display: flex; align-items: center; gap: 8px; padding: 5px 0;">
+              <input type="checkbox" class="filter-checkbox" value="${value.replace(/"/g, '&quot;')}">
+              <span>${value.substring(0, 50)}${value.length > 50 ? '...' : ''}</span>
+              <span style="color: #888; font-size: 12px;">(${count})</span>
+            </label>
+          `).join('')}
+          ${columnValues.size > 100 ? `<div style="color: #888; padding: 5px;">... и ещё ${columnValues.size - 100} значений</div>` : ''}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnApplyFilter" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">
+          Применить фильтр
+        </button>
+        <button id="btnClearFilter" style="padding: 8px 16px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">
+          Снять фильтр
+        </button>
+        <button onclick="this.closest('.modal-overlay').remove()" 
+                style="padding: 8px 16px; background: #9e9e9e; color: white; border: none; border-radius: 4px; cursor: pointer;">
+          Отмена
+        </button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  
+  // Живой поиск по значениям
+  const filterSearch = document.getElementById('filterSearch') as HTMLInputElement;
+  const filterValuesContainer = document.getElementById('filterValues')!;
+  const allCheckboxes = filterValuesContainer.querySelectorAll('.filter-checkbox');
+  
+  filterSearch.addEventListener('input', () => {
+    const searchTerm = filterSearch.value.toLowerCase();
+    allCheckboxes.forEach(cb => {
+      const label = cb.parentElement;
+      const text = label?.textContent?.toLowerCase() || '';
+      if (label) {
+        label.style.display = text.includes(searchTerm) ? 'flex' : 'none';
+      }
+    });
+  });
+  
+  // Применить фильтр
+  const btnApplyFilter = document.getElementById('btnApplyFilter')!;
+  btnApplyFilter.addEventListener('click', () => {
+    const filterType = (document.getElementById('filterType') as HTMLSelectElement).value as 'include' | 'exclude';
+    const selectedValues = Array.from(filterValuesContainer.querySelectorAll('.filter-checkbox:checked'))
+      .map(cb => cb.getAttribute('value'))
+      .filter((v): v is string => v !== null);
+
+    if (selectedValues.length === 0) {
+      alert('Выберите хотя бы одно значение');
+      return;
+    }
+    
+    // Установить фильтр
+    state.activeFilters.set(columnIndex, {
+      values: selectedValues,
+      type: filterType
+    });
+    
+    applyFilters();
+    modal.remove();
+  });
+  
+  // Снять фильтр
+  const btnClearFilter = document.getElementById('btnClearFilter')!;
+  btnClearFilter.addEventListener('click', () => {
+    state.activeFilters.delete(columnIndex);
+    applyFilters();
+    modal.remove();
+  });
+}
+
+/**
+ * Применить все активные фильтры
+ */
+function applyFilters(): void {
+  // Скрыть/показать ячейки согласно фильтрам
+  const data = getCurrentData();
+  
+  data.forEach((cellData, key) => {
+    const [row, col] = key.split('-').map(Number);
+    const cell = getCellElement(row, col);
+    if (!cell) return;
+    
+    let shouldShow = true;
+    
+    // Проверить фильтры для этой колонки
+    const filter = state.activeFilters.get(col);
+    if (filter && cellData.value) {
+      const value = String(cellData.value);
+      const isIncluded = filter.values.includes(value);
+      
+      if (filter.type === 'include') {
+        shouldShow = isIncluded;
+      } else { // exclude
+        shouldShow = !isIncluded;
+      }
+    }
+    
+    cell.style.display = shouldShow ? '' : 'none';
+  });
+}
+
+/**
+ * Сортировка по колонке
+ */
+function sortByColumn(columnIndex: number, direction: 'asc' | 'desc'): void {
+  const data = getCurrentData();
+  const rows = new Map<number, Map<number, any>>();
+
+  // Собрать данные по строкам
+  data.forEach((cellData, key) => {
+    const [row, col] = key.split('-').map(Number);
+    if (!rows.has(row)) {
+      rows.set(row, new Map());
+    }
+    rows.get(row)!.set(col, cellData);
+  });
+
+  // Преобразовать в массив для сортировки
+  const rowsArray = Array.from(rows.entries()).map(([rowNum, rowData]) => ({
+    rowNum,
+    rowData,
+    sortValue: getCellValueForSort(rowData.get(columnIndex))
+  }));
+
+  // Сортировать
+  rowsArray.sort((a, b) => {
+    const aVal = a.sortValue;
+    const bVal = b.sortValue;
+    
+    // Если оба числа
+    if (typeof aVal === 'number' && typeof bVal === 'number') {
+      return direction === 'asc' ? aVal - bVal : bVal - aVal;
+    }
+    
+    // Если строки
+    const aStr = String(aVal);
+    const bStr = String(bVal);
+    const cmp = aStr.localeCompare(bStr);
+    return direction === 'asc' ? cmp : -cmp;
+  });
+
+  // Переместить данные
+  const newData = new Map<string, any>();
+  rowsArray.forEach((item, newIndex) => {
+    item.rowData.forEach((cellData, col) => {
+      const newKey = `${newIndex}-${col}`;
+      newData.set(newKey, cellData);
+    });
+  });
+
+  // Обновить данные
+  state.sheetsData.set(state.currentSheet, newData);
+  state.activeSort.column = columnIndex;
+  state.activeSort.direction = direction;
+
+  renderCells();
+  updateAIDataCache();
+}
+
+/**
+ * Получить значение для сортировки
+ */
+function getCellValueForSort(cellData: any): number | string {
+  if (!cellData || !cellData.value) return ''; // Пустые ячейки в конец
+
+  const value = cellData.value;
+  const numValue = parseFloat(value);
+
+  // Если число - вернуть число
+  if (!isNaN(numValue) && isFinite(numValue)) {
+    return numValue;
+  }
+
+  // Иначе строка
+  return String(value).toLowerCase();
 }
 
 // Вставка изображения (плавающий объект)
@@ -2511,6 +3238,17 @@ function setupEventListeners(): void {
     });
   });
 
+  // ==========================================
+  // === МЕНЕДЖЕР ШАБЛОНОВ ===
+  // ==========================================
+  // Открытие менеджера шаблонов
+  document.addEventListener('open-template-manager', () => {
+    const component = document.querySelector('template-manager-component') as any;
+    if (component && typeof component.open === 'function') {
+      component.open();
+    }
+  });
+
   // Вставка таблицы (плавающий объект)
   document.addEventListener('insert-table', () => {
     showPromptModal('Количество строк:', (rows) => {
@@ -2822,12 +3560,13 @@ function setupEventListeners(): void {
   setupContextMenu();
   setupSheetContextMenu();
 
-  // Формула бар
+  // Формула бар - выпадающий список формул
   elements.formulaInput.addEventListener('input', (e) => {
     const value = (e.target as HTMLInputElement).value;
     const { row, col } = state.selectedCell;
     const cell = getCellElement(row, col);
     const data = getCurrentData();
+    
     if (cell) {
       cell.textContent = value;
       if (value) {
@@ -2838,18 +3577,76 @@ function setupEventListeners(): void {
       // Обновляем кэш при каждом изменении
       updateAIDataCache();
     }
+    
+    // Показываем выпадающий список формул при вводе =
+    if (value.startsWith('=')) {
+      const text = value.substring(1);
+      // Получаем последнее слово после разделителей
+      const parts = text.split(/[\(\),\s]/);
+      const lastPart = parts[parts.length - 1] || '';
+      
+      if (lastPart.length > 0) {
+        showFormulaSuggestions(
+          lastPart,
+          elements.formulaInput,
+          elements.formulaSuggestions,
+          elements.formulaSuggestionsList
+        );
+      } else {
+        hideFormulaSuggestions(elements.formulaSuggestions);
+      }
+    } else {
+      hideFormulaSuggestions(elements.formulaSuggestions);
+    }
   });
 
   elements.formulaInput.addEventListener('keydown', (e) => {
+    // Сначала проверяем навигацию по списку формул
+    const handled = handleFormulaSuggestionsKeydown(
+      e,
+      elements.formulaSuggestions,
+      elements.formulaSuggestionsList,
+      elements.formulaInput
+    );
+    
+    if (handled) return;
+    
     if (e.key === 'Enter') {
       e.preventDefault();
       elements.formulaInput.blur();
       const cell = getCellElement(state.selectedCell.row, state.selectedCell.col);
       cell?.focus();
     } else if (e.key === 'Escape') {
+      e.preventDefault();
+      hideFormulaSuggestions(elements.formulaSuggestions);
       elements.formulaInput.blur();
     }
   });
+  
+  // Скрыть список формул при клике вне
+  document.addEventListener('click', (e) => {
+    if (!elements.formulaSuggestions.contains(e.target as Node) && e.target !== elements.formulaInput) {
+      hideFormulaSuggestions(elements.formulaSuggestions);
+    }
+  });
+
+  // ==========================================
+  // === КНОПКА ФОРМУЛ (btnFormula) ===
+  // ==========================================
+  // Клик по кнопке формул слева от строки формул
+  const btnFormula = document.getElementById('btnFormula');
+  if (btnFormula) {
+    btnFormula.addEventListener('click', () => {
+      // Показываем список функций
+      showFormulaSuggestions(
+        '',
+        elements.formulaInput,
+        elements.formulaSuggestions,
+        elements.formulaSuggestionsList
+      );
+      elements.formulaInput.focus();
+    });
+  }
 
   // Навигация по листам
   console.log('[Renderer] Setting up addSheet listener, btnAddSheet:', !!elements.btnAddSheet);
@@ -2951,7 +3748,7 @@ function setupEventListeners(): void {
   });
 
   window.addEventListener('focus', () => {
-    // Восстанавливаем фокус на таблице при возврате в окно
+    // Восстанавливаем фокус н�� таблице при возврате в окно
     if (lastFocusedCell) {
       const cell = getCellElement(lastFocusedCell.row, lastFocusedCell.col);
       if (cell) {
@@ -3522,10 +4319,10 @@ async function sendAiMessage(): Promise<void> {
         // Проверяем предложение переключить режим - показываем ПЕРЕД выполнением
         if (response.suggestModeSwitch && response.suggestModeSwitch !== aiMode) {
           showModeSwitcher(response.suggestModeSwitch);
-          // Если есть план - показываем но не выполняем пока пользователь не подтвердит
+          // Если есть план - показываем но не выполняем пока пользователь н�� подтвердит
           if (response.executionPlan && response.executionPlan.length > 0) {
             lastExecutionPlan = response.executionPlan; // Сохраняем план
-            addAiMessage('📋 Предлагаю следующий план:', 'assistant');
+            addAiMessage('📋 Предл��гаю следующий план:', 'assistant');
             response.executionPlan.forEach((step: any) => {
               addAiMessage(`Шаг ${step.step}: ${step.action} - ${step.description}`, 'assistant');
             });
@@ -3565,7 +4362,7 @@ async function sendAiMessage(): Promise<void> {
           if (lowerMsg.includes('привет') || lowerMsg.includes('здравствуйте')) {
             showQuickReplies([
               '📊 Заполни таблицу дан��ыми',
-              '🎨 Покрась ячейки',
+              '🎨 Покр��сь яче��ки',
               '📈 Посчитай суммы'
             ]);
           }
@@ -3739,7 +4536,7 @@ async function executeAICommands(commands: any[]): Promise<void> {
     statusMsg.remove();
   }
   
-  // Сообщение об успехе
+  // Соо��щение об успехе
   const successMsg = document.createElement('div');
   successMsg.className = 'ai-message ai-message-assistant';
   successMsg.textContent = `✅ Выполнено команд: ${commands.length}`;
@@ -5400,7 +6197,7 @@ function generateAiResponse(message: string): string {
     return '🧹 Для очистки данных я могу:\n\n• Удалить пустые строки\n• Убрать дубликаты\n• Исправить формат\n• Нормализовать текст\n\nЧто именно нужно очистить?';
   }
   
-  return 'Я понял ваш запрос! Вот что я могу сделать:\n\n📝 **Создать формулу** - помогу с функциями\n📊 **Анализировать** - найду закономерности\n🧹 **Очистить данные** - ��беру лишнее\n📈 **Визуализировать** - предложу графики\n\nЧт���� бы вы хотели сделать?';
+  return 'Я понял ваш запрос! Вот что я могу сделать:\n\n📝 **Создать формулу** - помогу с функци��ми\n📊 **Анализировать** - найду закономерности\n🧹 **Очистить данные** - ��беру лишнее\n📈 **Визуализировать** - предложу графики\n\nЧт���� бы вы хотели сделать?';
 }
 
 
@@ -6794,6 +7591,13 @@ function importSheetsImpl(sheets: Array<{
 (window as any).showExportMenu = showExportMenu;
 (window as any).exportData = exportData;
 (window as any).exportDataWithSheets = exportDataWithSheets;
+
+// ==========================================
+// === ЭКСПОРТ FOCUS MANAGER ===
+// ==========================================
+(window as any).FocusManager = FocusManager;
+console.log('[Renderer] FocusManager exported to window');
+// ==========================================
 
 // Экспорт для ES module
 export {};

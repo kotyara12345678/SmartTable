@@ -4,7 +4,7 @@
  */
 
 // Импортируем функции (после сборки)
-const { evaluateFormula } = require('./dist/ui/core/formulas/formulas.js');
+import { evaluateFormula } from './dist/ui/core/formulas/formulas.js';
 
 // Тестовые данные
 const testData = new Map([
@@ -29,7 +29,7 @@ let failed = 0;
 function test(name, formula, expected) {
   const result = evaluateFormula(formula, getData);
   const success = result.value === expected;
-  
+
   if (success) {
     console.log(`✅ ${name}`);
     passed++;

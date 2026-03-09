@@ -14,6 +14,7 @@ export class TopBarComponent extends BaseComponent {
   private btnAI: HTMLElement | null = null;
   private btnSettings: HTMLElement | null = null;
   private btnExtensions: HTMLElement | null = null;
+  private btnTemplates: HTMLElement | null = null;
   private appIcon: HTMLElement | null = null;
   private onReturnToStart: (() => void) | null = null;
 
@@ -37,6 +38,7 @@ export class TopBarComponent extends BaseComponent {
     this.btnAI = this.querySelector('#btnAI');
     this.btnSettings = this.querySelector('#btnSettings');
     this.btnExtensions = this.querySelector('#btnExtensions');
+    this.btnTemplates = this.querySelector('#btnTemplates');
     this.appIcon = this.querySelector('.app-icon');
   }
 
@@ -60,6 +62,9 @@ export class TopBarComponent extends BaseComponent {
 
     // Кнопка расширений
     this.bindEvent(this.btnExtensions, 'click', (e) => this.handleExtensionsClick(e));
+
+    // Кнопка шаблонов
+    this.bindEvent(this.btnTemplates, 'click', () => this.handleTemplatesClick());
   }
   
   /**
@@ -107,6 +112,14 @@ export class TopBarComponent extends BaseComponent {
     event.stopPropagation();
     // Эмитим событие для открытия панели расширений
     document.dispatchEvent(new CustomEvent('extensions-panel-open'));
+  }
+
+  /**
+   * Обработчик клика по кнопке шаблонов
+   */
+  private handleTemplatesClick(): void {
+    // Эмитим событие для открытия менеджера шаблонов
+    document.dispatchEvent(new CustomEvent('open-template-manager'));
   }
   
   /**

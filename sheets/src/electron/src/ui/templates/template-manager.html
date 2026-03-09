@@ -1,0 +1,224 @@
+<!-- Template Manager Modal -->
+<div class="template-manager-modal" id="templateManagerModal">
+  <div class="template-manager-overlay" id="templateManagerOverlay"></div>
+  
+  <div class="template-manager-window">
+    <!-- Заголовок -->
+    <div class="template-manager-header">
+      <h2>📋 Менеджер шаблонов</h2>
+      <button class="btn-close" id="btnCloseTemplateManager">✕</button>
+    </div>
+
+    <!-- Вкладки -->
+    <div class="template-manager-tabs">
+      <button class="tab-btn active" data-tab="browse">📁 Обзор</button>
+      <button class="tab-btn" data-tab="create">➕ Создать</button>
+      <button class="tab-btn" data-tab="import">📥 Импорт</button>
+      <button class="tab-btn" data-tab="export">📤 Экспорт</button>
+    </div>
+
+    <!-- Контент -->
+    <div class="template-manager-content">
+      
+      <!-- Вкладка: Обзор шаблонов -->
+      <div class="tab-content active" id="tab-browse">
+        <!-- Категории -->
+        <div class="template-categories">
+          <div class="category-list" id="templateCategoryList">
+            <!-- Категории будут добавлены JS -->
+          </div>
+        </div>
+
+        <!-- Список шаблонов -->
+        <div class="template-list-container">
+          <div class="template-search">
+            <input type="text" id="templateSearch" placeholder="🔍 Поиск шаблонов..." />
+            <select id="templateSort">
+              <option value="name">По названию</option>
+              <option value="date">По дате</option>
+              <option value="category">По категории</option>
+            </select>
+          </div>
+
+          <div class="template-grid" id="templateGrid">
+            <!-- Шаблоны будут добавлены JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Вкладка: Создать шаблон -->
+      <div class="tab-content" id="tab-create">
+        <div class="create-template-form">
+          <h3>Создание нового шаблона</h3>
+          
+          <div class="form-group">
+            <label for="templateName">Название шаблона *</label>
+            <input type="text" id="templateName" placeholder="Например: Бюджет проекта" />
+          </div>
+
+          <div class="form-group">
+            <label for="templateDescription">Описание</label>
+            <textarea id="templateDescription" placeholder="Опишите назначение шаблона..." rows="3"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="templateCategory">Категория *</label>
+            <select id="templateCategory">
+              <option value="finance">💰 Финансы</option>
+              <option value="inventory">📦 Склад</option>
+              <option value="hr">👥 HR и кадры</option>
+              <option value="sales">📊 Продажи</option>
+              <option value="education">📚 Образование</option>
+              <option value="personal">🏠 Личные</option>
+              <option value="custom">⚙️ Пользовательские</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Что включить в шаблон:</label>
+            <div class="checkbox-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="includeData" checked />
+                <span>📊 Данные таблицы</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="includeLogic" />
+                <span>⚡ Логика (скрипты)</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="includeStyles" checked />
+                <span>🎨 Стили и форматирование</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="templateLogicCode">Код логики (JavaScript):</label>
+            <div class="logic-editor">
+              <textarea id="templateLogicCode" placeholder="// onCellChange, onLoad, etc." rows="8"></textarea>
+            </div>
+            <div class="logic-hints">
+              <p>Доступные события:</p>
+              <code>onLoad</code>, <code>onCellChange(cell, value)</code>, <code>onSelectionChange(cell)</code>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn-primary" id="btnCreateTemplate">Создать шаблон</button>
+            <button class="btn-secondary" id="btnCancelCreate">Отмена</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Вкладка: Импорт -->
+      <div class="tab-content" id="tab-import">
+        <div class="import-section">
+          <h3>Импорт шаблонов</h3>
+          
+          <div class="import-area" id="importArea">
+            <div class="import-icon">📥</div>
+            <p>Перетащите файлы .json или .js сюда</p>
+            <p class="import-hint">или</p>
+            <button class="btn-secondary" id="btnSelectFiles">Выбрать файлы</button>
+            <input type="file" id="templateFileInput" accept=".json,.js" multiple style="display:none" />
+          </div>
+
+          <div class="imported-list" id="importedList">
+            <!-- Импортированные файлы -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Вкладка: Экспорт -->
+      <div class="tab-content" id="tab-export">
+        <div class="export-section">
+          <h3>Экспорт шаблонов</h3>
+          
+          <div class="export-options">
+            <div class="export-item">
+              <label>
+                <input type="checkbox" id="exportAllCheckbox" />
+                Экспортировать все шаблоны
+              </label>
+            </div>
+            
+            <div class="export-format">
+              <label>Формат:</label>
+              <select id="exportFormat">
+                <option value="json">JSON (данные)</option>
+                <option value="js">JavaScript (модуль)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="template-export-list" id="templateExportList">
+            <!-- Список для выбора -->
+          </div>
+
+          <div class="form-actions">
+            <button class="btn-primary" id="btnExportTemplates">Экспортировать</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Подвал -->
+    <div class="template-manager-footer">
+      <button class="btn-secondary" id="btnExportAll">💾 Экспорт всех</button>
+      <span class="templates-count" id="templatesCount">0 шаблонов</span>
+    </div>
+  </div>
+</div>
+
+<!-- Модальное окно предпросмотра шаблона -->
+<div class="template-preview-modal" id="templatePreviewModal">
+  <div class="template-preview-overlay"></div>
+  <div class="template-preview-window">
+    <div class="template-preview-header">
+      <h3 id="previewTemplateName">Предпросмотр</h3>
+      <button class="btn-close" id="btnClosePreview">✕</button>
+    </div>
+    <div class="template-preview-body">
+      <div class="preview-info">
+        <p><strong>Описание:</strong> <span id="previewDescription"></span></p>
+        <p><strong>Категория:</strong> <span id="previewCategory"></span></p>
+        <p><strong>Создан:</strong> <span id="previewCreated"></span></p>
+        <p><strong>Листов:</strong> <span id="previewSheets"></span></p>
+        <p><strong>Ячеек:</strong> <span id="previewCells"></span></p>
+        <p><strong>Логика:</strong> <span id="previewLogic"></span></p>
+      </div>
+      <div class="preview-actions">
+        <button class="btn-primary" id="btnLoadTemplate">Загрузить шаблон</button>
+        <button class="btn-secondary" id="btnDeleteTemplate">Удалить</button>
+        <button class="btn-secondary" id="btnCancelPreview">Отмена</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Модальное окно загрузки -->
+<div class="template-load-options" id="templateLoadOptions">
+  <div class="template-load-overlay"></div>
+  <div class="template-load-window">
+    <h3>Параметры загрузки</h3>
+    <div class="load-options">
+      <label class="option-label">
+        <input type="checkbox" id="loadMergeData" />
+        <span>Объединить с текущими данными</span>
+      </label>
+      <label class="option-label">
+        <input type="checkbox" id="loadApplyStyles" checked />
+        <span>Применить стили</span>
+      </label>
+      <label class="option-label">
+        <input type="checkbox" id="loadRunLogic" checked />
+        <span>Выполнить логику шаблона</span>
+      </label>
+    </div>
+    <div class="load-actions">
+      <button class="btn-primary" id="btnConfirmLoad">Загрузить</button>
+      <button class="btn-secondary" id="btnCancelLoad">Отмена</button>
+    </div>
+  </div>
+</div>

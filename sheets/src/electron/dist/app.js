@@ -11,6 +11,7 @@ import { UserProfileComponent } from './ui/components/UserProfileComponent.js';
 import { DashboardComponent } from './ui/components/DashboardComponent.js';
 import { AIChatComponent } from './ui/components/AIChatComponent.js';
 import { ExtensionsPanelComponent } from './ui/components/ExtensionsPanelComponent.js';
+import { TemplateManagerComponent } from './ui/core/template-manager/TemplateManagerComponent.js';
 import { pluginManager } from './ui/core/plugins/PluginManager.js';
 import { themeManager } from './ui/core/theme-manager.js';
 import { aiContextService } from './ui/core/ai/ai-context-service.js';
@@ -31,6 +32,7 @@ let userProfile = null;
 let dashboard = null;
 let aiChat = null;
 let extensionsPanel = null;
+let templateManager = null;
 /**
  * Инициализация приложения
  */
@@ -173,6 +175,11 @@ async function initApp() {
         aiChat = new AIChatComponent();
         window.aiChat = aiChat;
         logs.push('[App] AIChatComponent initialized');
+        // Инициализация менеджера шаблонов
+        logs.push('[App] Creating TemplateManagerComponent...');
+        templateManager = new TemplateManagerComponent();
+        document.body.appendChild(templateManager);
+        logs.push('[App] TemplateManagerComponent initialized');
         // Инициализация трекера времени
         logs.push('[App] Initializing TimeTracker...');
         window.timeTracker = timeTracker;
