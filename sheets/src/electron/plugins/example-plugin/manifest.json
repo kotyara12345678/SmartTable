@@ -1,0 +1,18 @@
+{
+  "id": "com.smarttable.example-plugin",
+  "name": "Пример Плагина",
+  "version": "1.0.0",
+  "description": "Пример плагина для демонстрации структуры и API. Этот плагин ничего не делает, но показывает правильную структуру.",
+  "author": "SmartTable Team",
+  "main": "main.js",
+  "styles": [],
+  "apiVersion": "1.0",
+  "permissions": [
+    "sheets.read",
+    "sheets.write",
+    "ui.ribbon",
+    "events.subscribe"
+  ],
+  "icon": "",
+  "homepage": "https://github.com/SmartTableTeam/example-plugin"
+}
