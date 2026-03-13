@@ -255,6 +255,15 @@ function autoLoad() {
                     if (typeof sheetData === 'object') {
                         Object.keys(sheetData).forEach(cellKey => {
                             sheetMap.set(cellKey, sheetData[cellKey]);
+                            // ✅ Восстанавливаем формулы из loaded data
+                            const cellData = sheetData[cellKey];
+                            if (cellData.formula) {
+                                state.cellFormulas.set(cellKey, cellData.formula);
+                                // Регистрируем формулу в системе зависимостей
+                                registerFormula(cellKey, cellData.formula, (ref, formula) => {
+                                    state.cellFormulas.set(ref, formula);
+                                });
+                            }
                         });
                     }
                     state.sheetsData.set(parseInt(sheetKey), sheetMap);
@@ -263,6 +272,15 @@ function autoLoad() {
             else if (data.cells) {
                 Object.keys(data.cells).forEach(key => {
                     currentData.set(key, data.cells[key]);
+                    // ✅ Восстанавливаем формулы из loaded data
+                    const cellData = data.cells[key];
+                    if (cellData.formula) {
+                        state.cellFormulas.set(key, cellData.formula);
+                        // Регистрируем формулу в системе зависимостей
+                        registerFormula(key, cellData.formula, (ref, formula) => {
+                            state.cellFormulas.set(ref, formula);
+                        });
+                    }
                 });
             }
             state.currentSheet = data.currentSheet || 1;
@@ -425,6 +443,17 @@ function colToLetter(col) {
         n = Math.floor(n / 26);
     }
     return letter;
+}
+/**
+ * Преобразовать буквы в номер колонки (A → 0, B → 1, AA → 26, и т.д.)
+ */
+function letterToCol(letter) {
+    let col = 0;
+    const upper = letter.toUpperCase();
+    for (let i = 0; i < upper.length; i++) {
+        col = col * 26 + (upper.charCodeAt(i) - 64);
+    }
+    return col - 1; // Excel использует 1-индексацию, мы используем 0
 }
 function getCellId(row, col) {
     return `${colToLetter(col)}${row + 1}`;
@@ -860,9 +889,12 @@ function updateSelectionHeaders() {
 let lastSelectedCell = null;
 let lastSelectTime = 0;
 function selectCell(row, col) {
-    // Завершить редактирование если оно идет
+    // Завершить редактирование если оно идет и переключились на другую ячейку
     if (state.isEditing) {
-        finishEditing();
+        const isDifferentCell = state.editingCell.row !== row || state.editingCell.col !== col;
+        if (isDifferentCell) {
+            finishEditing();
+        }
     }
     // Не снимать выделение если идет выделение диапазона
     if (!state.isSelecting) {
@@ -974,6 +1006,32 @@ function editCell(row, col, selectAll = true) {
     state.isEditing = true;
     // Добавить класс к ячейке для визуальной подсветки
     cell.classList.add('editing');
+    // Удалить старый input listener если есть
+    if (input._currentInputHandler) {
+        input.removeEventListener('input', input._currentInputHandler);
+    }
+    // ✅ LIVE FORMULA HANDLER - реактивное обновление при вводе
+    const handleFormulaInput = () => {
+        const currentValue = input.value;
+        // Если это формула, показать live preview
+        if (currentValue.startsWith('=')) {
+            const result = previewFormula(currentValue, (cellRef) => {
+                const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
+                if (!match)
+                    return '';
+                const refCol = letterToCol(match[1]);
+                const refRow = parseInt(match[2]) - 1;
+                const refKey = getCellKey(refRow, refCol);
+                const cellData = data.get(refKey);
+                return cellData?.value || '';
+            });
+            console.log(`[Live Formula] Input: "${currentValue}" → Result: ${result.value}`);
+        }
+        // Обновить formula bar с live preview
+        updateFormulaBar();
+    };
+    input.addEventListener('input', handleFormulaInput);
+    input._currentInputHandler = handleFormulaInput;
     // Focus и выделение текста
     input.focus();
     if (selectAll) {
@@ -1000,16 +1058,18 @@ function finishEditing(save = true) {
         const inputValue = input.value;
         const data = getCurrentData();
         const oldValue = data.get(key);
-        // Вычислить формулу если есть
-        let finalValue = inputValue;
+        // ✅ НОВАЯ ЛОГИКА: Разделяем формулу и результат
+        let finalValue = inputValue; // То что будет отображаться в ячейке
+        let isFormula = false;
         if (inputValue.startsWith('=')) {
+            isFormula = true;
             const result = previewFormula(inputValue, (cellRef) => {
                 const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
                 if (!match)
                     return '';
-                const col = match[1].toUpperCase().charCodeAt(0) - 65;
-                const row = parseInt(match[2]) - 1;
-                const cellKey = getCellKey(row, col);
+                const refCol = letterToCol(match[1]);
+                const refRow = parseInt(match[2]) - 1;
+                const cellKey = getCellKey(refRow, refCol);
                 const cellData = data.get(cellKey);
                 return cellData?.value || '';
             });
@@ -1020,16 +1080,30 @@ function finishEditing(save = true) {
                 finalValue = ''; // COLOR не отображает значение в ячейке
             }
             // Зарегистрировать формулу для реактивного обновления
+            removeFormula(key);
             registerFormula(key, inputValue, (ref, formula) => {
                 state.cellFormulas.set(ref, formula);
+                console.log(`[Formulas] Registered: ${ref} = ${formula}`);
             });
+            state.cellFormulas.set(key, inputValue);
         }
         else {
             // Если ввели обычное значение, удалить формулу
             removeFormula(key);
+            if (state.cellFormulas.has(key)) {
+                state.cellFormulas.delete(key);
+            }
         }
-        if (finalValue) {
-            data.set(key, { value: finalValue });
+        // ✅ Сохраняем в data:
+        // - value: результат для отображения в ячейке
+        // - formula: саму формулу для показа в formula bar
+        const cellDataToSave = {
+            value: finalValue,
+            ...(isFormula && { formula: inputValue }), // Сохраняем формулу если это формула
+            ...oldValue // Сохраняем прежние стили и другие поля
+        };
+        if (finalValue || isFormula) {
+            data.set(key, cellDataToSave);
         }
         else {
             data.delete(key);
@@ -1037,10 +1111,8 @@ function finishEditing(save = true) {
         pushUndo(key, oldValue);
         updateAIDataCache();
         updateFormulaBar();
-        // Реактивное обновление зависимых ячеек
-        if (inputValue.startsWith('=')) {
-            recalculateDependentCells(key, data);
-        }
+        // ✅ Пересчитать зависимые ячейки
+        recalculateDependentCells(key, data);
         updateSingleCell(row, col);
         // Автоподбор ширины если включен
         const autoFitEnabled = localStorage.getItem('smarttable-auto-fit-columns') === 'true';
@@ -1067,23 +1139,50 @@ function resetEditing() {
 /**
  * Реактивное пересчитывание зависимых ячеек
  */
-function recalculateDependentCells(cellKey, data) {
-    const dependents = getDependentCells(cellKey);
+function recalculateDependentCells(changedCellKey, data) {
+    // Получаем все ячейки, которые зависят от только что измененной ячейки
+    const dependents = getDependentCells(changedCellKey);
+    console.log(`[Formulas] Recalculating dependents of ${changedCellKey}:`, dependents);
     for (const depKey of dependents) {
-        const formula = state.cellFormulas.get(depKey) || data.get(depKey)?.value;
-        if (formula && formula.startsWith('=')) {
-            // Разобрать ключ на row и col
-            const [row, col] = depKey.split('-').map(Number);
-            const getCellValue = (r, c) => {
-                const cellKey = getCellKey(r, c);
-                const cellData = data.get(cellKey);
-                return cellData?.value || '';
-            };
-            const result = calcFormula(formula, row, col, getCellValue);
-            data.set(depKey, { value: result });
-            // Обновить ячейку на экране
-            updateSingleCell(row, col);
+        // ✅ Получаем формулу из cellData (более надежно чем state.cellFormulas)
+        const depCellData = data.get(depKey);
+        const formula = depCellData?.formula || state.cellFormulas.get(depKey);
+        if (!formula || !formula.startsWith('=')) {
+            continue; // Пропускаем, если это не формула
         }
+        // Разобрать ключ на row и col
+        const [row, col] = depKey.split('-').map(Number);
+        console.log(`[Formulas] Recalculating ${depKey} (${colToLetter(col)}${row + 1}): ${formula}`);
+        // Пересчитываем формулу
+        const result = previewFormula(formula, (cellRef) => {
+            const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
+            if (!match)
+                return '';
+            const refCol = letterToCol(match[1]);
+            const refRow = parseInt(match[2]) - 1;
+            const refKey = getCellKey(refRow, refCol);
+            const cellData = data.get(refKey);
+            return cellData?.value || '';
+        });
+        const finalValue = String(result.value);
+        // ✅ Обновляем значение в ячейке, сохраняя формулу
+        if (finalValue || formula) {
+            const updatedData = {
+                value: finalValue,
+                formula: formula, // Сохраняем формулу
+                ...(depCellData?.style && { style: depCellData.style }) // Сохраняем стили если есть
+            };
+            data.set(depKey, updatedData);
+        }
+        else {
+            data.delete(depKey);
+        }
+        // Обновить ячейку на экране
+        updateSingleCell(row, col);
+        console.log(`[Formulas] Updated ${depKey} = ${finalValue}`);
+        // Рекурсивно пересчитываем зависимые ячейки от этой ячейки
+        // (если эта формула сама влияет на другие)
+        recalculateDependentCells(depKey, data);
     }
 }
 /**
@@ -1443,11 +1542,15 @@ document.addEventListener('mousedown', (e) => {
     if (state.isEditing) {
         const clickTarget = e.target;
         const input = getGlobalCellInput();
-        // Если клик на input - не закрываем редактор
+        const formulaBar = elements.formulaInput;
+        // Если клик на input или formula bar - не закрываем редактор
         if (clickTarget === input || input.contains(clickTarget)) {
             return;
         }
-        // Клик вне input - закрываем редактор и выделяем кликнутую ячейку
+        if (clickTarget === formulaBar || formulaBar.contains(clickTarget)) {
+            return;
+        }
+        // Клик вне input и formula bar - закрываем редактор и выделяем кликнутую ячейку
         finishEditing();
         // Если кликнули на другую ячейку - выделяем её
         const cell = e.target.closest('.cell');
@@ -1509,9 +1612,9 @@ function updateFormulaBar() {
     const key = getCellKey(row, col);
     const data = getCurrentData();
     const cellData = data.get(key);
-    // Показываем в формула баре только формулы (начинающиеся с =)
-    const value = cellData?.value || '';
-    elements.formulaInput.value = value.startsWith('=') ? value : '';
+    // ✅ Показываем в формула баре формулу если есть, иначе значение
+    const value = cellData?.formula || cellData?.value || '';
+    elements.formulaInput.value = value;
 }
 // === ОБНОВЛЕНИЕ ССЫЛКИ НА ЯЧЕЙКУ ===
 function updateCellReference() {
@@ -1600,7 +1703,13 @@ function setupCellEventListeners() {
         handleGlobalInputChange(e);
     });
     // Blur - завершить редактирование
-    globalInput.addEventListener('blur', () => {
+    globalInput.addEventListener('blur', (e) => {
+        // Проверить, не перешёл ли фокус на formula bar
+        const relatedTarget = e.relatedTarget;
+        if (relatedTarget === elements.formulaInput) {
+            // Фокус перешёл на formula bar - не завершать редактирование
+            return;
+        }
         if (state.isEditing) {
             finishEditing(true);
         }
@@ -3180,14 +3289,33 @@ function setupEventListeners() {
     // Контекстное меню (ПКМ)
     setupContextMenu();
     setupSheetContextMenu();
-    // Формула бар - выпадающий список формул
+    // Формула бар - редактирование и выпадающий список формул
     elements.formulaInput.addEventListener('input', (e) => {
         const value = e.target.value;
         const { row, col } = state.selectedCell;
         const cell = getCellElement(row, col);
         const data = getCurrentData();
         if (cell) {
-            cell.textContent = value;
+            // ✅ Live preview: показываем в ячейке что вводишь
+            if (value.startsWith('=')) {
+                // Это формула - показываем результат preview
+                const result = previewFormula(value, (cellRef) => {
+                    const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
+                    if (!match)
+                        return '';
+                    const refCol = letterToCol(match[1]);
+                    const refRow = parseInt(match[2]) - 1;
+                    const refKey = getCellKey(refRow, refCol);
+                    const cellData = data.get(refKey);
+                    return cellData?.value || '';
+                });
+                cell.textContent = String(result.value);
+                console.log(`[FormulaBar Live] Formula ${value} → ${result.value}`);
+            }
+            else {
+                // Обычное значение - показываем как есть
+                cell.textContent = value;
+            }
             if (value) {
                 data.set(getCellKey(row, col), { value });
             }
@@ -3221,14 +3349,85 @@ function setupEventListeners() {
             return;
         if (e.key === 'Enter') {
             e.preventDefault();
+            // ✅ Сохранить изменения из formula bar как если бы редактировали через global input
+            const { row, col } = state.selectedCell;
+            const key = getCellKey(row, col);
+            const inputValue = elements.formulaInput.value;
+            const data = getCurrentData();
+            const oldValue = data.get(key);
+            console.log(`[FormulaBar] Saving: ${inputValue}`);
+            // ✅ НОВАЯ ЛОГИКА: Разделяем формулу и результат
+            let finalValue = inputValue; // То что будет отображаться в ячейке
+            let isFormula = false;
+            // Вычислить формулу если есть
+            if (inputValue.startsWith('=')) {
+                isFormula = true;
+                const result = previewFormula(inputValue, (cellRef) => {
+                    const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
+                    if (!match)
+                        return '';
+                    const refCol = letterToCol(match[1]);
+                    const refRow = parseInt(match[2]) - 1;
+                    const cellKey = getCellKey(refRow, refCol);
+                    const cellData = data.get(cellKey);
+                    return cellData?.value || '';
+                });
+                finalValue = String(result.value);
+                // Зарегистрировать формулу для реактивного обновления
+                removeFormula(key);
+                registerFormula(key, inputValue, (ref, formula) => {
+                    state.cellFormulas.set(ref, formula);
+                    console.log(`[Formulas] Registered: ${ref} = ${formula}`);
+                });
+                state.cellFormulas.set(key, inputValue);
+            }
+            else {
+                // Если ввели обычное значение, удалить формулу
+                removeFormula(key);
+                if (state.cellFormulas.has(key)) {
+                    state.cellFormulas.delete(key);
+                }
+            }
+            // ✅ Сохраняем в data:
+            // - value: результат для отображения в ячейке
+            // - formula: саму формулу для показа в formula bar
+            const cellDataToSave = {
+                value: finalValue,
+                ...(isFormula && { formula: inputValue }), // Сохраняем формулу если это формула
+                ...oldValue // Сохраняем прежние стили и другие поля
+            };
+            if (finalValue || isFormula) {
+                data.set(key, cellDataToSave);
+            }
+            else {
+                data.delete(key);
+            }
+            pushUndo(key, oldValue);
+            updateAIDataCache();
+            // ✅ Пересчитать зависимые ячейки
+            recalculateDependentCells(key, data);
+            updateSingleCell(row, col);
+            updateFormulaBar(); // Обновить formula bar после сохранения
             elements.formulaInput.blur();
-            const cell = getCellElement(state.selectedCell.row, state.selectedCell.col);
+            const cell = getCellElement(row, col);
             cell?.focus();
         }
         else if (e.key === 'Escape') {
             e.preventDefault();
             hideFormulaSuggestions(elements.formulaSuggestions);
             elements.formulaInput.blur();
+            updateFormulaBar(); // Вернуть исходное значение
+        }
+    });
+    // ✅ При фокусе на formula bar - выделить весь текст для удобного редактирования
+    elements.formulaInput.addEventListener('focus', (e) => {
+        const input = e.target;
+        input.select(); // Выделить весь текст для быстрого редактирования
+    });
+    // ✅ При потере фокуса на formula bar - завершить редактирование
+    elements.formulaInput.addEventListener('blur', () => {
+        if (state.isEditing) {
+            finishEditing(true);
         }
     });
     // Скрыть список формул при клике вне
@@ -5081,6 +5280,9 @@ function setupFillHandle() {
                 }
                 if (finalValue) {
                     const newCellData = { value: finalValue };
+                    if (sourceData?.formula) {
+                        newCellData.formula = sourceData.formula;
+                    }
                     if (sourceData?.style) {
                         newCellData.style = { ...sourceData.style };
                     }
