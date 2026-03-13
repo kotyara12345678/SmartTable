@@ -1134,16 +1134,21 @@ function editCell(row: number, col: number, selectAll: boolean = true): void {
   // Установить значение в input
   input.value = cellData?.value || '';
   
-  // Позиционировать input над ячейкой
-  const rect = cell.getBoundingClientRect();
+  // Позиционировать input над ячейкой с учетом скролла
   const wrapper = elements.cellGridWrapper;
-  const wrapperRect = wrapper.getBoundingClientRect();
   
-  // Позиция относительно экрана
-  input.style.left = rect.left + 'px';
-  input.style.top = rect.top + 'px';
-  input.style.width = rect.width + 'px';
-  input.style.height = rect.height + 'px';
+  // Координаты ячейки: row * hauteur + column * largeur
+  const cellLeft = col * CONFIG.CELL_WIDTH;
+  const cellTop = row * CONFIG.CELL_HEIGHT;
+  
+  // Позиция относительно скролл-контейнера (с учетом скролла)
+  const posLeft = cellLeft - wrapper.scrollLeft;
+  const posTop = cellTop - wrapper.scrollTop;
+  
+  input.style.left = posLeft + 'px';
+  input.style.top = posTop + 'px';
+  input.style.width = CONFIG.CELL_WIDTH + 'px';
+  input.style.height = CONFIG.CELL_HEIGHT + 'px';
   input.style.font = window.getComputedStyle(cell).font;
   
   // Добавить класс для показа input
@@ -3075,7 +3080,34 @@ function setupKeyboardController(): void {
   console.log('[KeyboardController] Setup complete');
 }
 
+// === СИНХРОНИЗАЦИЯ ПОЗИЦИИ INPUT ПРИ СКРОЛЛЕ ===
+function syncInputPositionWithScroll(): void {
+  if (!state.isEditing) return;
+  
+  const { row, col } = state.editingCell;
+  const input = getGlobalCellInput();
+  const wrapper = elements.cellGridWrapper;
+  
+  // Пересчитываем позицию с учетом текущего скролла
+  const cellLeft = col * CONFIG.CELL_WIDTH;
+  const cellTop = row * CONFIG.CELL_HEIGHT;
+  
+  const posLeft = cellLeft - wrapper.scrollLeft;
+  const posTop = cellTop - wrapper.scrollTop;
+  
+  input.style.left = posLeft + 'px';
+  input.style.top = posTop + 'px';
+}
+
 function setupEventListeners(): void {
+  // Обработчик скролла таблицы - синхронизировать позицию input
+  elements.cellGridWrapper.addEventListener('scroll', () => {
+    syncInputPositionWithScroll();
+    // Также обновляем видимый диапазон при скролле
+    calculateVisibleRange();
+    renderVisibleCells();
+  });
+
   // Переключение вкладок меню
   document.querySelectorAll('.menu-item').forEach(item => {
     item.addEventListener('click', () => {

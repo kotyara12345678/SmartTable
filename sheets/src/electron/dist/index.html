@@ -45,7 +45,7 @@
     #charts-container > * { pointer-events: auto; }
     /* Глобальный input для редактирования ячеек */
     #global-cell-input {
-      position: fixed;
+      position: absolute;
       display: none;
       border: 2px solid #4a90e2;
       background: white;
@@ -55,6 +55,8 @@
       z-index: 5000;
       box-sizing: border-box;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      top: 0;
+      left: 0;
     }
     #global-cell-input.editing {
       display: block;
@@ -597,9 +599,6 @@
   <!-- Formula Bar -->
   <div id="formula-bar-container"></div>
 
-  <!-- Глобальный Input для редактирования ячеек -->
-  <input type="text" id="global-cell-input" spellcheck="false" autocomplete="off">
-
   <!-- Spreadsheet -->
   <div id="spreadsheet-container">
     <main class="spreadsheet-container" style="height:100%;overflow:auto;">
@@ -608,6 +607,8 @@
         <div class="column-headers" id="columnHeaders"></div>
         <div class="row-headers" id="rowHeaders"></div>
         <div class="cell-grid-wrapper" id="cellGridWrapper">
+          <!-- Глобальный Input для редактирования ячеек -->
+          <input type="text" id="global-cell-input" spellcheck="false" autocomplete="off">
           <div class="cell-grid" id="cellGrid"></div>
         </div>
       </div>
