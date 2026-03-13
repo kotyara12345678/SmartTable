@@ -5,6 +5,7 @@ console.log('[Renderer] Script loaded!');
 import { calculateCellFormula as calcFormula, previewFormula, validateFormula, saveActiveCell, showFormulaSuggestions, hideFormulaSuggestions, handleFormulaSuggestionsKeydown, insertFormula } from './formulabar/formulas-renderer.js';
 import { registerFormula, removeFormula, getDependentCells, extractCellReferences } from '../core/formulas/formula-dependencies.js';
 import FocusManager from '../core/focus/FocusManager.js';
+import KeyboardController from '../core/keyboard-controller.js';
 import TemplateManager from '../core/template-manager/TemplateManager.js';
 import { TemplateManagerComponent } from '../core/template-manager/TemplateManagerComponent.js';
 
@@ -42,6 +43,7 @@ const MAX_CACHED_CELLS = 5000;
 // === СОСТОЯНИЕ ===
 const state = {
   selectedCell: { row: 0, col: 0 },
+  editingCell: { row: -1, col: -1 }, // Текущая редактируемая ячейка
   sheetsData: new Map(),
   sheets: [{ id: 1, name: 'Лист 1' }],
   currentSheet: 1,
@@ -389,6 +391,9 @@ type AIMode = 'assistant' | 'agent';
 // Глобальный ipcRenderer
 let ipcRenderer: any;
 
+// Контроллер клавиатуры
+let keyboardController: KeyboardController;
+
 // Режим ИИ: 'assistant' или 'agent'
 let aiMode: AIMode = 'assistant';
 let pendingModeSwitch: AIMode | null = null;
@@ -423,6 +428,16 @@ function updateAIDataCache(): void {
     if (a.row !== b.row) return a.row - b.row;
     return a.col - b.col;
   });
+}
+
+// === ГЛОБАЛЬНЫЙ INPUT ДЛЯ РЕДАКТИРОВАНИЯ ===
+let globalCellInput: HTMLInputElement | null = null;
+
+function getGlobalCellInput(): HTMLInputElement {
+  if (!globalCellInput) {
+    globalCellInput = document.getElementById('global-cell-input') as HTMLInputElement;
+  }
+  return globalCellInput;
 }
 
 // === DOM ЭЛЕМЕНТЫ ===
@@ -655,12 +670,41 @@ async function init(): Promise<void> {
     ipcRenderer.on('export', (event: any, format: string) => {
       exportData(format as 'csv' | 'xlsx' | 'json' | 'html');
     });
+    
+    // Обработчик очистки кэша из хаба
+    ipcRenderer.on('clear-cache', async () => {
+      console.log('[Renderer] Received clear-cache event from hub');
+      try {
+        // Завершаем редактирование если оно активно
+        if (state.isEditing) {
+          finishEditing();
+        }
+        
+        // Очищаем всё состояние
+        clearAllState();
+        
+        // Очищаем localStorage полностью
+        localStorage.removeItem('smarttable-autosave');
+        localStorage.removeItem('smarttable-data-validations');
+        
+        // Перерендериваем таблицу
+        renderCells();
+        updateAIDataCache();
+        updateCellReference();
+        
+        console.log('[Renderer] Cache cleared and table reinitialized');
+      } catch (error) {
+        console.error('[Renderer] Error during cache clearing:', error);
+      }
+    });
   } else {
     console.warn('[Renderer] ipcRenderer not initialized, close-app handler not registered');
   }
 
   console.log('[Renderer] Starting setupEventListeners');
   setupEventListeners();
+  console.log('[Renderer] Starting setupKeyboardController');
+  setupKeyboardController();
   console.log('[Renderer] Starting updateCellReference');
   updateCellReference();
 
@@ -847,6 +891,11 @@ function renderVisibleCells(): void {
 
   for (let row = rowStart; row < rowEnd; row++) {
     for (let col = colStart; col < colEnd; col++) {
+      // ⚠️ ВАЖНО: Пропускаем редактируемую ячейку - на нее наложен input!
+      if (state.editingCell.row === row && state.editingCell.col === col) {
+        continue;
+      }
+
       const cell = document.createElement('div');
       cell.className = 'cell';
       cell.dataset.row = row.toString();
@@ -1072,115 +1121,147 @@ function getCellElement(row: number, col: number): HTMLDivElement | null {
   return elements.cellGrid.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`) as HTMLDivElement | null;
 }
 
-// === РЕДАКТИРОВАНИЕ ===
+// === РЕДАКТИРОВАНИЕ (ГЛОБАЛЬНЫЙ INPUT) ===
 function editCell(row: number, col: number, selectAll: boolean = true): void {
   const cell = getCellElement(row, col);
   if (!cell) return;
 
+  const input = getGlobalCellInput();
+  const data = getCurrentData();
+  const key = getCellKey(row, col);
+  const cellData = data.get(key);
+  
+  // Установить значение в input
+  input.value = cellData?.value || '';
+  
+  // Позиционировать input над ячейкой
+  const rect = cell.getBoundingClientRect();
+  const wrapper = elements.cellGridWrapper;
+  const wrapperRect = wrapper.getBoundingClientRect();
+  
+  // Позиция относительно экрана
+  input.style.left = rect.left + 'px';
+  input.style.top = rect.top + 'px';
+  input.style.width = rect.width + 'px';
+  input.style.height = rect.height + 'px';
+  input.style.font = window.getComputedStyle(cell).font;
+  
+  // Добавить класс для показа input
+  input.classList.add('editing');
+  
+  // Запомнить редактируемую ячейку
+  state.editingCell = { row, col };
   state.isEditing = true;
+  
+  // Добавить класс к ячейке для визуальной подсветки
   cell.classList.add('editing');
-  // Убираем класс has-content, курсор не будет виден в пустой ячейке
-  cell.classList.remove('has-content');
-  cell.contentEditable = 'true';
-  cell.focus();
-
-  // Выделить весь текст или поставить курсор в конец
+  
+  // Focus и выделение текста
+  input.focus();
   if (selectAll) {
-    const range = document.createRange();
-    range.selectNodeContents(cell);
-    const sel = window.getSelection();
-    sel?.removeAllRanges();
-    sel?.addRange(range);
+    input.select();
   }
-  // Если selectAll = false, курсор останется там, где кликнули
+  
+  updateFormulaBar();
 }
 
-function finishEditing(): void {
-  const cell = getCellElement(state.selectedCell.row, state.selectedCell.col);
-  if (!cell) return;
+function finishEditing(save: boolean = true): void {
+  if (state.editingCell.row === -1) return; // Нет редактируемой ячейки
+  
+  const input = getGlobalCellInput();
+  const { row, col } = state.editingCell;
+  const cell = getCellElement(row, col);
+  
+  if (!cell) {
+    resetEditing();
+    return;
+  }
 
   state.isEditing = false;
   cell.classList.remove('editing');
-  cell.classList.remove('has-content');
-  cell.contentEditable = 'false';
+  input.classList.remove('editing');
 
-  // Сохранить данные
-  const key = getCellKey(state.selectedCell.row, state.selectedCell.col);
-  const inputValue = cell.textContent || '';
-  const data = getCurrentData();
-  const oldValue = data.get(key);
+  if (save) {
+    // Сохранить данные
+    const key = getCellKey(row, col);
+    const inputValue = input.value;
+    const data = getCurrentData();
+    const oldValue = data.get(key);
 
-  // Вычислить формулу если есть
-  let finalValue = inputValue;
-  if (inputValue.startsWith('=')) {
-    const getCellValue = (row: number, col: number): string => {
-      const cellKey = getCellKey(row, col);
-      const cellData = data.get(cellKey);
-      return cellData?.value || '';
-    };
+    // Вычислить формулу если есть
+    let finalValue = inputValue;
+    if (inputValue.startsWith('=')) {
+      const result = previewFormula(inputValue, (cellRef: string) => {
+        const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
+        if (!match) return '';
+        const col = match[1].toUpperCase().charCodeAt(0) - 65;
+        const row = parseInt(match[2]) - 1;
+        const cellKey = getCellKey(row, col);
+        const cellData = data.get(cellKey);
+        return cellData?.value || '';
+      });
 
-    // Используем previewFormula для получения полного результата
-    const result = previewFormula(inputValue, (cellRef: string) => {
-      const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
-      if (!match) return '';
-      const col = match[1].toUpperCase().charCodeAt(0) - 65;
-      const row = parseInt(match[2]) - 1;
-      const cellKey = getCellKey(row, col);
-      const cellData = data.get(cellKey);
-      return cellData?.value || '';
-    });
+      finalValue = String(result.value);
 
-    finalValue = String(result.value);
+      // Обработка формулы COLOR
+      if (result.value === '#COLOR_COMMAND' && result.colorName) {
+        applyColorFromFormula(result, data);
+        finalValue = ''; // COLOR не отображает значение в ячейке
+      }
+      
+      // Зарегистрировать формулу для реактивного обновления
+      registerFormula(key, inputValue, (ref, formula) => {
+        state.cellFormulas.set(ref, formula);
+      });
+    } else {
+      // Если ввели обычное значение, удалить формулу
+      removeFormula(key);
+    }
 
-    // Обработка формулы COLOR
-    if (result.value === '#COLOR_COMMAND' && result.colorName) {
-      applyColorFromFormula(result, data);
-      finalValue = ''; // COLOR не отображает значение в ячейке
+    if (finalValue) {
+      data.set(key, { value: finalValue });
+    } else {
+      data.delete(key);
+    }
+
+    pushUndo(key, oldValue);
+    updateAIDataCache();
+    updateFormulaBar();
+    
+    // Реактивное обновление зависимых ячеек
+    if (inputValue.startsWith('=')) {
+      recalculateDependentCells(key, data);
     }
     
-    // Зарегистрировать формулу для реактивного обновления
-    registerFormula(key, inputValue, (ref, formula) => {
-      state.cellFormulas.set(ref, formula);
-    });
-  } else {
-    // Если ввели обычное значение, удалить формулу
-    removeFormula(key);
-  }
+    updateSingleCell(row, col);
 
-  if (finalValue) {
-    data.set(key, { value: finalValue });
-  } else {
-    data.delete(key);
-  }
-
-  pushUndo(key, oldValue);
-  updateAIDataCache();
-  updateFormulaBar();
-  
-  // Реактивное обновление зависимых ячеек
-  if (inputValue.startsWith('=')) {
-    recalculateDependentCells(key, data);
-  }
-  
-  updateSingleCell(state.selectedCell.row, state.selectedCell.col);
-
-  // Автоподбор ширины если включен
-  const autoFitEnabled = localStorage.getItem('smarttable-auto-fit-columns') === 'true';
-  if (autoFitEnabled && finalValue) {
-    autoFitColumn(state.selectedCell.col);
-  }
-
-  // === ВАЖНО: Восстановление фокуса через Focus Manager ===
-  setTimeout(() => {
-    const currentFocused = document.activeElement;
-    if (currentFocused === cell) {
-      cell.blur();
+    // Автоподбор ширины если включен
+    const autoFitEnabled = localStorage.getItem('smarttable-auto-fit-columns') === 'true';
+    if (autoFitEnabled && finalValue) {
+      autoFitColumn(col);
     }
-    
-    // Восстановить фокус на активной ячейке
-    FocusManager.restoreFocus();
-  }, 100);
+
+    // Сохраняем данные в localStorage
+    autoSave();
+  }
+
+  resetEditing();
 }
+
+function resetEditing(): void {
+  const input = getGlobalCellInput();
+  input.value = '';
+  input.classList.remove('editing');
+  state.editingCell = { row: -1, col: -1 };
+  state.isEditing = false;
+  
+  // Убрать класс editing со всех ячеек
+  elements.cellGrid.querySelectorAll('.cell.editing').forEach(cell => {
+    cell.classList.remove('editing');
+  });
+}
+
+// === РЕДАКТИРОВАНИЕ (СТАРЫЕ ФУНКЦИИ - УДАЛЕНЫ) ===
 
 /**
  * Реактивное пересчитывание зависимых ячеек
@@ -1586,163 +1667,81 @@ function autoFitColumn(col: number): void {
   }
 }
 
-// Завершить редактирование при клике вне ячейки
+// Завершить редактирование при клике вне input
 document.addEventListener('mousedown', (e) => {
   if (state.isEditing) {
-    const cell = e.target as HTMLElement;
-    if (!cell.classList.contains('cell') && !cell.closest('.cell')) {
-      finishEditing();
+    const clickTarget = e.target as HTMLElement;
+    const input = getGlobalCellInput();
+    
+    // Если клик на input - не закрываем редактор
+    if (clickTarget === input || input.contains(clickTarget)) {
+      return;
+    }
+    
+    // Клик вне input - закрываем редактор и выделяем кликнутую ячейку
+    finishEditing();
+    
+    // Если кликнули на другую ячейку - выделяем её
+    const cell = (e.target as HTMLElement).closest('.cell') as HTMLElement;
+    if (cell) {
+      const row = parseInt(cell.dataset.row || '0');
+      const col = parseInt(cell.dataset.col || '0');
+      selectCell(row, col);
     }
   }
 });
 
-function handleCellKeyDown(e: KeyboardEvent): void {
-  if (state.isEditing) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      finishEditing();
-      // Перейти к следующей ячейке
-      const nextRow = Math.min(state.selectedCell.row + 1, CONFIG.ROWS - 1);
-      selectCell(nextRow, state.selectedCell.col);
-    } else if (e.key === 'Tab') {
-      e.preventDefault();
-      finishEditing();
-      const nextCol = e.shiftKey 
-        ? Math.max(0, state.selectedCell.col - 1)
-        : Math.min(CONFIG.COLS - 1, state.selectedCell.col + 1);
-      selectCell(state.selectedCell.row, nextCol);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      // Отменить изменения
-      const cell = getCellElement(state.selectedCell.row, state.selectedCell.col);
-      const key = getCellKey(state.selectedCell.row, state.selectedCell.col);
-      const data = getCurrentData();
-      const cellData = data.get(key);
-      if (cell) {
-        cell.textContent = cellData?.value || '';
-      }
-      finishEditing();
-    }
-    return;
-  }
-  
-  const { row, col } = state.selectedCell;
-  
-  switch (e.key) {
-    case 'Enter':
-      e.preventDefault();
-      editCell(row, col);
-      break;
-    case 'Tab':
-      e.preventDefault();
-      const nextCol = e.shiftKey 
-        ? Math.max(0, col - 1)
-        : Math.min(CONFIG.COLS - 1, col + 1);
-      selectCell(row, nextCol);
-      break;
-    case 'ArrowUp':
-      if (row > 0) selectCell(row - 1, col);
-      break;
-    case 'ArrowDown':
-      if (row < CONFIG.ROWS - 1) selectCell(row + 1, col);
-      break;
-    case 'ArrowLeft':
-      if (col > 0) selectCell(row, col - 1);
-      break;
-    case 'ArrowRight':
-      if (col < CONFIG.COLS - 1) selectCell(row, col + 1);
-      break;
-    case 'Backspace':
-    case 'Delete':
-      const cell = getCellElement(row, col);
-      const data = getCurrentData();
-      if (cell) {
-        cell.textContent = '';
-        data.delete(getCellKey(row, col));
-        updateAIDataCache(); // Обновить кэш
-        updateFormulaBar();
-      }
-      break;
-    case 'F2':
-      e.preventDefault();
-      editCell(row, col);
-      break;
-    default:
-      // Начать редактирование при вводе символа (буква, цифра, знак)
-      // Не реагируем на модификаторы и специальные клавиши
-      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault();
-        editCellWithChar(row, col, e.key);
-      }
-      break;
+function handleGlobalInputKeyDown(e: KeyboardEvent): void {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    // Запомним текущую позицию ДО завершения редактирования
+    const currentRow = state.editingCell.row;
+    const currentCol = state.editingCell.col;
+    
+    finishEditing(true);
+    
+    // Перейти к следующей ячейке (используем сохраненную позицию)
+    const nextRow = Math.min(currentRow + 1, CONFIG.ROWS - 1);
+    selectCell(nextRow, currentCol);
+  } else if (e.key === 'Tab') {
+    e.preventDefault();
+    // Запомним текущую позицию ДО завершения редактирования
+    const currentRow = state.editingCell.row;
+    const currentCol = state.editingCell.col;
+    
+    finishEditing(true);
+    
+    const nextCol = e.shiftKey 
+      ? Math.max(0, currentCol - 1)
+      : Math.min(CONFIG.COLS - 1, currentCol + 1);
+    selectCell(currentRow, nextCol);
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    // Отменить изменения - закрыть без сохранения
+    finishEditing(false);
   }
 }
 
 // Редактирование ячейки с автоматическим вводом символа
 function editCellWithChar(row: number, col: number, char: string): void {
-  const cell = getCellElement(row, col);
-  if (!cell) return;
-
-  state.isEditing = true;
-  cell.classList.add('editing');
-  cell.contentEditable = 'true';
-  cell.focus();
-
-  // Устанавливаем символ и выделяем его для замены
-  cell.textContent = char;
-  // Добавляем класс для показа курсора
-  cell.classList.add('has-content');
+  editCell(row, col, false);
   
-  // Сохраняем данные
-  const key = getCellKey(row, col);
-  const data = getCurrentData();
-  const existingCellData = data.get(key);
-  const existingStyle = existingCellData?.style || {};
-  data.set(key, { value: char, style: existingStyle });
-
-  // Выделяем весь текст (символ) для последующей замены
-  const range = document.createRange();
-  range.selectNodeContents(cell);
-  const sel = window.getSelection();
-  sel?.removeAllRanges();
-  sel?.addRange(range);
+  const input = getGlobalCellInput();
+  input.value = char;
+  input.focus();
   
-  updateAIDataCache();
+  // Переместить курсор в конец
+  input.setSelectionRange(input.value.length, input.value.length);
+  
   updateFormulaBar();
-  autoSave();
 }
 
-function handleCellInput(e: Event): void {
-  // Авто-увеличение высоты ячейки при многострочном тексте
-  const cell = e.target as HTMLDivElement;
-  if (cell.classList.contains('editing')) {
-    // Обновляем кэш при каждом изменении в режиме редактирования
-    const row = parseInt(cell.dataset.row || '0');
-    const col = parseInt(cell.dataset.col || '0');
-    const key = getCellKey(row, col);
-    const data = getCurrentData();
-    const value = cell.textContent || '';
-
-    // Показываем/скрываем курсор в зависимости от наличия текста
-    if (value) {
-      cell.classList.add('has-content');
-    } else {
-      cell.classList.remove('has-content');
-    }
-
-    // Получаем существующий стиль ячейки
-    const existingCellData = data.get(key);
-    const existingStyle = existingCellData?.style || {};
-
-    if (value) {
-      // Сохраняем значение и стиль
-      data.set(key, { value, style: existingStyle });
-    } else {
-      // Если значение пустое, сохраняем стиль с пустым значением
-      data.set(key, { value: '', style: existingStyle });
-    }
-    updateAIDataCache();
-  }
+function handleGlobalInputChange(e: Event): void {
+  const input = e.target as HTMLInputElement;
+  if (!state.isEditing) return;
+  
+  // Обновляем formula bar в режиме реального времени
+  updateFormulaBar();
 }
 
 // === ФОРМУЛЫ ===
@@ -1811,11 +1810,6 @@ function setupCellEventListeners(): void {
     const row = parseInt(cell.dataset.row || '0');
     const col = parseInt(cell.dataset.col || '0');
 
-    // === ВАЖНО: Если застряло isEditing — завершаем принудительно! ===
-    if (state.isEditing) {
-      finishEditing();
-    }
-
     // Проверка на dropdown ячейку
     if (cell.dataset.hasDropdown === 'true') {
       selectCell(row, col);
@@ -1850,52 +1844,23 @@ function setupCellEventListeners(): void {
     editCell(row, col, true);
   });
 
-  // Обработка клавиатуры для ячеек
-  elements.cellGrid.addEventListener('keydown', (e: KeyboardEvent) => {
-    const cell = e.target as HTMLElement;
-    if (!cell.classList.contains('cell')) return;
-
-    handleCellKeyDown(e);
-  });
-
-  // Обработка ввода для ячеек
-  elements.cellGrid.addEventListener('input', (e: Event) => {
-    const cell = e.target as HTMLElement;
-    if (!cell.classList.contains('cell')) return;
-
-    handleCellInput(e);
+  // === ОБРАБОТЧИКИ ДЛЯ ГЛОБАЛЬНОГО INPUT ===
+  const globalInput = getGlobalCellInput();
+  
+  // Keydown для глобального input
+  globalInput.addEventListener('keydown', (e: KeyboardEvent) => {
+    handleGlobalInputKeyDown(e);
   });
   
-  // Обработка начала редактирования по клавише
-  elements.cellGrid.addEventListener('keypress', (e: KeyboardEvent) => {
-    const cell = (e.target as HTMLElement).closest('.cell') as HTMLElement;
-    if (!cell) return;
-
-    const row = parseInt(cell.dataset.row || '0');
-    const col = parseInt(cell.dataset.col || '0');
-
-    // === ЕСЛИ УЖЕ РЕДАКТИРУЕМ — НЕ ВМЕШИВАЕМСЯ! ===
-    // Позволяем браузеру обрабатывать ввод текста в editing ячейке
+  // Input event для обновления formula bar
+  globalInput.addEventListener('input', (e: Event) => {
+    handleGlobalInputChange(e);
+  });
+  
+  // Blur - завершить редактирование
+  globalInput.addEventListener('blur', () => {
     if (state.isEditing) {
-      const prevCell = getCellElement(state.selectedCell.row, state.selectedCell.col);
-      if (prevCell && prevCell !== cell) {
-        // Перешли к другой ячейке — завершаем предыдущее редактирование
-        console.log('[DEBUG keypress] Switching cells, finishing editing');
-        finishEditing();
-        // Начин������ем редактирование в новой ячейке
-        setTimeout(() => {
-          editCellWithChar(row, col, e.key);
-        }, 0);
-      }
-      // Если редактируем ту же ячейку — просто позволяем браузеру работать
-      return;
-    }
-
-    // Начинаем редактирование если нажата printable клавиша
-    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      console.log('[DEBUG keypress] Starting edit with char:', e.key);
-      editCellWithChar(row, col, e.key);
-      e.preventDefault(); // Предотвращаем дублирование символа
+      finishEditing(true);
     }
   });
 }
@@ -3018,6 +2983,96 @@ function addResizeHandles(element: HTMLElement): void {
   });
 
   element.appendChild(resizeHandle);
+}
+
+// === KEYBOARD CONTROLLER ===
+function setupKeyboardController(): void {
+  keyboardController = new KeyboardController({
+    // Навигация
+    onArrowUp: () => {
+      const { row, col } = state.selectedCell;
+      if (row > 0) selectCell(row - 1, col);
+    },
+    onArrowDown: () => {
+      const { row, col } = state.selectedCell;
+      if (row < CONFIG.ROWS - 1) selectCell(row + 1, col);
+    },
+    onArrowLeft: () => {
+      const { row, col } = state.selectedCell;
+      if (col > 0) selectCell(row, col - 1);
+    },
+    onArrowRight: () => {
+      const { row, col } = state.selectedCell;
+      if (col < CONFIG.COLS - 1) selectCell(row, col + 1);
+    },
+    
+    // Редактирование
+    onEnter: () => {
+      const { row, col } = state.selectedCell;
+      editCell(row, col);
+    },
+    onTab: (shiftKey: boolean) => {
+      const { row, col } = state.selectedCell;
+      const nextCol = shiftKey 
+        ? Math.max(0, col - 1)
+        : Math.min(CONFIG.COLS - 1, col + 1);
+      selectCell(row, nextCol);
+    },
+    onEscape: () => {
+      if (state.isEditing) {
+        finishEditing(false); // Отмена без сохранения
+      }
+    },
+    
+    // Удаление
+    onDelete: () => {
+      if (!state.isEditing) {
+        const { row, col } = state.selectedCell;
+        const cell = getCellElement(row, col);
+        const data = getCurrentData();
+        if (cell) {
+          cell.textContent = '';
+          data.delete(getCellKey(row, col));
+          updateAIDataCache();
+          updateFormulaBar();
+          autoSave();
+        }
+      }
+    },
+    onBackspace: () => {
+      if (!state.isEditing) {
+        const { row, col } = state.selectedCell;
+        const cell = getCellElement(row, col);
+        const data = getCurrentData();
+        if (cell) {
+          cell.textContent = '';
+          data.delete(getCellKey(row, col));
+          updateAIDataCache();
+          updateFormulaBar();
+          autoSave();
+        }
+      }
+    },
+    
+    // F2 - начать редактирование
+    onF2: () => {
+      const { row, col } = state.selectedCell;
+      editCell(row, col, true);
+    },
+    
+    // Ввод символа - начать редактирование
+    onChar: (char: string) => {
+      const { row, col } = state.selectedCell;
+      editCellWithChar(row, col, char);
+    },
+    
+    // Проверка состояния
+    isEditing: () => state.isEditing,
+    isSelecting: () => state.isSelecting,
+  });
+  
+  keyboardController.init();
+  console.log('[KeyboardController] Setup complete');
 }
 
 function setupEventListeners(): void {

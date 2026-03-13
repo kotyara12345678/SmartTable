@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: file:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://github.com; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: file:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:;">
   <title>SmartTable - Умная таблица</title>
   <link rel="stylesheet" href="ui/styles/variables.css">
   <link rel="stylesheet" href="ui/styles/top-bar.css">
@@ -43,6 +43,22 @@
     #context-menu-container { position: fixed; z-index: 10000; }
     #charts-container { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; pointer-events: none; }
     #charts-container > * { pointer-events: auto; }
+    /* Глобальный input для редактирования ячеек */
+    #global-cell-input {
+      position: fixed;
+      display: none;
+      border: 2px solid #4a90e2;
+      background: white;
+      font-family: inherit;
+      font-size: 14px;
+      padding: 4px 6px;
+      z-index: 5000;
+      box-sizing: border-box;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+    #global-cell-input.editing {
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -580,6 +596,9 @@
 
   <!-- Formula Bar -->
   <div id="formula-bar-container"></div>
+
+  <!-- Глобальный Input для редактирования ячеек -->
+  <input type="text" id="global-cell-input" spellcheck="false" autocomplete="off">
 
   <!-- Spreadsheet -->
   <div id="spreadsheet-container">
