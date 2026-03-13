@@ -1,29 +1,49 @@
-/* AI Panel Container - Microsoft Copilot Style */
+/* AI Panel Container - VS Code Style Side Panel */
 #ai-panel-container {
-  position: fixed;
-  top: 80px;
-  right: 20px;
-  bottom: 20px;
-  width: 500px;
-  max-width: calc(100vw - 40px);
-  z-index: 1000;
-  transform: translateX(120%);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 450px;
+  min-width: 300px;
+  max-width: 800px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-color);
+  border-left: 1px solid var(--border-color);
+  transform: translateX(100%);
+  transition: transform 0.2s ease;
 }
 
 #ai-panel-container.open {
   transform: translateX(0);
 }
 
+/* Resize handle для изменения ширины панели */
+#ai-panel-resize-handle {
+  position: absolute;
+  top: 0;
+  left: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 101;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+#ai-panel-resize-handle:hover,
+#ai-panel-resize-handle.resizing {
+  opacity: 1;
+  background: linear-gradient(to right, transparent, var(--primary-color), transparent);
+}
+
 /* AI Panel Component Styles */
 .ai-panel {
-  height: 100%;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--surface-color);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--border-color);
   overflow: hidden;
   position: relative;
 }

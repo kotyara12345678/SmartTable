@@ -3972,11 +3972,11 @@ function setupEventListeners(): void {
   const aiPanelContainer = document.getElementById('ai-panel-container');
   console.log('[Renderer] AI panel container:', !!aiPanelContainer);
   console.log('[Renderer] btnAI element:', !!elements.btnAI);
-  
+
   if (elements.btnAI && aiPanelContainer) {
     elements.btnAI.addEventListener('click', () => {
       console.log('[Renderer] AI button clicked');
-      aiPanelContainer.classList.add('open');
+      aiPanelContainer.classList.toggle('open');
     });
   }
 
@@ -3985,6 +3985,49 @@ function setupEventListeners(): void {
       console.log('[Renderer] Close AI button clicked');
       aiPanelContainer.classList.remove('open');
     });
+  }
+
+  // ==========================================
+  // === RESIZE HANDLE ДЛЯ AI ПАНЕЛИ ===
+  // ==========================================
+  const resizeHandle = document.getElementById('ai-panel-resize-handle');
+  if (resizeHandle && aiPanelContainer) {
+    let isResizing = false;
+    let startX = 0;
+    let startWidth = 0;
+
+    resizeHandle.addEventListener('mousedown', (e) => {
+      isResizing = true;
+      startX = e.clientX;
+      startWidth = aiPanelContainer.offsetWidth;
+      resizeHandle.classList.add('resizing');
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      const dx = startX - e.clientX;
+      const newWidth = startWidth + dx;
+      // Ограничения ширины
+      if (newWidth >= 300 && newWidth <= 800) {
+        aiPanelContainer.style.width = newWidth + 'px';
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isResizing) {
+        isResizing = false;
+        resizeHandle.classList.remove('resizing');
+        // Сохранить ширину в localStorage
+        localStorage.setItem('smarttable-ai-panel-width', aiPanelContainer.style.width);
+      }
+    });
+
+    // Восстановить ширину из localStorage
+    const savedWidth = localStorage.getItem('smarttable-ai-panel-width');
+    if (savedWidth) {
+      aiPanelContainer.style.width = savedWidth;
+    }
   }
   
   elements.btnClearChat.addEventListener('click', () => {

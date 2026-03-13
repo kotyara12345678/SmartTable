@@ -35,9 +35,9 @@
     #ribbon-container { flex-shrink: 0; }
     #formula-bar-container { flex-shrink: 0; display: none; }
     #formula-bar-container.visible { display: flex; }
+    #main-workspace { flex: 1; display: flex; overflow: hidden; position: relative; }
     #spreadsheet-container { flex: 1; overflow: hidden; position: relative; }
-    #ai-panel-container { position: fixed; top: 60px; right: 0; bottom: 0; width: 400px; z-index: 1000; transform: translateX(100%); transition: transform 0.3s; background: white; box-shadow: -2px 0 10px rgba(0,0,0,0.2); }
-    #ai-panel-container.open { transform: translateX(0); }
+    #ai-panel-container { width: 450px; min-width: 300px; max-width: 800px; }
     #extensions-panel-container { position: fixed; top: 60px; right: 0; bottom: 0; width: 450px; z-index: 1000; transform: translateX(100%); transition: transform 0.3s; background: var(--bg-secondary, #f5f5f5); box-shadow: -2px 0 10px rgba(0,0,0,0.2); }
     #extensions-panel-container.open { transform: translateX(0); }
     #context-menu-container { position: fixed; z-index: 10000; }
@@ -599,48 +599,55 @@
   <!-- Formula Bar -->
   <div id="formula-bar-container"></div>
 
-  <!-- Spreadsheet -->
-  <div id="spreadsheet-container">
-    <main class="spreadsheet-container" style="height:100%;overflow:auto;">
-      <div class="spreadsheet-wrapper">
-        <div class="corner-header"></div>
-        <div class="column-headers" id="columnHeaders"></div>
-        <div class="row-headers" id="rowHeaders"></div>
-        <div class="cell-grid-wrapper" id="cellGridWrapper">
-          <!-- Глобальный Input для редактирования ячеек -->
-          <input type="text" id="global-cell-input" spellcheck="false" autocomplete="off">
-          <div class="cell-grid" id="cellGrid"></div>
+  <!-- Main Workspace - содержит таблицу и AI панель -->
+  <div id="main-workspace">
+    <!-- Spreadsheet -->
+    <div id="spreadsheet-container">
+      <main class="spreadsheet-container" style="height:100%;overflow:auto;">
+        <div class="spreadsheet-wrapper">
+          <div class="corner-header"></div>
+          <div class="column-headers" id="columnHeaders"></div>
+          <div class="row-headers" id="rowHeaders"></div>
+          <div class="cell-grid-wrapper" id="cellGridWrapper">
+            <!-- Глобальный Input для редактирования ячеек -->
+            <input type="text" id="global-cell-input" spellcheck="false" autocomplete="off">
+            <div class="cell-grid" id="cellGrid"></div>
+          </div>
         </div>
+      </main>
+      <!-- Sheets Bar - абсолютно внизу -->
+      <footer class="sheets-bar">
+        <div class="sheets-left">
+          <button class="btn-sheet-nav" id="btnPrevSheet">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,18 9,12 15,6"/></svg>
+          </button>
+          <button class="btn-sheet-nav" id="btnNextSheet">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9,18 15,12 9,6"/></svg>
+          </button>
+          <div class="sheets-list" id="sheetsList"></div>
+          <button class="btn-add-sheet" id="btnAddSheet">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
+        <div class="sheets-right">
+          <span class="status-text" id="statusText">Готово</span>
+        </div>
+      </footer>
+      <div class="fill-handle" id="fillHandle"></div>
+      <!-- Выпадающий список формул -->
+      <div class="formula-suggestions" id="formulaSuggestions">
+        <div class="formula-suggestions-header">Формулы</div>
+        <div class="formula-suggestions-list" id="formulaSuggestionsList"></div>
       </div>
-    </main>
-    <!-- Sheets Bar - абсолютно внизу -->
-    <footer class="sheets-bar" style="position:absolute;bottom:0;left:0;right:0;z-index:100;">
-      <div class="sheets-left">
-        <button class="btn-sheet-nav" id="btnPrevSheet">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15,18 9,12 15,6"/></svg>
-        </button>
-        <button class="btn-sheet-nav" id="btnNextSheet">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9,18 15,12 9,6"/></svg>
-        </button>
-        <div class="sheets-list" id="sheetsList"></div>
-        <button class="btn-add-sheet" id="btnAddSheet">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
-      </div>
-      <div class="sheets-right">
-        <span class="status-text" id="statusText">Готово</span>
-      </div>
-    </footer>
-    <div class="fill-handle" id="fillHandle"></div>
-    <!-- Выпадающий список формул -->
-    <div class="formula-suggestions" id="formulaSuggestions">
-      <div class="formula-suggestions-header">Формулы</div>
-      <div class="formula-suggestions-list" id="formulaSuggestionsList"></div>
+    </div>
+
+    <!-- AI Panel - VS Code Style Side Panel -->
+    <div id="ai-panel-container">
+      <!-- Resize handle для изменения ширины -->
+      <div id="ai-panel-resize-handle"></div>
+      <!-- AI Panel Content -->
     </div>
   </div>
-
-  <!-- AI Panel -->
-  <div id="ai-panel-container"></div>
 
   <!-- Settings Panel -->
   <div id="settings-panel-container"></div>

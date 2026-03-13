@@ -352,6 +352,18 @@
   background: var(--bg-color);
   border-top: 1px solid var(--border-color);
   height: 40px;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  transition: right 0.2s ease;
+}
+
+/* Когда AI панель открыта - сдвигаем правый край */
+#ai-panel-container.open ~ #spreadsheet-container .sheets-bar,
+#main-workspace:has(#ai-panel-container.open) .sheets-bar {
+  right: 450px;
 }
 
 .sheets-left {
