@@ -1,0 +1,5 @@
+# GitHub Linguist overrides
+# Ignore website files for language stats
+sheets/src/web/** linguist-generated
+sheets/src/web/*.vue linguist-generated
+sheets/src/web/**/*.vue linguist-generated
