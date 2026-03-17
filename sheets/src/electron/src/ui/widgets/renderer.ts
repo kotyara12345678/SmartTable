@@ -1079,11 +1079,6 @@ function selectCell(row: number, col: number): void {
     prevColHeader.classList.remove('selected');
   }
 
-  // Проверяем, кликнули ли по той же ячейке второй раз подряд
-  const now = Date.now();
-  const isSameCell = lastSelectedCell && lastSelectedCell.row === row && lastSelectedCell.col === col;
-  const isQuickClick = now - lastSelectTime < 300; // 300мс между кликами
-
   // Выделить новую ячейку
   state.selectedCell = { row, col };
   const cell = getCellElement(row, col);
@@ -1091,7 +1086,7 @@ function selectCell(row: number, col: number): void {
   if (cell) {
     cell.classList.add('selected');
     cell.focus();
-    
+
     // Сообщить Focus Manager об активной ячейке
     FocusManager.setActiveCell(cell, { row, col });
   }
@@ -1124,14 +1119,9 @@ function selectCell(row: number, col: number): void {
     }
   }
 
-  // Если кликнули по той же ячейке второй раз — начинаем редактирование
-  if (isSameCell && isQuickClick) {
-    editCell(row, col);
-    lastSelectedCell = null; // Сбрасываем
-  } else {
-    lastSelectedCell = { row, col };
-    lastSelectTime = now;
-  }
+  // Запомнить последнюю выделенную ячейку для double-click
+  lastSelectedCell = { row, col };
+  lastSelectTime = Date.now();
 }
 
 function selectRow(row: number): void {
@@ -1924,7 +1914,7 @@ function setupRangeSelection(): void {
 
 // === ДЕЛЕГИРОВАНИЕ СОБЫТИЙ ЯЧЕЕК ===
 function setupCellEventListeners(): void {
-  // Клик по ячейке (выделение)
+  // Клик по ячейке (только выделение)
   elements.cellGrid.addEventListener('click', (e: MouseEvent) => {
     const cell = (e.target as HTMLElement).closest('.cell') as HTMLElement;
     if (!cell) return;
@@ -1942,15 +1932,11 @@ function setupCellEventListeners(): void {
       return;
     }
 
-    // Если ячейка уже выделена и содержит текст — начинаем редактирование
-    const isSameCell = state.selectedCell.row === row && state.selectedCell.col === col;
-    const cellHasContent = cell.textContent && cell.textContent.length > 0;
+    // Игнорируем клик если было выделение диапазона
+    if (state.isSelecting) return;
 
-    if (isSameCell && cellHasContent) {
-      editCell(row, col, false);
-    } else {
-      selectCell(row, col);
-    }
+    // Просто выделяем ячейку (без редактирования)
+    selectCell(row, col);
   });
 
   // Двойной клик (редактирование с выделением)
@@ -3188,13 +3174,7 @@ function setupKeyboardController(): void {
       const { row, col } = state.selectedCell;
       editCell(row, col, true);
     },
-    
-    // Ввод символа - начать редактирование
-    onChar: (char: string) => {
-      const { row, col } = state.selectedCell;
-      editCellWithChar(row, col, char);
-    },
-    
+
     // Проверка состояния
     isEditing: () => state.isEditing,
     isSelecting: () => state.isSelecting,
@@ -4073,13 +4053,8 @@ function setupEventListeners(): void {
     }
   });
 
-  elements.textColor?.addEventListener('input', (e) => {
-    applyStyle('color', (e.target as HTMLInputElement).value);
-  });
-  
-  elements.fillColor?.addEventListener('input', (e) => {
-    applyStyle('backgroundColor', (e.target as HTMLInputElement).value);
-  });
+  // Обработчики для RibbonComponent (через события)
+  // textColor и fillColor обрабатываются через text-color-change и fill-color-change события
 
   elements.fontFamily?.addEventListener('change', (e) => {
     applyStyle('fontFamily', (e.target as HTMLSelectElement).value);
@@ -4479,22 +4454,55 @@ function toggleBorders(): void {
 }
 
 function applyStyle(property: string, value: string): void {
-  const { row, col } = state.selectedCell;
-  const cell = getCellElement(row, col);
-  if (!cell) return;
-
-  const key = getCellKey(row, col);
   const data = getCurrentData();
-  const cellData = data.get(key) || { value: cell.textContent || '' };
-
-  if (!cellData.style) {
-    cellData.style = {};
+  
+  // Если есть выделенный диапазон - применяем ко всем ячейкам диапазона
+  if (state.selectionStart && state.selectionEnd) {
+    const minRow = Math.min(state.selectionStart.row, state.selectionEnd.row);
+    const maxRow = Math.max(state.selectionStart.row, state.selectionEnd.row);
+    const minCol = Math.min(state.selectionStart.col, state.selectionEnd.col);
+    const maxCol = Math.max(state.selectionStart.col, state.selectionEnd.col);
+    
+    // Применяем стиль ко всем ячейкам диапазона
+    for (let r = minRow; r <= maxRow; r++) {
+      for (let c = minCol; c <= maxCol; c++) {
+        const cell = getCellElement(r, c);
+        if (!cell) continue;
+        
+        const key = getCellKey(r, c);
+        const cellData = data.get(key) || { value: cell.textContent || '' };
+        
+        if (!cellData.style) {
+          cellData.style = {};
+        }
+        
+        cellData.style[property] = value;
+        (cell.style as any)[property] = value;
+        
+        data.set(key, cellData);
+      }
+    }
+  } else {
+    // Если нет диапазона - применяем к текущей ячейке
+    const { row, col } = state.selectedCell;
+    const cell = getCellElement(row, col);
+    if (!cell) return;
+    
+    const key = getCellKey(row, col);
+    const cellData = data.get(key) || { value: cell.textContent || '' };
+    
+    if (!cellData.style) {
+      cellData.style = {};
+    }
+    
+    cellData.style[property] = value;
+    (cell.style as any)[property] = value;
+    
+    data.set(key, cellData);
   }
-
-  cellData.style[property] = value;
-  (cell.style as any)[property] = value;
-
-  data.set(key, cellData);
+  
+  pushUndo('format', property);
+  autoSave();
 }
 
 // === ЛИСТЫ ===

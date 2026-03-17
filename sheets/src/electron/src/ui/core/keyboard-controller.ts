@@ -118,14 +118,9 @@ class KeyboardController {
         e.preventDefault();
         this.config.onF2?.();
         break;
-        
-      default:
-        // Начало редактирования с вводом символа
-        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-          e.preventDefault();
-          this.config.onChar?.(e.key);
-        }
-        break;
+
+      // Примечание: ввод символов для редактирования отключён
+      // Для начала редактирования используйте F2 или двойной клик
     }
   }
 
