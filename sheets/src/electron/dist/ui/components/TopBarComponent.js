@@ -160,6 +160,13 @@ export class TopBarComponent extends BaseComponent {
      * Показать меню приложения
      */
     showAppMenu() {
+        // Проверяем, открыто ли меню уже - если да, закрываем (toggle)
+        const existingMenu = document.querySelector('.app-context-menu');
+        if (existingMenu) {
+            existingMenu.remove();
+            document.querySelector('.app-export-menu')?.remove();
+            return;
+        }
         // Удаляем старое меню если есть
         const oldMenu = document.querySelector('.app-context-menu');
         if (oldMenu)
