@@ -1402,7 +1402,10 @@ function applyColorToSelection(type, color) {
             data.set(key, { value: '', style: newStyle });
         }
     }
+    // Обновляем выделение чтобы применить стили
+    updateRangeSelection();
     updateAIDataCache();
+    pushUndo('format', type);
     autoSave();
 }
 // Применение выравнивания текста
@@ -3528,12 +3531,8 @@ function setupEventListeners() {
             formulaBarContainer.classList.toggle('visible');
         }
     });
-    elements.textColor?.addEventListener('input', (e) => {
-        applyStyle('color', e.target.value);
-    });
-    elements.fillColor?.addEventListener('input', (e) => {
-        applyStyle('backgroundColor', e.target.value);
-    });
+    // Обработчики для RibbonComponent (через события)
+    // textColor и fillColor обрабатываются через text-color-change и fill-color-change события
     elements.fontFamily?.addEventListener('change', (e) => {
         applyStyle('fontFamily', e.target.value);
     });

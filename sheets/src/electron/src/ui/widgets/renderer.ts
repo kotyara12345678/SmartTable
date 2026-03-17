@@ -1634,7 +1634,10 @@ function applyColorToSelection(type: 'text' | 'fill', color: string): void {
     }
   }
 
+  // Обновляем выделение чтобы применить стили
+  updateRangeSelection();
   updateAIDataCache();
+  pushUndo('format', type);
   autoSave();
 }
 
