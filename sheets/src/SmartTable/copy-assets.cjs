@@ -1,10 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 
-// Исправляем пути - script находится в sheets/src/electron
-const projectRoot = path.join(__dirname, '..'); // sheets/src
-const srcDir = path.join(projectRoot, 'electron', 'src'); // sheets/src/electron/src
-const distDir = path.join(projectRoot, 'electron', 'dist'); // sheets/src/electron/dist
+// Исправляем пути - script находится в SmartTable
+const projectRoot = __dirname; // SmartTable
+const srcDir = path.join(projectRoot, 'src'); // SmartTable/src
+const distDir = path.join(projectRoot, 'dist'); // SmartTable/dist
 
 console.log('Project root:', projectRoot);
 console.log('Src dir:', srcDir);
