@@ -1,4 +1,6 @@
 // Проверка загрузки скрипта
+import {RunServer} from "@core/server/app/server";
+
 console.log('[Renderer] Script loaded!');
 
 // Импорт функций для работы с формулами
@@ -7966,6 +7968,9 @@ function importSheetsImpl(sheets: Array<{
 (window as any).FocusManager = FocusManager;
 console.log('[Renderer] FocusManager exported to window');
 // ==========================================
+
+// ЗАПУСК СЕРВЕРА
+
 
 // Экспорт для ES module
 export {};

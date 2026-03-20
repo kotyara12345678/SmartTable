@@ -1,76 +1,20 @@
 package main
 
 import (
-	"SmartServer/internal/core/service"
-	"SmartServer/pkg/requets"
-	"github.com/gin-gonic/gin"
+	"SmartServer/internal/fetcher"
+	"SmartServer/pkg/database"
+	"github.com/Payel-git-ol/azure/env"
 )
 
 func main() {
-	//database.InitDb()
-	r := gin.Default()
-	r.Use(gin.Recovery())
-	r.Use(gin.Logger())
+	database.InitDb()
+	port := env.MustGet("APP_PORT", "3663")
+	idMagazine := env.MustGet("IDMAGAZINE", "")
+	secretKey := env.MustGet("SERCETKEYMAGAZINE", "")
 
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"message": "Hello World",
-		})
-		return
-	})
+	var yookassaRepository fetcher.YookassaRepository
 
-	r.POST("/reg", func(c *gin.Context) {
-		var req requets.UserRequest
-		var userRepo service.UserRepository
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(500, gin.H{
-				"status":  "failed",
-				"message": err.Error(),
-			})
-			return
-		}
+	yookassaRepository.RegisterClient(idMagazine, secretKey)
 
-		err := userRepo.Reg(req)
-		if err != nil {
-			c.JSON(500, gin.H{
-				"status":  "failed",
-				"message": err.Error(),
-			})
-			return
-		}
-
-		c.JSON(200, gin.H{
-			"status": "success",
-		})
-		return
-	})
-
-	r.POST("/auth", func(c *gin.Context) {
-		var req requets.UserRequest
-		var userRepo service.UserRepository
-
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(500, gin.H{
-				"status":  "failed",
-				"message": err.Error(),
-			})
-			return
-		}
-
-		err := userRepo.Auth(req)
-		if err != nil {
-			c.JSON(500, gin.H{
-				"status":  "failed",
-				"message": err.Error(),
-			})
-			return
-		}
-
-		c.JSON(200, gin.H{
-			"status": "success",
-		})
-		return
-	})
-
-	r.Run(":8080")
+	RegisterRouters(port)
 }

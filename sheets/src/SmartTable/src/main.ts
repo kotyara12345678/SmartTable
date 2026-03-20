@@ -7,6 +7,7 @@ import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { registerIPCHandlers, cleanupIPCHandlers } from './ui/core/ipc-handlers.js';
+import {RunServer} from "@core/server/app/server";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

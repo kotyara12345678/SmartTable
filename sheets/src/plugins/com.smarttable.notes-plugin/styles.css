@@ -1,0 +1,560 @@
+/**
+ * Стили для Notes Plugin
+ * Современный дизайн с улучшенным UX
+ * Совместимость с темами SmartTable
+ */
+
+/* ===== Модальное окно ===== */
+.notes-modal {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.notes-window {
+  width: 100%;
+  max-width: 900px;
+  background: var(--bg-primary, #ffffff);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  max-height: 85vh;
+  height: 85vh;
+}
+
+/* ===== Заголовок ===== */
+.notes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #107c41 0%, #0d5c33 50%, #0a4a2a 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(16, 124, 65, 0.3);
+}
+
+.notes-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.notes-header-icon {
+  width: 32px;
+  height: 32px;
+  opacity: 0.95;
+}
+
+.notes-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.notes-close-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(10px);
+}
+
+.notes-close-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: rotate(90deg);
+}
+
+.notes-close-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* ===== Панель инструментов ===== */
+.notes-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: linear-gradient(180deg, #f8f9fa 0%, #f0f1f3 100%);
+  border-bottom: 1px solid #e1e4e8;
+  gap: 16px;
+}
+
+.notes-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #107c41 0%, #0d5c33 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(16, 124, 65, 0.25);
+}
+
+.notes-add-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(16, 124, 65, 0.35);
+  background: linear-gradient(135deg, #0d5c33 0%, #0a4a2a 100%);
+}
+
+.notes-add-btn:active {
+  transform: translateY(0);
+}
+
+.notes-add-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.notes-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.notes-count {
+  font-size: 14px;
+  color: #6b7280;
+  font-weight: 500;
+  background: #ffffff;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.notes-clear-btn {
+  width: 38px;
+  height: 38px;
+  border: none;
+  background: #fee2e2;
+  color: #dc2626;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.notes-clear-btn:hover {
+  background: #fecaca;
+  transform: scale(1.05);
+}
+
+.notes-clear-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ===== Список заметок ===== */
+.notes-list {
+  padding: 20px 24px;
+  background: #fafbfc;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  min-height: 400px;
+  max-height: calc(85vh - 160px);
+  scroll-behavior: smooth;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Скроллбар */
+.notes-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.notes-list::-webkit-scrollbar-track {
+  background: #f1f3f5;
+  border-radius: 4px;
+}
+
+.notes-list::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #107c41 0%, #0d5c33 100%);
+  border-radius: 4px;
+}
+
+.notes-list::-webkit-scrollbar-thumb:hover {
+  background: #0d5c33;
+}
+
+.notes-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 60px 20px;
+  color: #9ca3af;
+  text-align: center;
+}
+
+.notes-empty svg {
+  width: 64px;
+  height: 64px;
+  opacity: 0.3;
+  stroke: #9ca3af;
+}
+
+.notes-empty p {
+  font-size: 16px;
+  margin: 0;
+  color: #6b7280;
+}
+
+/* ===== Карточка заметки ===== */
+.note-item {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.note-item:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  border-color: #107c41;
+  transform: translateY(-2px);
+}
+
+.note-item:first-child {
+  margin-top: 0;
+}
+
+.note-item:last-child {
+  margin-bottom: 0;
+}
+
+.note-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  width: 100%;
+}
+
+.note-title {
+  flex: 1;
+  min-width: 200px;
+  padding: 10px 14px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  background: #ffffff;
+  color: #1f2937;
+  transition: all 0.2s;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.note-title::placeholder {
+  color: #9ca3af;
+  font-weight: 400;
+}
+
+.note-title:focus {
+  outline: none;
+  border-color: #107c41;
+  box-shadow: 0 0 0 4px rgba(16, 124, 65, 0.1);
+}
+
+.note-delete-btn {
+  width: 34px;
+  height: 34px;
+  border: none;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.note-delete-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+  transform: scale(1.1);
+}
+
+.note-delete-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.note-content {
+  width: 100%;
+  min-height: 100px;
+  padding: 14px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  resize: vertical;
+  background: #ffffff;
+  color: #374151;
+  transition: all 0.2s;
+  box-sizing: border-box;
+}
+
+.note-content::placeholder {
+  color: #9ca3af;
+}
+
+.note-content:focus {
+  outline: none;
+  border-color: #107c41;
+  box-shadow: 0 0 0 4px rgba(16, 124, 65, 0.1);
+}
+
+.note-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.note-status {
+  font-size: 12px;
+  font-weight: 600;
+  color: #10b981;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 0.3s;
+}
+
+.note-date {
+  font-size: 12px;
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+/* ===== Адаптивность ===== */
+@media (max-width: 768px) {
+  .notes-window {
+    max-width: 100%;
+    margin: 0;
+    border-radius: 0;
+    max-height: 100vh;
+  }
+
+  .notes-header {
+    padding: 16px 18px;
+  }
+
+  .notes-title {
+    font-size: 18px;
+  }
+
+  .notes-toolbar {
+    padding: 14px 18px;
+    flex-wrap: wrap;
+  }
+
+  .notes-list {
+    padding: 16px 18px;
+    min-height: 300px;
+  }
+
+  .note-item {
+    padding: 14px;
+  }
+}
+
+/* ===== Тёмная тема и совместимость с темами SmartTable ===== */
+/* SmartTable использует data-theme атрибут */
+[data-theme="dark"] .notes-window,
+.theme-dark .notes-window,
+.dark-mode .notes-window {
+  background: #1f2937;
+}
+
+[data-theme="dark"] .notes-toolbar,
+.theme-dark .notes-toolbar,
+.dark-mode .notes-toolbar {
+  background: linear-gradient(180deg, #374151 0%, #1f2937 100%);
+  border-bottom-color: #4b5563;
+}
+
+[data-theme="dark"] .notes-list,
+.theme-dark .notes-list,
+.dark-mode .notes-list {
+  background: #111827;
+}
+
+[data-theme="dark"] .notes-count,
+.theme-dark .notes-count,
+.dark-mode .notes-count {
+  background: #374151;
+  border-color: #4b5563;
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .note-item,
+.theme-dark .note-item,
+.dark-mode .note-item {
+  background: #1f2937;
+  border-color: #4b5563;
+}
+
+[data-theme="dark"] .note-title,
+[data-theme="dark"] .note-content,
+.theme-dark .note-title,
+.theme-dark .note-content,
+.dark-mode .note-title,
+.dark-mode .note-content {
+  background: #111827;
+  border-color: #4b5563;
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .note-title::placeholder,
+[data-theme="dark"] .note-content::placeholder,
+.theme-dark .note-title::placeholder,
+.theme-dark .note-content::placeholder,
+.dark-mode .note-title::placeholder,
+.dark-mode .note-content::placeholder {
+  color: #6b7280;
+}
+
+[data-theme="dark"] .note-title:focus,
+[data-theme="dark"] .note-content:focus,
+.theme-dark .note-title:focus,
+.theme-dark .note-content:focus,
+.dark-mode .note-title:focus,
+.dark-mode .note-content:focus {
+  border-color: #107c41;
+  box-shadow: 0 0 0 4px rgba(16, 124, 65, 0.25);
+}
+
+[data-theme="dark"] .note-footer,
+.theme-dark .note-footer,
+.dark-mode .note-footer {
+  border-top-color: #374151;
+}
+
+[data-theme="dark"] .notes-empty,
+.theme-dark .notes-empty,
+.dark-mode .notes-empty {
+  color: #9ca3af;
+}
+
+[data-theme="dark"] .notes-empty p,
+.theme-dark .notes-empty p,
+.dark-mode .notes-empty p {
+  color: #9ca3af;
+}
+
+/* Системная тёмная тема (резерв) */
+@media (prefers-color-scheme: dark) {
+  .notes-window {
+    background: #1f2937;
+  }
+
+  .notes-toolbar {
+    background: linear-gradient(180deg, #374151 0%, #1f2937 100%);
+    border-bottom-color: #4b5563;
+  }
+
+  .notes-list {
+    background: #111827;
+  }
+
+  .notes-count {
+    background: #374151;
+    border-color: #4b5563;
+    color: #e5e7eb;
+  }
+
+  .note-item {
+    background: #1f2937;
+    border-color: #4b5563;
+  }
+
+  .note-title,
+  .note-content {
+    background: #111827;
+    border-color: #4b5563;
+    color: #e5e7eb;
+  }
+
+  .note-title::placeholder,
+  .note-content::placeholder {
+    color: #6b7280;
+  }
+
+  .note-title:focus,
+  .note-content:focus {
+    border-color: #107c41;
+    box-shadow: 0 0 0 4px rgba(16, 124, 65, 0.25);
+  }
+
+  .note-footer {
+    border-top-color: #374151;
+  }
+
+  .notes-empty {
+    color: #9ca3af;
+  }
+
+  .notes-empty p {
+    color: #9ca3af;
+  }
+}
+
+/* ===== Анимации ===== */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.note-item {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.note-status {
+  animation: pulse 1.5s ease-in-out infinite;
+}
