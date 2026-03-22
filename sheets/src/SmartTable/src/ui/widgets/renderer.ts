@@ -1,4 +1,4 @@
-// Проверка загрузки скрипта
+﻿// Проверка загрузки скрипта
 import {RunServer} from "@core/server/app/server";
 
 console.log('[Renderer] Script loaded!');
@@ -10,6 +10,10 @@ import FocusManager from '../core/focus/FocusManager.js';
 import KeyboardController from '../core/keyboard-controller.js';
 import TemplateManager from '../core/template-manager/TemplateManager.js';
 import { TemplateManagerComponent } from '../core/template-manager/TemplateManagerComponent.js';
+// Импорт системы команд для Undo/Redo
+import { SetValueCommand, SetFormatCommand, MergeCellsCommand, InsertRowCommand, DeleteRowCommand, InsertColumnCommand, DeleteColumnCommand, getCurrentData } from '../core/commands.js';
+import { commandManager } from '../core/command-manager.js';
+import { storageService } from '../core/storage-service.js';
 
 // === КОНФИГУРАЦИЯ ===
 const CONFIG = {
@@ -85,72 +89,55 @@ state.activeSort.direction = null;
 state.sheetsData.set(1, new Map());
 
 // ==========================================
-// === UNDO/REDO ФУНКЦИИ ===
+// === UNDO/REDO ФУНКЦИИ (Command Pattern) ===
 // ==========================================
+
+/**
+ * Выполнить команду с сохранением в историю
+ * @deprecated Используйте напрямую commandManager.execute()
+ */
 function pushUndo(key: string, oldValue: any): void {
-  const MAX_UNDO = 50;
-  state.undoStack.push({ key, oldValue, newValue: state.sheetsData.get(state.currentSheet)?.get(key) });
-  if (state.undoStack.length > MAX_UNDO) {
-    state.undoStack.shift();
-  }
-  state.redoStack = []; // Очищаем redo при новом действии
-  console.log('[Undo] Pushed to undo stack, size:', state.undoStack.length);
-  
-  // Автосохранение после каждого изменения
+  // Эта функция оставлена для обратной совместимости
+  // Новый код должен использовать commandManager.execute()
+  console.warn('[pushUndo] Deprecated! Use commandManager.execute() instead');
   autoSave();
 }
 
+/**
+ * Отменить последнее действие
+ */
 function undo(): void {
-  if (state.undoStack.length === 0) {
-    console.log('[Undo] Nothing to undo');
-    return;
+  const renderer = (window as any).renderer;
+  const success = commandManager.undo();
+  if (success) {
+    console.log('[Undo] Successfully undone');
+    renderer?.renderCells?.();
+    renderer?.updateAIDataCache?.();
+    renderer?.updateFormulaBar?.();
+    autoSave();
   }
-  
-  const action = state.undoStack.pop()!;
-  const data = getCurrentData();
-  const currentValue = data.get(action.key);
-  
-  // Сохраняем текущее значение для redo
-  state.redoStack.push({ key: action.key, oldValue: currentValue, newValue: action.oldValue });
-  
-  // Восстанавливаем старое значение
-  if (action.oldValue) {
-    data.set(action.key, action.oldValue);
-  } else {
-    data.delete(action.key);
-  }
-  
-  console.log('[Undo] Undone:', action.key);
-  renderCells();
-  updateAIDataCache();
-  updateFormulaBar();
-  autoSave();
 }
 
+/**
+ * Повторить отмененное действие
+ */
 function redo(): void {
-  if (state.redoStack.length === 0) {
-    console.log('[Redo] Nothing to redo');
-    return;
+  const renderer = (window as any).renderer;
+  const success = commandManager.redo();
+  if (success) {
+    console.log('[Redo] Successfully redone');
+    renderer?.renderCells?.();
+    renderer?.updateAIDataCache?.();
+    renderer?.updateFormulaBar?.();
+    autoSave();
   }
-  
-  const action = state.redoStack.pop()!;
-  const data = getCurrentData();
-  
-  // Сохраняем текущее значение для undo
-  state.undoStack.push({ key: action.key, oldValue: data.get(action.key), newValue: action.newValue });
-  
-  // Восстанавливаем значение
-  if (action.newValue) {
-    data.set(action.key, action.newValue);
-  } else {
-    data.delete(action.key);
-  }
-  
-  console.log('[Redo] Redone:', action.key);
-  renderCells();
-  updateAIDataCache();
-  updateFormulaBar();
-  autoSave();
+}
+
+// Делаем функции доступными глобально
+if (typeof window !== 'undefined') {
+  (window as any).undo = undo;
+  (window as any).redo = redo;
+  (window as any).commandManager = commandManager;
 }
 
 // ==========================================
@@ -257,95 +244,58 @@ function showDropdownList(event: MouseEvent, cell: HTMLElement, row: number, col
 
 /**
  * Автосохранение данных таблицы
- * Использует AutoSaveManager если доступен, иначе сохраняет в localStorage
+ * Сохраняет в localStorage после каждого изменения
  */
 function autoSave(): void {
   try {
-    const dataToSave: any = {};
-    const currentData = getCurrentData();
-    currentData.forEach((value, key) => {
-      dataToSave[key] = value;
-    });
-
-    // Помечаем как измененное для AutoSaveManager
-    if ((window as any).markAutoSaveDirty) {
-      (window as any).markAutoSaveDirty();
-    }
-
-    // Сохраняем в localStorage для резервного копирования
-    localStorage.setItem('smarttable-autosave', JSON.stringify({
-      sheetsData: dataToSave,
-      currentSheet: state.currentSheet,
-      timestamp: Date.now()
-    }));
+    // Получаем sheetsData и sheets из state
+    const sheetsData = state.sheetsData;
+    const currentSheet = state.currentSheet;
+    const sheets = state.sheets;
+    
+    // Сохраняем через storageService
+    storageService.save(sheetsData, currentSheet, sheets);
+    
+    // Также делаем быстрое автосохранение
+    storageService.autoSave(sheetsData, currentSheet);
+    
+    console.log('[AutoSave] Data saved successfully');
   } catch (e) {
     console.error('[AutoSave] Error:', e);
   }
 }
 
-function autoLoad(): void {
+/**
+ * Загрузка данных при старте
+ */
+function autoLoad(): boolean {
   try {
-    const saved = localStorage.getItem('smarttable-autosave');
-    const currentData = getCurrentData();
-    currentData.clear();
-
-    if (saved) {
-      const data = JSON.parse(saved);
-
-      // Загружаем sheetsData
-      if (data.sheetsData) {
-        Object.keys(data.sheetsData).forEach(sheetKey => {
-          const sheetData = data.sheetsData[sheetKey];
-          const sheetMap = new Map();
-
-          if (typeof sheetData === 'object') {
-            Object.keys(sheetData).forEach(cellKey => {
-              sheetMap.set(cellKey, sheetData[cellKey]);
-              
-              // ✅ Восстанавливаем формулы из loaded data
-              const cellData = sheetData[cellKey];
-              if (cellData.formula) {
-                state.cellFormulas.set(cellKey, cellData.formula);
-                // Регистрируем формулу в системе зависимостей
-                registerFormula(cellKey, cellData.formula, (ref: string, formula: string) => {
-                  state.cellFormulas.set(ref, formula);
-                });
-              }
-            });
-          }
-
-          state.sheetsData.set(parseInt(sheetKey), sheetMap);
-        });
-      } else if (data.cells) {
-        Object.keys(data.cells).forEach(key => {
-          currentData.set(key, data.cells[key]);
-          
-          // ✅ Восстанавливаем формулы из loaded data
-          const cellData = data.cells[key];
-          if (cellData.formula) {
-            state.cellFormulas.set(key, cellData.formula);
-            // Регистрируем формулу в системе зависимостей
-            registerFormula(key, cellData.formula, (ref: string, formula: string) => {
-              state.cellFormulas.set(ref, formula);
-            });
-          }
-        });
+    const loaded = storageService.load();
+    if (!loaded) {
+      console.log('[AutoLoad] No saved data found');
+      return false;
+    }
+    
+    // Восстанавливаем листы
+    state.sheetsData = loaded.sheetsData;
+    state.currentSheet = loaded.currentSheet;
+    state.sheets = loaded.sheets;
+    
+    // Восстанавливаем настройки
+    if (loaded.settings) {
+      if (loaded.settings.zoom) {
+        localStorage.setItem('smarttable-zoom', loaded.settings.zoom.toString());
       }
-
-      state.currentSheet = data.currentSheet || 1;
-
-      if (data.fileName) {
-        updateFileNameInHeader(data.fileName);
+      if (loaded.settings.theme) {
+        localStorage.setItem('smarttable-theme', loaded.settings.theme);
       }
     }
-
-    // ПРИНУДИТЕЛЬНО очищаем dataValidations при каждой загрузке
-    state.dataValidations.clear();
-
-    renderCells();
-    updateAIDataCache();
+    
+    console.log('[AutoLoad] Data loaded successfully:', loaded.sheets.length, 'sheets');
+    return true;
   } catch (e) {
     console.error('[AutoLoad] Error:', e);
+    return false;
   }
 }
 
@@ -575,13 +525,16 @@ function getCellKey(row: number, col: number): string {
   return `${row}-${col}`;
 }
 
-function getCurrentData(): Map<string, { value: string; formula?: string; style?: any }> {
-  return state.sheetsData.get(state.currentSheet) || new Map();
-}
 
 // === ИНИЦИАЛИЗАЦИЯ ===
 async function init(): Promise<void> {
   console.log('[Renderer] init() called');
+
+  // === ЗАГРУЗКА СОХРАНЕННЫХ ДАННЫХ ===
+  const dataLoaded = autoLoad();
+  if (dataLoaded) {
+    console.log('[Renderer] Restored data from previous session');
+  }
 
   // Рендерим формулу бар в контейнер
   const formulaBarContainer = document.getElementById('formula-bar-container');
@@ -947,7 +900,7 @@ function renderVisibleCells(): void {
       const key = getCellKey(row, col);
       const cellData = data.get(key);
       if (cellData) {
-        cell.textContent = cellData.value;
+        cell.textContent = cellData.value || "";
 
         // Применяем сохраненные стили
         if (cellData.style) {
@@ -1251,31 +1204,37 @@ function finishEditing(save: boolean = true): void {
     const data = getCurrentData();
     const oldValue = data.get(key);
 
-    // ✅ НОВАЯ ЛОГИКА: Разделяем формулу и результат
-    let finalValue = inputValue; // То что будет отображаться в ячейке
-    let isFormula = false;
+    // ✅ Сохраняем в data через команду для undo/redo
+    const isFormula = inputValue.startsWith('=');
 
-    if (inputValue.startsWith('=')) {
-      isFormula = true;
+    // Создаем и выполняем команду установки значения
+    const command = new SetValueCommand(row, col, inputValue, isFormula);
+    commandManager.execute(command);
+
+    // Получаем обновленные данные для дальнейшей обработки
+    const updatedData = getCurrentData();
+    const cellData = updatedData.get(key);
+    const finalValue = cellData?.value || '';
+    
+    // Обработка формулы COLOR (если была формула)
+    if (isFormula && inputValue.includes('COLOR')) {
       const result = previewFormula(inputValue, (cellRef: string) => {
         const match = cellRef.match(/^([A-Z]+)(\d+)$/i);
         if (!match) return '';
         const refCol = letterToCol(match[1]);
         const refRow = parseInt(match[2]) - 1;
         const cellKey = getCellKey(refRow, refCol);
-        const cellData = data.get(cellKey);
-        return cellData?.value || '';
+        const cd = updatedData.get(cellKey);
+        return cd?.value || '';
       });
-
-      finalValue = String(result.value);
-
-      // Обработка формулы COLOR
-      if (result.value === '#COLOR_COMMAND' && result.colorName) {
-        applyColorFromFormula(result, data);
-        finalValue = ''; // COLOR не отображает значение в ячейке
-      }
       
-      // Зарегистрировать формулу для реактивного обновления
+      if (result.value === '#COLOR_COMMAND' && result.colorName) {
+        applyColorFromFormula(result, updatedData);
+      }
+    }
+    
+    // Регистрируем формулу если есть
+    if (isFormula) {
       removeFormula(key);
       registerFormula(key, inputValue, (ref: string, formula: string) => {
         state.cellFormulas.set(ref, formula);
@@ -1289,30 +1248,13 @@ function finishEditing(save: boolean = true): void {
         state.cellFormulas.delete(key);
       }
     }
-
-    // ✅ Сохраняем в data:
-    // - value: результат для отображения в ячейке
-    // - formula: саму формулу для показа в formula bar
-    const cellDataToSave = {
-      value: finalValue,
-      ...(isFormula && { formula: inputValue }), // Сохраняем формулу если это формула
-      ...oldValue // Сохраняем прежние стили и другие поля
-    };
     
-    if (finalValue || isFormula) {
-      data.set(key, cellDataToSave);
-    } else {
-      data.delete(key);
-    }
-
-    pushUndo(key, oldValue);
     updateAIDataCache();
     updateFormulaBar();
-    
+
     // ✅ Пересчитать зависимые ячейки
-    recalculateDependentCells(key, data);
-    
-    updateSingleCell(row, col);
+    recalculateDependentCells(key, updatedData);
+
 
     // Автоподбор ширины если включен
     const autoFitEnabled = localStorage.getItem('smarttable-auto-fit-columns') === 'true';
@@ -1391,7 +1333,7 @@ function recalculateDependentCells(changedCellKey: string, data: Map<string, any
     }
     
     // Обновить ячейку на экране
-    updateSingleCell(row, col);
+
     console.log(`[Formulas] Updated ${depKey} = ${finalValue}`);
     
     // Рекурсивно пересчитываем зависимые ячейки от этой ячейки
@@ -1541,7 +1483,7 @@ function updateSingleCell(row: number, col: number): void {
   const cellData = getCurrentData().get(key);
 
   if (cellData) {
-    cell.textContent = cellData.value;
+    cell.textContent = cellData.value || "";
     cell.classList.add('has-content');
 
     // Применяем стили
@@ -1582,64 +1524,32 @@ function updateSingleCell(row: number, col: number): void {
   }
 }
 
-// === ПРИМЕНЕНИЕ ЦВЕТА К ЯЧЕЙКАМ ===
+// === ПРИМЕНЕНИЕ ЦВЕТА К ЯЧЕЙКАМ (Command Pattern) ===
 function applyColorToSelection(type: 'text' | 'fill', color: string): void {
-  const data = getCurrentData();
-  const cellsToColor: Array<{ row: number; col: number }> = [];
-
-  // Получаем выделенные ячейки
+  // Определяем выделенный диапазон
+  let startRow: number, startCol: number, endRow: number, endCol: number;
+  
   if (state.selectionStart && state.selectionEnd) {
-    // Выделен диапазон
-    const minRow = Math.min(state.selectionStart.row, state.selectionEnd.row);
-    const maxRow = Math.max(state.selectionStart.row, state.selectionEnd.row);
-    const minCol = Math.min(state.selectionStart.col, state.selectionEnd.col);
-    const maxCol = Math.max(state.selectionStart.col, state.selectionEnd.col);
-
-    for (let r = minRow; r <= maxRow; r++) {
-      for (let c = minCol; c <= maxCol; c++) {
-        cellsToColor.push({ row: r, col: c });
-      }
-    }
+    startRow = Math.min(state.selectionStart.row, state.selectionEnd.row);
+    endRow = Math.max(state.selectionStart.row, state.selectionEnd.row);
+    startCol = Math.min(state.selectionStart.col, state.selectionEnd.col);
+    endCol = Math.max(state.selectionStart.col, state.selectionEnd.col);
   } else {
-    // Одна ячейка
-    cellsToColor.push({ ...state.selectedCell });
+    startRow = state.selectedCell.row;
+    endRow = state.selectedCell.row;
+    startCol = state.selectedCell.col;
+    endCol = state.selectedCell.col;
   }
 
-  // Применяем цвет
-  for (const cellRef of cellsToColor) {
-    const key = getCellKey(cellRef.row, cellRef.col);
-    const cellData = data.get(key);
-    const cellElement = getCellElement(cellRef.row, cellRef.col);
-
-    if (cellData) {
-      // Сохраняем цвет в стиле
-      const newStyle = { ...cellData.style };
-      if (type === 'text') {
-        newStyle.color = color;
-        if (cellElement) cellElement.style.color = color;
-      } else {
-        newStyle.backgroundColor = color;
-        if (cellElement) cellElement.style.backgroundColor = color;
-      }
-      data.set(key, { ...cellData, style: newStyle });
-    } else {
-      // Если ячейка пустая, создаём стиль
-      const newStyle: any = {};
-      if (type === 'text') {
-        newStyle.color = color;
-        if (cellElement) cellElement.style.color = color;
-      } else {
-        newStyle.backgroundColor = color;
-        if (cellElement) cellElement.style.backgroundColor = color;
-      }
-      data.set(key, { value: '', style: newStyle });
-    }
-  }
-
-  // Обновляем выделение чтобы применить стили
-  updateRangeSelection();
+  // Определяем тип форматирования
+  const formatType = type === 'text' ? 'color' : 'backgroundColor';
+  
+  // Создаем и выполняем команду
+  const command = new SetFormatCommand(startRow, startCol, endRow, endCol, formatType, color);
+  commandManager.execute(command);
+  
+  // Обновляем кэш и автосохранение
   updateAIDataCache();
-  pushUndo('format', type);
   autoSave();
 }
 
@@ -1721,7 +1631,7 @@ function changeDecimalPlaces(delta: number): void {
 
     if (cellData && cellData.value) {
       // Проверяем, является ли значение числом
-      const numValue = parseFloat(cellData.value);
+      const numValue = parseFloat(cellData.value || "0");
       if (!isNaN(numValue)) {
         // Получаем текущую разрядность из стиля
         const currentDecimals = cellData.style?.decimals ?? 2;
@@ -1809,6 +1719,22 @@ document.addEventListener('mousedown', (e) => {
 });
 
 function handleGlobalInputKeyDown(e: KeyboardEvent): void {
+  // Ctrl+Z - Undo
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    finishEditing(false); // Сначала завершаем редактирование
+    undo();
+    return;
+  }
+  
+  // Ctrl+Y - Redo
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+    e.preventDefault();
+    finishEditing(false); // Сначала завершаем редактирование
+    redo();
+    return;
+  }
+  
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     // Запомним текущую позицию ДО завершения редактирования
@@ -2315,18 +2241,10 @@ function handleContextMenuAction(action: string): void {
   updateAIDataCache();
 }
 
-// Вспомогательные функции для контекстного меню
+// Вспомогательные функции для контекстного меню (Command Pattern)
 function insertRowAboveAt(row: number): void {
-  const data = getCurrentData();
-  const rowsToMove: Array<{ oldKey: string; newKey: string; value: any }> = [];
-  data.forEach((cellData, key) => {
-    const [cellRow, cellCol] = key.split('-').map(Number);
-    if (cellRow >= row) {
-      const newKey = `${cellRow + 1}-${cellCol}`;
-      rowsToMove.push({ oldKey: key, newKey, value: cellData });
-    }
-  });
-  rowsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
+  const command = new InsertRowCommand(row);
+  commandManager.execute(command);
 }
 
 function insertRowBelowAt(row: number): void {
@@ -2334,35 +2252,13 @@ function insertRowBelowAt(row: number): void {
 }
 
 function deleteRowAt(row: number): void {
-  const data = getCurrentData();
-  const keysToDelete: string[] = [];
-  data.forEach((_, key) => {
-    const [cellRow] = key.split('-').map(Number);
-    if (cellRow === row) keysToDelete.push(key);
-  });
-  keysToDelete.forEach(key => data.delete(key));
-  const rowsToMove: Array<{ oldKey: string; newKey: string; value: any }> = [];
-  data.forEach((cellData, key) => {
-    const [cellRow, cellCol] = key.split('-').map(Number);
-    if (cellRow > row) {
-      const newKey = `${cellRow - 1}-${cellCol}`;
-      rowsToMove.push({ oldKey: key, newKey, value: cellData });
-    }
-  });
-  rowsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
+  const command = new DeleteRowCommand(row);
+  commandManager.execute(command);
 }
 
 function insertColumnLeftAt(col: number): void {
-  const data = getCurrentData();
-  const colsToMove: Array<{ oldKey: string; newKey: string; value: any }> = [];
-  data.forEach((cellData, key) => {
-    const [row, cellCol] = key.split('-').map(Number);
-    if (cellCol >= col) {
-      const newKey = `${row}-${cellCol + 1}`;
-      colsToMove.push({ oldKey: key, newKey, value: cellData });
-    }
-  });
-  colsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
+  const command = new InsertColumnCommand(col);
+  commandManager.execute(command);
 }
 
 function insertColumnRightAt(col: number): void {
@@ -2370,22 +2266,8 @@ function insertColumnRightAt(col: number): void {
 }
 
 function deleteColumnAt(col: number): void {
-  const data = getCurrentData();
-  const keysToDelete: string[] = [];
-  data.forEach((_, key) => {
-    const [row, cellCol] = key.split('-').map(Number);
-    if (cellCol === col) keysToDelete.push(key);
-  });
-  keysToDelete.forEach(key => data.delete(key));
-  const colsToMove: Array<{ oldKey: string; newKey: string; value: any }> = [];
-  data.forEach((cellData, key) => {
-    const [row, cellCol] = key.split('-').map(Number);
-    if (cellCol > col) {
-      const newKey = `${row}-${cellCol - 1}`;
-      colsToMove.push({ oldKey: key, newKey, value: cellData });
-    }
-  });
-  colsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
+  const command = new DeleteColumnCommand(col);
+  commandManager.execute(command);
 }
 
 // ==========================================
@@ -3891,8 +3773,7 @@ function setupEventListeners(): void {
       
       // ✅ Пересчитать зависимые ячейки
       recalculateDependentCells(key, data);
-      
-      updateSingleCell(row, col);
+
       updateFormulaBar(); // Обновить formula bar после сохранения
       
       elements.formulaInput.blur();
@@ -5982,7 +5863,7 @@ function setupFillHandle(): void {
           const key = getCellKey(r, fillRange.startCol);
           const cellData = data.get(key);
           if (cellData && cellData.value) {
-            const num = parseFloat(cellData.value);
+            const num = parseFloat(cellData.value || "0");
             sourceValues.push(isNaN(num) ? cellData.value : num);
           }
         }
@@ -5996,7 +5877,7 @@ function setupFillHandle(): void {
           const key = getCellKey(fillRange.startRow, c);
           const cellData = data.get(key);
           if (cellData && cellData.value) {
-            const num = parseFloat(cellData.value);
+            const num = parseFloat(cellData.value || "0");
             sourceValues.push(isNaN(num) ? cellData.value : num);
           }
         }
@@ -6021,7 +5902,7 @@ function setupFillHandle(): void {
           finalValue = String(calculatePatternValue(pattern, stepCounter));
         } else if (sourceData) {
           // Иначе просто копируем значение
-          finalValue = sourceData.value;
+          finalValue = sourceData.value || "";
         }
 
         if (finalValue) {
@@ -6096,7 +5977,7 @@ function detectFillPatternVertical(col: number, startRow: number, data: Map<stri
     const key = getCellKey(r, col);
     const cellData = data.get(key);
     if (cellData && cellData.value !== '') {
-      const num = parseFloat(cellData.value);
+      const num = parseFloat(cellData.value || "0");
       values.unshift(isNaN(num) ? cellData.value : num);
     } else {
       break;
@@ -6250,7 +6131,7 @@ function detectFillPatternHorizontal(row: number, startCol: number, data: Map<st
     const key = getCellKey(row, c);
     const cellData = data.get(key);
     if (cellData) {
-      const num = parseFloat(cellData.value);
+      const num = parseFloat(cellData.value || "0");
       if (!isNaN(num)) values.unshift(num);
       else break;
     } else break;
@@ -6651,7 +6532,7 @@ function autoSum(): void {
       const key = getCellKey(r, endCol);
       const cellData = data.get(key);
       if (cellData) {
-        const num = parseFloat(cellData.value);
+        const num = parseFloat(cellData.value || "0");
         if (!isNaN(num)) {
           sum += num;
           count++;
@@ -6669,7 +6550,7 @@ function autoSum(): void {
         const key = getCellKey(endRow, c);
         const cellData = data.get(key);
         if (cellData) {
-          const num = parseFloat(cellData.value);
+          const num = parseFloat(cellData.value || "0");
           if (!isNaN(num)) {
             sum += num;
             count++;
@@ -6705,7 +6586,7 @@ function autoSum(): void {
       const key = getCellKey(row, col);
       const cellData = data.get(key);
       if (cellData) {
-        const num = parseFloat(cellData.value);
+        const num = parseFloat(cellData.value || "0");
         if (!isNaN(num)) {
           sum += num;
           count++;
@@ -6788,7 +6669,7 @@ function getSelectedRangeData(): { labels: string[]; datasets: { label: string; 
       data.forEach((cellData, key) => {
         const [row, col] = key.split('-').map(Number);
         if (!rows.has(row)) rows.set(row, new Map());
-        rows.get(row)!.set(col, cellData.value);
+        rows.get(row)!.set(col, cellData.value || "");
       });
       
       // Первая строка - заголовки (метки)
@@ -6859,15 +6740,15 @@ function mergeCells(): void {
   }
 
   // Собираем данные о выделенных ячейках
-  const cellsData: Array<{ row: number; col: number; cell: HTMLElement; value: string }> = [];
+  const cellsData: Array<{ row: number; col: number }> = [];
   let mergedValue = '';
-  
+
   selectedCells.forEach(cell => {
     const row = parseInt((cell as HTMLElement).dataset.row || '0');
     const col = parseInt((cell as HTMLElement).dataset.col || '0');
     const value = cell.textContent || '';
     if (value) mergedValue += (mergedValue ? ' ' : '') + value;
-    cellsData.push({ row, col, cell, value });
+    cellsData.push({ row, col });
   });
 
   // Находим границы диапазона
@@ -6877,114 +6758,48 @@ function mergeCells(): void {
   const maxRow = Math.max(...rows);
   const minCol = Math.min(...cols);
   const maxCol = Math.max(...cols);
-  
-  const rowspan = maxRow - minRow + 1;
-  const colspan = maxCol - minCol + 1;
 
+  // Создаем и выполняем команду объединения
+  const command = new MergeCellsCommand(minRow, minCol, maxRow, maxCol);
+  commandManager.execute(command);
+  
+  // Устанавливаем значение первой ячейки (объединенное)
   const data = getCurrentData();
-  
-  // Первая ячейка становится объединённой
   const firstKey = getCellKey(minRow, minCol);
-  const firstCell = getCellElement(minRow, minCol);
-  
-  if (firstCell) {
-    // Устанавливаем значение
-    firstCell.textContent = mergedValue;
-    
-    // Устанавливаем grid свойства для объединения
-    firstCell.style.gridColumn = `${minCol + 1} / span ${colspan}`;
-    firstCell.style.gridRow = `${minRow + 1} / span ${rowspan}`;
-    firstCell.style.borderRight = 'none';
-    firstCell.style.borderBottom = 'none';
-    firstCell.style.zIndex = '10';
-    
-    data.set(firstKey, {
-      value: mergedValue,
-      style: {
-        ...data.get(firstKey)?.style,
-        merged: true,
-        rowspan,
-        colspan,
-        gridColumnStart: minCol + 1,
-        gridRowStart: minRow + 1
-      }
-    });
+  const firstCellData = data.get(firstKey);
+  if (firstCellData) {
+    firstCellData.value = mergedValue;
+    data.set(firstKey, firstCellData);
   }
-
-  // Остальные ячейки скрываем полностью
-  cellsData.forEach((item, index) => {
-    if (index === 0) return; // Пропускаем первую
-
-    const key = getCellKey(item.row, item.col);
-    data.delete(key);
-
-    // Полностью скрываем ячейку
-    item.cell.style.display = 'none';
-    item.cell.style.visibility = 'hidden';
-    item.cell.style.pointerEvents = 'none';
-  });
-
+  
   updateAIDataCache();
   updateFormulaBar();
+  autoSave();
 }
 
 function insertRow(): void {
   const { row } = state.selectedCell;
-  const data = getCurrentData();
-  const rowsToMove: Array<{ oldKey: string; newKey: string; value: any }> = [];
-  data.forEach((cellData, key) => {
-    const [cellRow, col] = key.split('-').map(Number);
-    if (cellRow >= row) { const newKey = `${cellRow + 1}-${col}`; rowsToMove.push({ oldKey: key, newKey, value: cellData }); }
-  });
-  rowsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
-  renderCells();
-  updateAIDataCache();
+  const command = new InsertRowCommand(row);
+  commandManager.execute(command);
 }
 
 function deleteRow(): void {
   const { row } = state.selectedCell;
-  const data = getCurrentData();
-  const keysToDelete: string[] = [];
-  data.forEach((_, key) => { const [cellRow] = key.split('-').map(Number); if (cellRow === row) keysToDelete.push(key); });
-  keysToDelete.forEach(key => data.delete(key));
-  const rowsToMove: Array<{ oldKey: string; newKey: string; value: any }> = [];
-  data.forEach((cellData, key) => {
-    const [cellRow, col] = key.split('-').map(Number);
-    if (cellRow > row) { const newKey = `${cellRow - 1}-${col}`; rowsToMove.push({ oldKey: key, newKey, value: cellData }); }
-  });
-  rowsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
-  renderCells();
-  updateAIDataCache();
+  const command = new DeleteRowCommand(row);
+  commandManager.execute(command);
   updateFormulaBar();
 }
 
 function insertColumn(): void {
   const { col } = state.selectedCell;
-  const data = getCurrentData();
-  const colsToMove: Array<{ oldKey: string; newKey: string; value: any }> = [];
-  data.forEach((cellData, key) => {
-    const [row, cellCol] = key.split('-').map(Number);
-    if (cellCol >= col) { const newKey = `${row}-${cellCol + 1}`; colsToMove.push({ oldKey: key, newKey, value: cellData }); }
-  });
-  colsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
-  renderCells();
-  updateAIDataCache();
+  const command = new InsertColumnCommand(col);
+  commandManager.execute(command);
 }
 
 function deleteColumn(): void {
   const { col } = state.selectedCell;
-  const data = getCurrentData();
-  const keysToDelete: string[] = [];
-  data.forEach((_, key) => { const [, cellCol] = key.split('-').map(Number); if (cellCol === col) keysToDelete.push(key); });
-  keysToDelete.forEach(key => data.delete(key));
-  const colsToMove: Array<{ oldKey: string; newKey: string; value: any }> = [];
-  data.forEach((cellData, key) => {
-    const [row, cellCol] = key.split('-').map(Number);
-    if (cellCol > col) { const newKey = `${row}-${cellCol - 1}`; colsToMove.push({ oldKey: key, newKey, value: cellData }); }
-  });
-  colsToMove.forEach(item => { data.delete(item.oldKey); data.set(item.newKey, item.value); });
-  renderCells();
-  updateAIDataCache();
+  const command = new DeleteColumnCommand(col);
+  commandManager.execute(command);
   updateFormulaBar();
 }
 
@@ -6995,7 +6810,7 @@ function sortData(): void {
   data.forEach((cellData, key) => {
     const [row, cellCol] = key.split('-').map(Number);
     if (!rowsMap.has(row)) rowsMap.set(row, new Map());
-    rowsMap.get(row)!.set(cellCol, cellData.value);
+    rowsMap.get(row)!.set(cellCol, cellData.value || "");
   });
   const sortedRows = Array.from(rowsMap.entries()).sort((a, b) => {
     const valA = a[1].get(col) || '';
@@ -7053,7 +6868,7 @@ function sortColumnAZ(): void {
   data.forEach((cellData, key) => {
     const [row, cellCol] = key.split('-').map(Number);
     if (!rowsMap.has(row)) rowsMap.set(row, new Map());
-    rowsMap.get(row)!.set(cellCol, cellData.value);
+    rowsMap.get(row)!.set(cellCol, cellData.value || "");
   });
   const sortedRows = Array.from(rowsMap.entries()).sort((a, b) => {
     const valA = a[1].get(col) || '';
@@ -7082,7 +6897,7 @@ function filterDataFull(): void {
     const [row, cellCol] = key.split('-').map(Number);
     if (cellCol === col) {
       const cellEl = getCellElement(row, col);
-      if (cellEl) cellEl.style.display = cellData.value.includes(value) ? '' : 'none';
+      if (cellEl) cellEl.style.display = (cellData.value || "").includes(value) ? '' : 'none';
     }
   });
   updateAIDataCache();
@@ -7099,7 +6914,7 @@ function removeDuplicates(): void {
   data.forEach((cellData, key) => {
     const [row, cellCol] = key.split('-').map(Number);
     if (!rowsMap.has(row)) rowsMap.set(row, new Map());
-    rowsMap.get(row)!.set(cellCol, cellData.value);
+    rowsMap.get(row)!.set(cellCol, cellData.value || "");
   });
   rowsMap.forEach((rowData, row) => {
     const val = rowData.get(col) || '';
@@ -7955,6 +7770,18 @@ function importSheetsImpl(sheets: Array<{
 (window as any).fillTable = globalFillTable;
 (window as any).colorCells = globalColorCells;
 (window as any).boldColumn = globalBoldColumn;
+
+// Экспорт для системы команд
+(window as any).renderer = {
+  undo,
+  redo,
+  renderCells,
+  updateSingleCell,
+  updateAIDataCache,
+  updateFormulaBar,
+  getCurrentData,
+  getSheetsData: () => state.sheetsData
+};
 
 // КРИТИЧНО: Регистрируем importSheets ПРЯМО здесь
 (window as any).importSheets = importSheetsImpl;

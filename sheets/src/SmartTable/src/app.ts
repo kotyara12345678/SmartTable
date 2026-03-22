@@ -609,6 +609,11 @@ function saveFile(): void {
  */
 function undo(): void {
   console.log('[App] Undo');
+  // Используем commandManager из renderer
+  const renderer = (window as any).renderer;
+  if (renderer?.undo) {
+    renderer.undo();
+  }
 }
 
 /**
@@ -616,6 +621,11 @@ function undo(): void {
  */
 function redo(): void {
   console.log('[App] Redo');
+  // Используем commandManager из renderer
+  const renderer = (window as any).renderer;
+  if (renderer?.redo) {
+    renderer.redo();
+  }
 }
 
 /**
