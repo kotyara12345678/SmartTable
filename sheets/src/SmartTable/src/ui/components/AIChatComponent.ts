@@ -1,5 +1,5 @@
 /**
- * AI Chat Component - улучшенный чат с контекстом
+ * AI Chat Component - боковая панель с ИИ
  */
 
 import { aiContextService, AIRequest, AIResponse } from '../core/ai/ai-context-service.js';
@@ -10,8 +10,9 @@ export class AIChatComponent {
   private container: HTMLElement | null = null;
   private currentSession: string = 'default';
   private messages: HTMLElement | null = null;
-  private input: HTMLInputElement | null = null;
+  private input: HTMLTextAreaElement | null = null;
   private sendButton: HTMLButtonElement | null = null;
+  private toggleButton: HTMLElement | null = null;
 
   constructor() {
     this.init();
@@ -19,39 +20,37 @@ export class AIChatComponent {
 
   async init(): Promise<void> {
     this.createChat();
+    this.createToggleButton();
     this.bindEvents();
     await this.loadChatHistory();
   }
 
   private createChat(): void {
-    if (document.getElementById('ai-chat-container')) return;
+    // Используем существующий контейнер в main-workspace
+    this.container = document.getElementById('ai-chat-container');
+    if (!this.container) return;
 
-    this.container = document.createElement('div');
-    this.container.id = 'ai-chat-container';
     this.container.innerHTML = `
-      <div class="ai-chat-overlay" id="aiChatOverlay"></div>
-      <div class="ai-chat-wrapper">
-        <div class="ai-chat-header">
-          <div class="ai-chat-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
+      <div class="ai-panel">
+        <div class="ai-panel-header">
+          <div class="ai-panel-title">
+            <div class="ai-logo"></div>
             <span>AI Ассистент</span>
           </div>
-          <div class="ai-chat-controls">
-            <button class="ai-chat-btn" id="newChatBtn" title="Новый чат">
+          <div class="ai-panel-controls">
+            <button class="ai-panel-btn" id="newChatBtn" title="Новый чат">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="12" y1="5" x2="12" y2="19"/>
                 <line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
             </button>
-            <button class="ai-chat-btn" id="clearChatBtn" title="Очистить чат">
+            <button class="ai-panel-btn" id="clearChatBtn" title="Очистить чат">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="3,6 5,6 21,6"/>
                 <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"/>
               </svg>
             </button>
-            <button class="ai-chat-btn close-btn" id="aiChatClose" title="Закрыть">
+            <button class="ai-panel-btn close-btn" id="aiChatClose" title="Закрыть">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"/>
                 <line x1="6" y1="6" x2="18" y2="18"/>
@@ -59,50 +58,70 @@ export class AIChatComponent {
             </button>
           </div>
         </div>
-        
-        <div class="ai-chat-messages" id="aiChatMessages">
-          <div class="ai-message system">
-            <div class="message-content">
-              <p>👋 Здравствуйте! Я ваш AI-ассистент для SmartTable. Я запоминаю наш разговор и могу помочь с:</p>
-              <ul>
-                <li>📊 Созданием формул и вычислений</li>
-                <li>📈 Построением диаграмм и графиков</li>
-                <li>🔍 Анализом данных</li>
-                <li>🎨 Форматированием таблиц</li>
-              </ul>
-              <p>Чем могу помочь сегодня?</p>
+
+        <div class="ai-panel-content">
+          <div class="ai-chat-messages" id="aiChatMessages">
+            <div class="empty-state">
+              <div class="empty-logo"></div>
+              <div class="empty-text">
+                Что бы вы хотели сделать? Спросите о<br>
+                данных или начнём работу с кодом.
+              </div>
             </div>
           </div>
         </div>
-        
-        <div class="ai-chat-input-container">
-          <div class="ai-chat-input-wrapper">
-            <input type="text" id="aiChatInput" placeholder="Введите сообщение..." autocomplete="off">
-            <button class="ai-send-btn" id="aiSendBtn" disabled>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="22" y1="2" x2="11" y2="13"/>
-                <polygon points="22,2 15,22 11,13 2,9 22,2"/>
-              </svg>
-            </button>
-          </div>
-          <div class="ai-chat-suggestions" id="aiChatSuggestions">
-            <span class="suggestion-text">Попробуйте спросить:</span>
-            <div class="suggestion-chips" id="suggestionChips"></div>
+
+        <div class="ai-input-wrapper">
+          <div class="ai-input-box">
+            <textarea id="aiChatInput" rows="2" placeholder="Спросите ИИ..."></textarea>
+            <div class="ai-toolbar">
+              <div class="ai-toolbar-left">
+                <span class="mode-indicator">✏ Спрашивать перед изменением</span>
+              </div>
+              <div class="ai-toolbar-right">
+                <div class="mode-circle"></div>
+                <span class="slash-hint">/</span>
+                <button class="ai-send-btn" id="aiSendBtn" disabled>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="22" y1="2" x2="11" y2="13"/>
+                    <polygon points="22,2 15,22 11,13 2,9 22,2"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     `;
+  }
 
-    document.body.appendChild(this.container);
+  private createToggleButton(): void {
+    this.toggleButton = document.createElement('button');
+    this.toggleButton.id = 'ai-chat-toggle';
+    this.toggleButton.title = 'Открыть AI чат';
+    this.toggleButton.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+    `;
+    document.body.appendChild(this.toggleButton);
   }
 
   private bindEvents(): void {
     // Закрытие чата
-    const overlay = document.getElementById('aiChatOverlay');
     const closeBtn = document.getElementById('aiChatClose');
-    
-    overlay?.addEventListener('click', () => this.close());
     closeBtn?.addEventListener('click', () => this.close());
+
+    // Кнопка переключения (плавающая)
+    if (this.toggleButton) {
+      this.toggleButton.addEventListener('click', () => {
+        if (this.isOpen) {
+          this.close();
+        } else {
+          this.open();
+        }
+      });
+    }
 
     // Новый чат
     const newChatBtn = document.getElementById('newChatBtn');
@@ -113,9 +132,17 @@ export class AIChatComponent {
     clearChatBtn?.addEventListener('click', () => this.clearChat());
 
     // Отправка сообщения
-    this.input = document.getElementById('aiChatInput') as HTMLInputElement;
+    this.input = document.getElementById('aiChatInput') as HTMLTextAreaElement;
     this.sendButton = document.getElementById('aiSendBtn') as HTMLButtonElement;
     this.messages = document.getElementById('aiChatMessages');
+
+    // Авто-увеличение высоты textarea
+    this.input?.addEventListener('input', () => {
+      if (this.input) {
+        this.input.style.height = 'auto';
+        this.input.style.height = Math.min(this.input.scrollHeight, 120) + 'px';
+      }
+    });
 
     // Включение/выключение кнопки отправки
     this.input?.addEventListener('input', () => {
@@ -124,7 +151,7 @@ export class AIChatComponent {
       }
     });
 
-    // Отправка по Enter
+    // Отправка по Enter (без Shift)
     this.input?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -134,10 +161,6 @@ export class AIChatComponent {
 
     // Отправка по клику на кнопку
     this.sendButton?.addEventListener('click', () => this.sendMessage());
-
-    // Предотвращение закрытия при клике на чат
-    const wrapper = this.container?.querySelector('.ai-chat-wrapper');
-    wrapper?.addEventListener('click', (e) => e.stopPropagation());
   }
 
   private async loadChatHistory(): Promise<void> {
@@ -228,33 +251,19 @@ export class AIChatComponent {
   private displayMessage(message: any): void {
     if (!this.messages) return;
 
+    // Удаляем empty state при первом сообщении
+    const emptyState = this.messages.querySelector('.empty-state');
+    emptyState?.remove();
+
     const messageEl = document.createElement('div');
     messageEl.className = `ai-message ${message.role}`;
-    
-    const avatar = document.createElement('div');
-    avatar.className = 'message-avatar';
-    
-    if (message.role === 'user') {
-      avatar.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-          <circle cx="12" cy="7" r="4"/>
-        </svg>
-      `;
-    } else {
-      avatar.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-        </svg>
-      `;
-    }
 
     const content = document.createElement('div');
     content.className = 'message-content';
-    
+
     // Для отладки - выводим исходное сообщение
     console.log('[AI Chat] Raw content:', message.content);
-    
+
     // Преобразуем markdown в HTML (простая версия)
     const html = this.markdownToHTML(message.content);
     console.log('[AI Chat] Processed HTML:', html);
@@ -264,7 +273,6 @@ export class AIChatComponent {
     timestamp.className = 'message-timestamp';
     timestamp.textContent = this.formatTime(message.timestamp);
 
-    messageEl.appendChild(avatar);
     messageEl.appendChild(content);
     messageEl.appendChild(timestamp);
 
@@ -487,28 +495,28 @@ export class AIChatComponent {
 
   open(): void {
     if (this.isOpen || !this.container) return;
-    
+
     this.isOpen = true;
-    this.container.style.display = 'block';
-    document.body.style.overflow = 'hidden';
-    
+    this.container.classList.add('open');
+    this.toggleButton?.classList.add('hidden');
+
     // Начинаем отслеживание времени в AI чате
     timeTracker.startSession('ai_chat');
-    
+
     // Фокус на поле ввода
     setTimeout(() => this.input?.focus(), 100);
   }
 
   close(): void {
     if (!this.isOpen || !this.container) return;
-    
+
     this.isOpen = false;
-    this.container.style.display = 'none';
-    document.body.style.overflow = '';
-    
+    this.container.classList.remove('open');
+    this.toggleButton?.classList.remove('hidden');
+
     // Завершаем сессию AI чата
     timeTracker.endCurrentSession();
-    
+
     // Начинаем отслеживание времени в таблицах
     timeTracker.startSession('spreadsheet');
   }
@@ -516,5 +524,6 @@ export class AIChatComponent {
   destroy(): void {
     this.close();
     this.container?.remove();
+    this.toggleButton?.remove();
   }
 }

@@ -478,9 +478,7 @@ let elements: {
   zoomLabel: HTMLElement;
   btnZoomIn: HTMLElement;
   btnZoomOut: HTMLElement;
-  aiPanel: HTMLElement;
   btnAI: HTMLElement;
-  btnCloseAI: HTMLElement;
   btnClearChat: HTMLElement;
   btnAiSend: HTMLElement;
   aiInput: HTMLInputElement;
@@ -514,13 +512,12 @@ function initElements(): void {
     zoomLabel: document.getElementById('zoomLabel')!,
     btnZoomIn: document.getElementById('btnZoomIn')!,
     btnZoomOut: document.getElementById('btnZoomOut')!,
-    aiPanel: document.getElementById('aiPanel')!,
     btnAI: document.getElementById('btnAI')!,
-    btnCloseAI: document.getElementById('btnCloseAI')!,
-    btnClearChat: document.getElementById('btnClearChat')!,
-    btnAiSend: document.getElementById('btnAiSend')!,
-    aiInput: document.getElementById('aiInput')! as HTMLInputElement,
-    aiChat: document.getElementById('aiChat')!,
+    // Заглушки для старого AI чата - не используются в новом компоненте
+    btnClearChat: document.getElementById('btnClearChat') || document.createElement('div'),
+    btnAiSend: document.getElementById('btnAiSend') || document.createElement('div'),
+    aiInput: document.getElementById('aiInput') as HTMLInputElement || document.createElement('input'),
+    aiChat: document.getElementById('aiChat') || document.createElement('div'),
     btnBold: document.getElementById('btnBold')!,
     btnItalic: document.getElementById('btnItalic')!,
     btnUnderline: document.getElementById('btnUnderline')!,
@@ -3621,11 +3618,14 @@ function setupEventListeners(): void {
   // Fill handle для ячеек
   setupFillHandle();
 
-  // ИИ кнопка
+  // ИИ кнопка - открываем новый AI Chat Component
   elements.btnAI.addEventListener('click', () => {
-    elements.aiPanel.classList.add('open');
+    const aiChat = (window as any).aiChat;
+    if (aiChat) {
+      aiChat.open();
+    }
   });
-  
+
   // Зум
   let zoom = parseInt(localStorage.getItem('smarttable-zoom') || '100');
   const BASE_CELL_WIDTH = 100;
@@ -3952,95 +3952,7 @@ function setupEventListeners(): void {
       addSheet();
     });
   }
-  
-  // ИИ панель - открываем по кнопке в топ-баре
-  const aiPanelContainer = document.getElementById('ai-panel-container');
-  console.log('[Renderer] AI panel container:', !!aiPanelContainer);
-  console.log('[Renderer] btnAI element:', !!elements.btnAI);
 
-  if (elements.btnAI && aiPanelContainer) {
-    elements.btnAI.addEventListener('click', () => {
-      console.log('[Renderer] AI button clicked');
-      aiPanelContainer.classList.toggle('open');
-    });
-  }
-
-  if (elements.btnCloseAI && aiPanelContainer) {
-    elements.btnCloseAI.addEventListener('click', () => {
-      console.log('[Renderer] Close AI button clicked');
-      aiPanelContainer.classList.remove('open');
-    });
-  }
-
-  // ==========================================
-  // === RESIZE HANDLE ДЛЯ AI ПАНЕЛИ ===
-  // ==========================================
-  const resizeHandle = document.getElementById('ai-panel-resize-handle');
-  if (resizeHandle && aiPanelContainer) {
-    let isResizing = false;
-    let startX = 0;
-    let startWidth = 0;
-
-    resizeHandle.addEventListener('mousedown', (e) => {
-      isResizing = true;
-      startX = e.clientX;
-      startWidth = aiPanelContainer.offsetWidth;
-      resizeHandle.classList.add('resizing');
-      e.preventDefault();
-    });
-
-    document.addEventListener('mousemove', (e) => {
-      if (!isResizing) return;
-      const dx = startX - e.clientX;
-      const newWidth = startWidth + dx;
-      // Ограничения ширины
-      if (newWidth >= 300 && newWidth <= 800) {
-        aiPanelContainer.style.width = newWidth + 'px';
-      }
-    });
-
-    document.addEventListener('mouseup', () => {
-      if (isResizing) {
-        isResizing = false;
-        resizeHandle.classList.remove('resizing');
-        // Сохранить ширину в localStorage
-        localStorage.setItem('smarttable-ai-panel-width', aiPanelContainer.style.width);
-      }
-    });
-
-    // Восстановить ширину из localStorage
-    const savedWidth = localStorage.getItem('smarttable-ai-panel-width');
-    if (savedWidth) {
-      aiPanelContainer.style.width = savedWidth;
-    }
-  }
-  
-  elements.btnClearChat.addEventListener('click', () => {
-    clearChatHistory();
-    elements.aiChat.innerHTML = '<div class="ai-message ai-message-assistant">История чата очищена. Чем могу помочь?</div>';
-  });
-
-  // Кнопка очистки валидаций
-  const btnClearValidations = document.getElementById('btnClearValidations');
-  if (btnClearValidations) {
-    btnClearValidations.addEventListener('click', () => {
-      clearAllDataValidations();
-      const msg = document.createElement('div');
-      msg.className = 'ai-message ai-message-assistant';
-      msg.textContent = '✅ Все валидации данных очищены!';
-      elements.aiChat.appendChild(msg);
-      elements.aiChat.scrollTop = elements.aiChat.scrollHeight;
-    });
-  }
-
-  elements.btnAiSend.addEventListener('click', sendAiMessage);
-
-  elements.aiInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      sendAiMessage();
-    }
-  });
-  
   // Форматирование
   elements.btnBold?.addEventListener('click', () => toggleFormatting('bold'));
   elements.btnItalic?.addEventListener('click', () => toggleFormatting('italic'));
@@ -4164,7 +4076,10 @@ function handleGlobalKeyDown(e: KeyboardEvent): void {
         break;
       case 'k':
         e.preventDefault();
-        elements.aiPanel.classList.toggle('open');
+        const aiChat = (window as any).aiChat;
+        if (aiChat) {
+          aiChat.open();
+        }
         break;
     }
   }

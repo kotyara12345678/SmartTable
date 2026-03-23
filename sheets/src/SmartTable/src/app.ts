@@ -359,9 +359,8 @@ function applyFormat(format: string): void {
  * Открытие AI панели
  */
 function openAIPanel(): void {
-  const aiPanel = document.getElementById('ai-panel-container');
-  if (aiPanel) {
-    aiPanel.classList.add('open');
+  if (aiChat) {
+    aiChat.open();
   }
 }
 
