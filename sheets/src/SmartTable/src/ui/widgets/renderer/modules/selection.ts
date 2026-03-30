@@ -1,150 +1,123 @@
 /**
- * Selection Module - Выделение и навигация по ячейкам
+ * Selection Module - Выделение и навигация
  */
 
-export interface CellPosition {
-  row: number;
-  col: number;
-}
-
-export interface SelectionState {
-  start: CellPosition | null;
-  end: CellPosition | null;
-  isSelecting: boolean;
-}
-
-/**
- * Проверить является ли ячейка заголовком строки
- */
-export function isRowHeader(col: number): boolean {
-  return col === -1;
+export interface SelectionContext {
+  state: any;
+  CONFIG: any;
+  elements: any;
+  getCellElement: (row: number, col: number) => HTMLElement | null;
+  getCellId: (row: number, col: number) => string;
+  updateCellReference: () => void;
+  updateFormulaBar: () => void;
+  finishEditing: () => void;
+  saveActiveCell?: (row: number, col: number) => void;
+  FocusManager?: any;
 }
 
 /**
- * Проверить является ли ячейка заголовком колонки
+ * Выделить ячейку
  */
-export function isColumnHeader(row: number): boolean {
-  return row === -1;
-}
+export function selectCell(row: number, col: number, context: SelectionContext): void {
+  const { state, elements, CONFIG } = context;
 
-/**
- * Получить границы выделенного диапазона
- */
-export function getSelectionBounds(
-  start: CellPosition | null,
-  end: CellPosition | null
-): {
-  minRow: number;
-  maxRow: number;
-  minCol: number;
-  maxCol: number;
-} | null {
-  if (!start || !end) return null;
-
-  return {
-    minRow: Math.min(start.row, end.row),
-    maxRow: Math.max(start.row, end.row),
-    minCol: Math.min(start.col, end.col),
-    maxCol: Math.max(start.col, end.col),
-  };
-}
-
-/**
- * Получить все ячейки в выделенном диапазоне
- */
-export function getSelectedCells(
-  start: CellPosition | null,
-  end: CellPosition | null
-): CellPosition[] {
-  const bounds = getSelectionBounds(start, end);
-  if (!bounds) return [];
-
-  const cells: CellPosition[] = [];
-  for (let r = bounds.minRow; r <= bounds.maxRow; r++) {
-    for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
-      cells.push({ row: r, col: c });
+  // Завершить редактирование если оно идет
+  if (state.isEditing) {
+    const isDifferentCell = state.editingCell.row !== row || state.editingCell.col !== col;
+    if (isDifferentCell) {
+      context.finishEditing();
     }
   }
-  return cells;
-}
 
-/**
- * Переместить выделение на следующую ячейку
- */
-export function moveSelection(
-  current: CellPosition,
-  direction: 'up' | 'down' | 'left' | 'right',
-  maxRows: number,
-  maxCols: number
-): CellPosition {
-  const { row, col } = current;
-
-  switch (direction) {
-    case 'up':
-      return { row: Math.max(0, row - 1), col };
-    case 'down':
-      return { row: Math.min(maxRows - 1, row + 1), col };
-    case 'left':
-      return { row, col: Math.max(0, col - 1) };
-    case 'right':
-      return { row, col: Math.min(maxCols - 1, col + 1) };
+  // Не снимать выделение если идет выделение диапазона
+  if (!state.isSelecting) {
+    elements.cellGrid.querySelectorAll('.cell.selected').forEach((cell: HTMLElement) => {
+      cell.classList.remove('selected');
+    });
   }
-}
 
-/**
- * Выделить всю строку
- */
-export function selectRow(row: number, totalCols: number): CellPosition[] {
-  const cells: CellPosition[] = [];
-  for (let c = 0; c < totalCols; c++) {
-    cells.push({ row, col: c });
-  }
-  return cells;
-}
+  // Снять выделение с предыдущих заголовков
+  const prevRowHeader = elements.rowHeaders.querySelector('.row-header.selected');
+  if (prevRowHeader) prevRowHeader.classList.remove('selected');
 
-/**
- * Выделить весь столбец
- */
-export function selectColumn(col: number, totalRows: number): CellPosition[] {
-  const cells: CellPosition[] = [];
-  for (let r = 0; r < totalRows; r++) {
-    cells.push({ row: r, col });
-  }
-  return cells;
-}
+  const prevColHeader = elements.columnHeaders.querySelector('.column-header.selected');
+  if (prevColHeader) prevColHeader.classList.remove('selected');
 
-/**
- * Выделить всю таблицу
- */
-export function selectAll(totalRows: number, totalCols: number): CellPosition[] {
-  const cells: CellPosition[] = [];
-  for (let r = 0; r < totalRows; r++) {
-    for (let c = 0; c < totalCols; c++) {
-      cells.push({ row: r, col: c });
+  // Выделить новую ячейку
+  state.selectedCell = { row, col };
+  const cell = context.getCellElement(row, col);
+
+  if (cell) {
+    cell.classList.add('selected');
+    cell.focus();
+
+    if (context.FocusManager) {
+      context.FocusManager.setActiveCell(cell, { row, col });
     }
   }
-  return cells;
+
+  if (context.saveActiveCell) {
+    context.saveActiveCell(row, col);
+  }
+
+  // Выделить заголовки
+  const rowHeader = elements.rowHeaders.querySelector(`.row-header[data-row="${row}"]`);
+  if (rowHeader) rowHeader.classList.add('selected');
+
+  const colHeader = elements.columnHeaders.querySelector(`.column-header[data-col="${col}"]`);
+  if (colHeader) colHeader.classList.add('selected');
+
+  context.updateCellReference();
+  context.updateFormulaBar();
+
+  // Обновить fill handle
+  const fillHandle = document.getElementById('fillHandle');
+  if (fillHandle && cell) {
+    const rect = cell.getBoundingClientRect();
+    fillHandle.style.display = 'block';
+    fillHandle.style.left = `${rect.right - 4}px`;
+    fillHandle.style.top = `${rect.bottom - 4}px`;
+  }
 }
 
 /**
- * Проверить находится ли ячейка в диапазоне
+ * Выделить строку
  */
-export function isCellInRange(
-  cell: CellPosition,
-  start: CellPosition | null,
-  end: CellPosition | null
-): boolean {
-  if (!start || !end) return false;
+export function selectRow(row: number, context: SelectionContext): void {
+  for (let col = 0; col < context.CONFIG.COLS; col++) {
+    selectCell(row, col, context);
+  }
+}
 
-  const minRow = Math.min(start.row, end.row);
-  const maxRow = Math.max(start.row, end.row);
-  const minCol = Math.min(start.col, end.col);
-  const maxCol = Math.max(start.col, end.col);
+/**
+ * Выделить столбец
+ */
+export function selectColumn(col: number, context: SelectionContext): void {
+  const { state, elements } = context;
+  
+  for (let row = 0; row < context.CONFIG.ROWS; row++) {
+    const cell = context.getCellElement(row, col);
+    if (cell) {
+      cell.classList.add('selected');
+    }
+  }
+  state.selectedCell.col = col;
+  context.updateCellReference();
+}
 
-  return (
-    cell.row >= minRow &&
-    cell.row <= maxRow &&
-    cell.col >= minCol &&
-    cell.col <= maxCol
-  );
+/**
+ * Переместить выделение
+ */
+export function moveSelection(deltaRow: number, deltaCol: number, context: SelectionContext): void {
+  const { state, CONFIG } = context;
+  const newRow = Math.max(0, Math.min(CONFIG.ROWS - 1, state.selectedCell.row + deltaRow));
+  const newCol = Math.max(0, Math.min(CONFIG.COLS - 1, state.selectedCell.col + deltaCol));
+  selectCell(newRow, newCol, context);
+}
+
+/**
+ * Получить элемент ячейки
+ */
+export function getCellElement(row: number, col: number, cellGrid: HTMLElement): HTMLElement | null {
+  return cellGrid.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`) as HTMLElement | null;
 }

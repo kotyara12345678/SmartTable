@@ -114,4 +114,56 @@ if (fs.existsSync(smartTableSrc)) {
 fs.copyFileSync(path.join(srcDir, 'index.html'), path.join(distDir, 'index.html'));
 console.log('Copied: index.html');
 
+// Исправляем импорты - добавляем .js к относительным импортам
+function fixImports(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  
+  let content = fs.readFileSync(filePath, 'utf8');
+  const original = content;
+  
+  // Добавляем .js к относительным импортам (но не к тем, которые уже имеют .js)
+  content = content.replace(
+    /from\s+['"](\.[^'"]+)['"]/g,
+    (match, path) => {
+      if (path.endsWith('.js') || path.endsWith('.mjs')) {
+        return match;
+      }
+      return `from '${path}.js'`;
+    }
+  );
+  
+  // Исправляем динамические импорты
+  content = content.replace(
+    /import\(['"](\.[^'"]+)['"]\)/g,
+    (match, path) => {
+      if (path.endsWith('.js') || path.endsWith('.mjs')) {
+        return match;
+      }
+      return `import('${path}.js')`;
+    }
+  );
+  
+  if (content !== original) {
+    fs.writeFileSync(filePath, content, 'utf8');
+    console.log(`[FixImports] Fixed: ${path.relative(distDir, filePath)}`);
+  }
+}
+
+// Рекурсивно исправляем все .js файлы в dist/ui/widgets/renderer/modules
+function fixImportsInDir(dir) {
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      fixImportsInDir(fullPath);
+    } else if (entry.isFile() && entry.name.endsWith('.js')) {
+      fixImports(fullPath);
+    }
+  }
+}
+
+console.log('Fixing imports in renderer modules...');
+fixImportsInDir(path.join(distDir, 'ui', 'widgets', 'renderer', 'modules'));
+fixImports(path.join(distDir, 'ui', 'widgets', 'renderer.js'));
+
 console.log('Asset copy completed!');

@@ -3,17 +3,20 @@
  * Основной процесс Electron - создание окна, меню, управление приложением
  */
 
-import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron';
+import * as electron from 'electron';
+const { app, BrowserWindow, Menu, ipcMain, dialog } = electron;
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { registerIPCHandlers, cleanupIPCHandlers } from './ui/core/ipc-handlers.js';
-import {RunServer} from "@core/server/app/server";
+import { RunServer } from './ui/core/server/app/server.js';
+import { createLogger } from './ui/core/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const log = createLogger('Main');
 
-let mainWindow: BrowserWindow | null = null;
-let splashWindow: BrowserWindow | null = null;
+let mainWindow: electron.BrowserWindow | null = null;
+let splashWindow: electron.BrowserWindow | null = null;
 let isAppClosing = false;
 
 /**
@@ -31,13 +34,14 @@ function createSplashScreen(): void {
   });
 
   // Загружаем изображение заставки
-  // В разработке: ../SmartTableStartApp.png
-  // В сборке: ресурсы в process.resourcesPath
   const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
-  const splashPath = isDev
-    ? path.join(__dirname, '../SmartTableStartApp.png')
-    : path.join(process.resourcesPath, 'SmartTableStartApp.png');
   
+  // В режиме разработки используем app.getAppPath() для получения пути к корню проекта
+  const splashPath = isDev
+    ? path.join(app.getAppPath(), 'SmartTableStartApp.png')
+    : path.join(process.resourcesPath, 'SmartTableStartApp.png');
+
+  log.info('[Main] Splash screen path:', splashPath, '| app.getAppPath():', app.getAppPath());
   splashWindow.loadFile(splashPath);
 
   // Центрируем окно
@@ -51,23 +55,37 @@ function createWindow(): void {
   // Проверяем, запущено ли приложение в режиме разработки
   const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
+  // Пути к изображениям и файлам
+  const appRoot = app.getAppPath();
+  const iconPath = isDev
+    ? path.join(appRoot, 'SmartTable.png')
+    : path.join(process.resourcesPath, 'SmartTable.png');
+  const preloadPath = path.join(__dirname, 'preload.js');
+  const indexPath = path.join(__dirname, 'index.html');
+
+  log.info('[Main] App root:', appRoot);
+  log.info('[Main] Icon path:', iconPath);
+  log.info('[Main] Preload path:', preloadPath);
+  log.info('[Main] Index path:', indexPath);
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 800,
     minHeight: 600,
-    icon: path.join(__dirname, 'SmartTable.png'),
+    icon: iconPath,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
+      preload: preloadPath,
+      devTools: isDev,
     },
     backgroundColor: '#f8f9fa',
     titleBarStyle: 'default',
     show: false, // Не показываем пока не загрузится
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'index.html'));
+  mainWindow.loadFile(indexPath);
 
   // Отключаем стандартное меню Electron — используем свой Top Bar
   Menu.setApplicationMenu(null);
@@ -79,6 +97,13 @@ function createWindow(): void {
 
   // Когда окно загрузится - ждём 5 секунд и показываем приложение
   mainWindow.once('ready-to-show', () => {
+    // Очищаем кэш чтобы избавиться от старых source maps
+    if (isDev && mainWindow) {
+      mainWindow.webContents.session.clearCache().then(() => {
+        log.info('[Main] Cache cleared');
+      });
+    }
+    
     // Ждём 5 секунд пока показывается splash screen
     setTimeout(() => {
       if (mainWindow) {
@@ -100,7 +125,7 @@ function createWindow(): void {
   });
 
   // Обработка попытки закрытия окна
-  mainWindow.on('close', (event) => {
+  mainWindow.on('close', (event: electron.Event) => {
     console.log('[Main] Window close event triggered, isAppClosing:', isAppClosing);
     if (!isAppClosing && mainWindow) {
       event.preventDefault();

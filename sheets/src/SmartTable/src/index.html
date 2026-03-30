@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://github.com; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: file:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:;">
+  <!-- CSP отключён для отладки -->
   <title>SmartTable - Умная таблица</title>
   <link rel="stylesheet" href="ui/styles/variables.css">
   <link rel="stylesheet" href="ui/styles/top-bar.css">
@@ -748,6 +748,7 @@
   <script src="ui/components/StartScreenComponent.js" type="module"></script>
   <script src="ui/widgets/charts/ChartsWidget.js" type="module"></script>
   <script src="ui/widgets/renderer.js" type="module"></script>
+  
   <script src="ui/components/UserProfileComponent.js" type="module"></script>
   <script src="ui/components/DashboardComponent.js" type="module"></script>
   <script src="ui/components/AIChatComponent.js" type="module"></script>

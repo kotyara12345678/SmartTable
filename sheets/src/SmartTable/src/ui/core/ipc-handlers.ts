@@ -3,7 +3,8 @@
  * Регистрация всех IPC обработчиков для main процесса
  */
 
-import { ipcMain, app, dialog, net } from 'electron';
+import * as electron from 'electron';
+const { ipcMain, app, dialog, net } = electron;
 import { aiService, AIRequest, AIResponse } from './ai/ai-service.js';
 import { createLogger } from './logger.js';
 import * as path from 'path';

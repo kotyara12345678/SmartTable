@@ -1,5 +1,5 @@
 /**
- * Formatting Module - Форматирование ячеек
+ * Formatting Actions Module - Действия форматирования
  */
 
 export interface FormattingContext {
@@ -120,7 +120,7 @@ export function applyTextAlign(align: string, context: FormattingContext): void 
  * Изменить разрядность чисел
  */
 export function changeDecimalPlaces(delta: number, context: FormattingContext): void {
-  const { state, getCurrentData, getCellElement } = context;
+  const { state, getCurrentData, getCellElement, getCellKey } = context;
   const data = getCurrentData();
   const cellsToFormat: Array<{ row: number; col: number }> = [];
 
@@ -140,7 +140,7 @@ export function changeDecimalPlaces(delta: number, context: FormattingContext): 
   }
 
   for (const cellRef of cellsToFormat) {
-    const key = context.getCellKey(cellRef.row, cellRef.col);
+    const key = getCellKey(cellRef.row, cellRef.col);
     const cellData = data.get(key);
     const cellElement = getCellElement(cellRef.row, cellRef.col);
 

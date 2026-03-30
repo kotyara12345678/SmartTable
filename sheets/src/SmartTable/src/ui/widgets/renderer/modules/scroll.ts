@@ -15,6 +15,11 @@ export interface VirtualScrollOptions {
   overscan?: number;
 }
 
+export interface ScrollCallbacks {
+  onScroll?: () => void;
+  onRender?: () => void;
+}
+
 /**
  * Получить видимый диапазон при скролле
  */
@@ -82,6 +87,23 @@ export function updateFixedHeaders(
 }
 
 /**
+ * Синхронизировать фиксированные заголовки со скроллом
+ */
+export function syncFixedHeaders(
+  container: HTMLElement,
+  fixedColumnHeadersId: string,
+  fixedRowHeadersId: string
+): void {
+  const scrollLeft = container.scrollLeft;
+  const scrollTop = container.scrollTop;
+
+  const fixedColumnHeaders = document.getElementById(fixedColumnHeadersId);
+  const fixedRowHeaders = document.getElementById(fixedRowHeadersId);
+
+  updateFixedHeaders(scrollLeft, scrollTop, fixedColumnHeaders, fixedRowHeaders);
+}
+
+/**
  * Оптимизировать скролл с requestAnimationFrame
  */
 export function optimizeScroll(
@@ -127,7 +149,8 @@ export function scrollToCell(
   row: number,
   col: number,
   cellWidth: number,
-  cellHeight: number
+  cellHeight: number,
+  smooth?: boolean
 ): void {
   const targetLeft = col * cellWidth;
   const targetTop = row * cellHeight;
@@ -135,6 +158,78 @@ export function scrollToCell(
   container.scrollTo({
     left: targetLeft,
     top: targetTop,
-    behavior: 'smooth',
+    behavior: smooth ? 'smooth' : 'auto',
   });
+}
+
+/**
+ * Проверить видна ли ячейка в области просмотра
+ */
+export function isCellVisible(
+  row: number,
+  col: number,
+  scrollLeft: number,
+  scrollTop: number,
+  viewportWidth: number,
+  viewportHeight: number,
+  cellWidth: number,
+  cellHeight: number
+): boolean {
+  const cellLeft = col * cellWidth;
+  const cellRight = cellLeft + cellWidth;
+  const cellTop = row * cellHeight;
+  const cellBottom = cellTop + cellHeight;
+
+  const viewportRight = scrollLeft + viewportWidth;
+  const viewportBottom = scrollTop + viewportHeight;
+
+  return (
+    cellRight >= scrollLeft &&
+    cellLeft <= viewportRight &&
+    cellBottom >= scrollTop &&
+    cellTop <= viewportBottom
+  );
+}
+
+/**
+ * Обработать скролл контейнера
+ */
+export function handleScroll(
+  container: HTMLElement,
+  callbacks: ScrollCallbacks
+): void {
+  if (callbacks.onScroll) {
+    callbacks.onScroll();
+  }
+}
+
+/**
+ * Настроить обработчик скролла с оптимизацией
+ */
+export function setupScrollHandler(
+  container: HTMLElement,
+  callback: () => void,
+  debounceMs?: number
+): () => void {
+  let timeout: NodeJS.Timeout | null = null;
+  
+  const handler = () => {
+    if (debounceMs) {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+      timeout = setTimeout(callback, debounceMs);
+    } else {
+      optimizeScroll(callback, { current: null });
+    }
+  };
+
+  container.addEventListener('scroll', handler);
+  
+  return () => {
+    container.removeEventListener('scroll', handler);
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  };
 }
