@@ -213,12 +213,30 @@ const CONFIG = {
   HEADER_HEIGHT: 32,
 };
 
-let elements: any = {};
+let elements: any = null;
 let ipcRenderer: any;
 let keyboardController: KeyboardController;
 let renderScheduled = false;
 const cellCache = new Map();
 const MAX_CACHED_CELLS = 5000;
+
+// Инициализация элементов
+function initRenderer(): void {
+  if (elements) return; // Уже инициализировано
+  elements = initElements();
+  
+  renderColumnHeaders();
+  renderRowHeaders();
+  renderFixedColumnHeaders();
+  renderFixedRowHeaders();
+  renderCells();
+  autoLoad();
+  setupEventListeners();
+  setupKeyboardController();
+  updateCellReference();
+  updateModeUI();
+  console.log('[Renderer] Initialized!');
+}
 
 // Wrapper функции
 function getCurrentData(): Map<string, any> {
@@ -378,15 +396,18 @@ function getGlobalCellInput(): HTMLInputElement {
   return getGlobalCellInputMod();
 }
 
-function initElements(): void {
+function initElements() {
   elements = initElementsMod();
+  return elements;
 }
 
 function updateCellReference(): void {
+  if (!elements.cellReference) return;
   updateCellReferenceMod({ elements, state, getCellId, getCellKey, getCurrentData });
 }
 
 function updateFormulaBar(): void {
+  if (!elements.formulaInput) return;
   updateFormulaBarMod({ elements, state, getCellId, getCellKey, getCurrentData });
 }
 
@@ -1032,36 +1053,8 @@ async function init(): Promise<void> {
   });
 }
 
-// Инициализация после загрузки DOM
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    console.log('[Renderer] Script loaded!');
-    initElements();
-    renderColumnHeaders();
-    renderRowHeaders();
-    renderFixedColumnHeaders();
-    renderFixedRowHeaders();
-    renderCells();
-    autoLoad();
-    setupEventListeners();
-    setupKeyboardController();
-    updateCellReference();
-    updateModeUI();
-    console.log('[Renderer] Initialized!');
-  });
-} else {
-  // DOM уже готов
-  console.log('[Renderer] Script loaded!');
-  initElements();
-  renderColumnHeaders();
-  renderRowHeaders();
-  renderFixedColumnHeaders();
-  renderFixedRowHeaders();
-  renderCells();
-  autoLoad();
-  setupEventListeners();
-  setupKeyboardController();
-  updateCellReference();
-  updateModeUI();
-  console.log('[Renderer] Initialized!');
-}
+// Инициализация после загрузки DOM и скрипта
+window.addEventListener('load', () => {
+  console.log('[Renderer] Window loaded!');
+  initRenderer();
+});
