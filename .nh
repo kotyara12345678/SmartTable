@@ -1,14 +1,12 @@
 
-БЛЯ НУ ТЫ ДОДИК 
-МОЖНО БЫЛО СОЗДАТЬ СКРИПТ .ps1 ДЛЯ POWERSHELL
 
 git checkout sandbox
 
 git fetch origin master
 
-git reset --hard origin/master <-- ЭТО ОПАСНЫЙ МАНЁВР
+git reset --hard origin/master 
 
-git push origin sandbox --force <-- ТАК ЛУЧШЕ НЕ ДЕЛАЙ МОЖЕШЬ СБИТЬ ЧУЖИЕ КОММИТЫ И ИЗМЕНЕНИЯ 
+git push origin sandbox --force 
 
 
 git add .

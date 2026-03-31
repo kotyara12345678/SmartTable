@@ -16,6 +16,7 @@ export interface InitContext {
   autoLoad: () => void;
   updateCellReference: () => void;
   setupEventListeners: () => void;
+  setupScrollHandler: () => void;
   setupKeyboardController: () => void;
   updateModeUI: () => void;
 }
@@ -91,6 +92,7 @@ export async function init(context: InitContext): Promise<void> {
 
   console.log('[Renderer] Starting setupEventListeners');
   context.setupEventListeners();
+  context.setupScrollHandler();
   console.log('[Renderer] Starting setupKeyboardController');
   context.setupKeyboardController();
   console.log('[Renderer] Starting updateCellReference');

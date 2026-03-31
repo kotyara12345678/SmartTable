@@ -1,4 +1,4 @@
-п»їimport {RunServer} from "../core/server/app/server";
+import {RunServer} from "../core/server/app/server";
 
 import { calculateCellFormula as calcFormula, previewFormula, validateFormula, saveActiveCell, showFormulaSuggestions, hideFormulaSuggestions, handleFormulaSuggestionsKeydown, insertFormula } from './formulabar/formulas-renderer.js';
 import { registerFormula as registerFormulaDep, removeFormula as removeFormulaDep, getDependentCells as getDependentCellsDep } from '../core/formulas/formula-dependencies.js';
@@ -120,7 +120,7 @@ import {
   addResizeHandles as addResizeHandlesMod,
 
   // Events
-  setupEventListeners as setupEventListenersMod,
+  setupEventListeners as setupEventListenersMod, setupScrollHandler as setupScrollHandlerMod,
   setupRangeSelection as setupRangeSelectionMod,
   setupCellEventListeners as setupCellEventListenersMod,
   setupContextMenu as setupContextMenuMod,
@@ -166,7 +166,7 @@ import {
 
 } from './renderer/modules/index.js';
 
-// === WRAPPER Р¤РЈРќРљР¦РР Р”Р›РЇ РњРћР”РЈР›Р•Р™ ===
+// === WRAPPER ФУНКЦИИ ДЛЯ МОДУЛЕЙ ===
 const colToLetter = colToLetterMod;
 const letterToCol = letterToColMod;
 const getCellId = getCellIdMod;
@@ -178,7 +178,7 @@ const state = {
   selectedCell: { row: 0, col: 0 },
   editingCell: { row: -1, col: -1 },
   sheetsData: new Map(),
-  sheets: [{ id: 1, name: 'Р›РёСЃС‚ 1' }],
+  sheets: [{ id: 1, name: 'Лист 1' }],
   currentSheet: 1,
   isEditing: false,
   selectionStart: null as { row: number, col: number } | null,
@@ -220,9 +220,9 @@ let renderScheduled = false;
 const cellCache = new Map();
 const MAX_CACHED_CELLS = 5000;
 
-// РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ СЌР»РµРјРµРЅС‚РѕРІ
+// Инициализация элементов
 function initRenderer(): void {
-  if (elements) return; // РЈР¶Рµ РёРЅРёС†РёР°Р»РёР·РёСЂРѕРІР°РЅРѕ
+  if (elements) return; // Уже инициализировано
   elements = initElements();
   
   renderColumnHeaders();
@@ -238,7 +238,7 @@ function initRenderer(): void {
   console.log('[Renderer] Initialized!');
 }
 
-// Wrapper С„СѓРЅРєС†РёРё
+// Wrapper функции
 function getCurrentData(): Map<string, any> {
   return getCurrentDataFromModule(state);
 }
@@ -314,7 +314,7 @@ function renderCellDropdown(cell: HTMLElement, row: number, col: number): void {
   if (validation?.type === 'list') {
     cell.style.position = 'relative';
     const arrow = document.createElement('span');
-    arrow.innerHTML = 'в–ј';
+    arrow.innerHTML = 'Ў';
     arrow.style.cssText = 'position:absolute;right:2px;top:50%;transform:translateY(-50%);font-size:10px;color:#666;pointer-events:none;';
     cell.appendChild(arrow);
   }
@@ -641,7 +641,7 @@ function applyStyle(property: string, value: string): void {
 
 function addSheet(): void {
   const id = state.sheets.length + 1;
-  const name = `Р›РёСЃС‚ ${id}`;
+  const name = `Лист ${id}`;
   state.sheets.push({ id, name });
   state.sheetsData.set(id, new Map());
   renderSheets();
@@ -1013,7 +1013,7 @@ function getColLetter(colIndex: number): string {
 
 function showSaveDialog(): Promise<boolean> {
   return new Promise((resolve) => {
-    const result = confirm('РЎРѕС…СЂР°РЅРёС‚СЊ С‚Р°Р±Р»РёС†Сѓ РїРµСЂРµРґ Р·Р°РєСЂС‹С‚РёРµРј?\n\nOK - РЎРѕС…СЂР°РЅРёС‚СЊ РІ XLSX\nРћС‚РјРµРЅР° - Р—Р°РєСЂС‹С‚СЊ Р±РµР· СЃРѕС…СЂР°РЅРµРЅРёСЏ');
+    const result = confirm('Сохранить таблицу перед закрытием?\n\nOK - Сохранить в XLSX\nОтмена - Закрыть без сохранения');
     resolve(result);
   });
 }
@@ -1024,7 +1024,7 @@ async function exportToXLSXWithDialog(): Promise<void> {
 }
 
 function updateModeUI(): void {
-  (window as any).updateModeUIInternal();
+  /* updateModeUIInternal - disabled */
 }
 
 function showQuickReplies(replies: string[]): void {
@@ -1048,12 +1048,12 @@ async function init(): Promise<void> {
     elements, state, CONFIG, FocusManager,
     initElements, renderCells, renderColumnHeaders, renderRowHeaders,
     renderFixedColumnHeaders, renderFixedRowHeaders, autoLoad,
-    updateCellReference, setupEventListeners, setupKeyboardController,
+    updateCellReference, setupEventListeners, setupScrollHandler: () => setupScrollHandlerMod(elements.cellGridWrapper, renderCells), setupKeyboardController,
     updateModeUI
   });
 }
 
-// РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ РїРѕСЃР»Рµ Р·Р°РіСЂСѓР·РєРё DOM Рё СЃРєСЂРёРїС‚Р°
+// Инициализация после загрузки DOM и скрипта
 window.addEventListener('load', () => {
   console.log('[Renderer] Window loaded!');
   initRenderer();

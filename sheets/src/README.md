@@ -96,7 +96,7 @@
 ### Установка зависимостей
 
 ```bash
-cd sheets/src/electron
+cd sheets/src/SmartTable
 npm install
 ```
 
@@ -107,7 +107,7 @@ npm install
 ### Режим разработки
 
 ```bash
-npm run dev
+ 
 ```
 
 ### Сборка проекта
